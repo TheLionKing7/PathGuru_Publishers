@@ -506,3 +506,159 @@ export async function buildProject(input) {
     aiError,
   };
 }
+
+/* ══════════════════════════════════════════════════════
+   FEEDBACK LOOP — runs after first format pass
+   Sends renderReport weak sections back to AI for rewrite
+   then re-renders those sections only
+══════════════════════════════════════════════════════ */
+async function runFeedbackLoop(manuscript, renderReport, nicheProfile, project) {
+  try {
+    const { buildFeedbackPrompt, parseFeedbackResponse } = await import('./skills/editorial.js');
+    const prompt = buildFeedbackPrompt(manuscript, renderReport, nicheProfile);
+    if (!prompt) return manuscript; // nothing weak — return as-is
+
+    console.log(`[PathGuru] Feedback loop: fixing ${renderReport.sections.filter(s=>s.issues?.length>0).length} weak sections...`);
+
+    let rawResponse = '';
+    const provider = process.env.AI_PROVIDER || 'gemini';
+
+    if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
+      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+          body: JSON.stringify({
+            contents: [{ role:'user', parts:[{ text: prompt }] }],
+            generationConfig: { temperature: 0.6, responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      const data = await res.json();
+      rawResponse = data.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('').trim() || '';
+    }
+
+    if (!rawResponse) return manuscript;
+
+    const feedback = parseFeedbackResponse(rawResponse);
+    const revisions = feedback?.revisions || [];
+
+    if (!revisions.length) return manuscript;
+
+    // Apply revisions to matching sections
+    const { normalizeSection } = await import('./skills/editorial.js');
+    const improved = { ...manuscript };
+    improved.sections = manuscript.sections.map(s => {
+      const rev = revisions.find(r => r.title === s.title);
+      if (!rev) return s;
+      return normalizeSection({ ...s, body: rev.body || s.body, designIntent: rev.designIntent || s.designIntent });
+    });
+
+    console.log(`[PathGuru] Feedback loop: applied ${revisions.length} revision(s)`);
+    return improved;
+
+  } catch (err) {
+    console.warn('[PathGuru] Feedback loop skipped:', err.message);
+    return manuscript;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   buildProject v3 — orchestrates full Phase 3 pipeline
+   with feedback loop + PDF post-processing
+══════════════════════════════════════════════════════ */
+export async function buildProject(input) {
+  const project = createBaseProject(input);
+
+  let manuscript  = null;
+  let design      = null;
+  let html        = null;
+  let pdfBuffer   = null;
+  let renderReport = null;
+  let nicheProfile = null;
+
+  try {
+    const { createAiPublishingPackage }  = await import('./aiPipeline.js');
+    const { runDesignAgent }             = await import('./skills/design.js');
+    const { runFormattingAgent }         = await import('./skills/formatting.js');
+    const { exportToPdf }                = await import('./exporter.js');
+    const { detectNiche, validateEditorialPackage } = await import('./skills/editorial.js');
+
+    // 1. Research + editorial (AI writing pass 1)
+    console.log('[PathGuru] Phase 1: Research + editorial...');
+    const aiPackage = await createAiPublishingPackage(input, project);
+    applyAiPackage(project, aiPackage);
+    manuscript = validateEditorialPackage(aiPackage.manuscript, project);
+
+    // 2. Detect niche
+    const { niche, profile } = detectNiche(project.topic || manuscript.title, project.writingMode || '');
+    nicheProfile = profile;
+    project.niche = niche;
+    console.log(`[PathGuru] Niche detected: ${niche}`);
+
+    // 3. Design agent (cover + tokens)
+    console.log('[PathGuru] Phase 2: Design + cover composition...');
+    design = await runDesignAgent(input, project, aiPackage.research || null, manuscript);
+    project.coverHtml = design.coverHtml;
+
+    // 4. Format pass 1 → get renderReport
+    console.log('[PathGuru] Phase 3: Layout engine (pass 1)...');
+    const pass1 = await runFormattingAgent(project, manuscript, design);
+    html        = pass1.html;
+    renderReport = pass1.renderReport;
+
+    // 5. Feedback loop (AI writing pass 2 — fixes weak sections)
+    const weakCount = (renderReport?.sections || []).filter(s => s.issues?.length > 0).length;
+    if (weakCount > 0) {
+      console.log(`[PathGuru] Phase 4: Feedback loop (${weakCount} sections to improve)...`);
+      manuscript = await runFeedbackLoop(manuscript, renderReport, nicheProfile, project);
+
+      // 6. Format pass 2 — re-render with improved content
+      console.log('[PathGuru] Phase 5: Layout engine (pass 2 — post-feedback)...');
+      const pass2 = await runFormattingAgent(project, manuscript, design);
+      html        = pass2.html;
+      renderReport = pass2.renderReport;
+    }
+
+    // 7. PDF post-processing
+    console.log('[PathGuru] Phase 6: PDF post-processing (metadata, bookmarks, page labels)...');
+    pdfBuffer = await exportToPdf(html, project, manuscript, renderReport);
+
+  } catch (err) {
+    console.error('[PathGuru] Pipeline error:', err.message);
+    html = html || renderDocumentHtml(project);
+    // Try bare Playwright export as fallback
+    try {
+      const { exportToPdf } = await import('./exporter.js');
+      pdfBuffer = await exportToPdf(html, project, manuscript || {}, renderReport);
+    } catch {}
+  }
+
+  // Compliance report
+  project.complianceReport = createComplianceReport(project);
+  const compliance = project.complianceReport;
+
+  return {
+    html,
+    pdfBase64:   pdfBuffer ? pdfBuffer.toString('base64') : null,
+    manuscript:  manuscript || { title: project.title, subtitle: project.subtitle, sections: project.sections || [] },
+    design:      design     || { design: { palette:{}, fontStack:'Georgia, serif' }, coverHtml:'' },
+    compliance,
+    renderReport,
+    project: {
+      title:            project.title,
+      subtitle:         project.subtitle,
+      author:           project.author,
+      publisher:        project.publisher,
+      copyright:        project.copyright,
+      niche:            project.niche,
+      kdpProfile:       project.kdpProfile,
+      publisherProfile: project.publisherProfile,
+    },
+    positioning:       manuscript?.positioning       || '',
+    writingPersonality:manuscript?.writingPersonality || '',
+    proofreaderNotes:  manuscript?.proofreaderNotes  || project.proofreaderNotes || [],
+  };
+}

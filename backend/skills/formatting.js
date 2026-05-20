@@ -1,153 +1,207 @@
 /**
- * PathGuru Publishers — Layout Engine  (Phase 3)
+ * PathGuru Publishers — Layout Engine  (Phase 3 Complete)
  *
- * Fixes vs Phase 2:
- *  ✓ Body parser handles BOTH plain text AND residual HTML tags safely
- *  ✓ Chapter number pulled from sequential counter, NOT from title string
- *  ✓ designIntent NEVER leaks into rendered body content
- *  ✓ Cover HTML injected as first page-break page
- *  ✓ <strong>/<em>/<h3>/<ol>/<ul> inside body rendered properly
- *  ✓ Inline pull-quotes (>> prefix) rendered as callout blocks
- *  ✓ Sub-headings (ALL CAPS lines) rendered as <h3>
+ * New vs Phase 2:
+ *  1. Reads structured designIntent JSON — precise, not guessed
+ *  2. Produces renderReport per section — feeds feedback loop
+ *  3. Niche typography system — distinct visual personality per niche
+ *  4. Callout stat blocks from designIntent.calloutStat
+ *  5. Subheading injection from designIntent.subheadings array
+ *  6. Widow/orphan control, optical margin, text-rendering
+ *  7. Cover injected as first break page
  */
 
+import { detectNiche } from './editorial.js';
+
+/* ── Niche typography overrides ─────────────────────── */
+const NICHE_TYPO = {
+  business:   { chNum:'80pt', chOp:'.10', hSize:'22pt', hWeight:'700', bSize:'10.5pt', lh:'1.62', pqSize:'14pt', pqStyle:'normal', track:'.14em', drop:'58pt', shSize:'11.5pt', shWeight:'700', gap:'0.55in' },
+  marketing:  { chNum:'88pt', chOp:'.09', hSize:'24pt', hWeight:'900', bSize:'11pt',   lh:'1.60', pqSize:'15pt', pqStyle:'normal', track:'.16em', drop:'62pt', shSize:'12pt',   shWeight:'800', gap:'0.52in' },
+  wellness:   { chNum:'72pt', chOp:'.12', hSize:'21pt', hWeight:'700', bSize:'11pt',   lh:'1.70', pqSize:'13.5pt',pqStyle:'italic',track:'.12em', drop:'56pt', shSize:'11pt',   shWeight:'600', gap:'0.58in' },
+  finance:    { chNum:'76pt', chOp:'.10', hSize:'21pt', hWeight:'700', bSize:'10.5pt', lh:'1.64', pqSize:'13pt', pqStyle:'normal', track:'.13em', drop:'56pt', shSize:'11pt',   shWeight:'700', gap:'0.54in' },
+  leadership: { chNum:'76pt', chOp:'.10', hSize:'22pt', hWeight:'700', bSize:'10.5pt', lh:'1.62', pqSize:'13pt', pqStyle:'normal', track:'.13em', drop:'56pt', shSize:'11.5pt', shWeight:'700', gap:'0.54in' },
+  faith:      { chNum:'70pt', chOp:'.13', hSize:'21pt', hWeight:'700', bSize:'11pt',   lh:'1.72', pqSize:'14pt', pqStyle:'italic', track:'.11em', drop:'56pt', shSize:'11pt',   shWeight:'600', gap:'0.58in' },
+  parenting:  { chNum:'72pt', chOp:'.11', hSize:'21pt', hWeight:'700', bSize:'11pt',   lh:'1.68', pqSize:'13.5pt',pqStyle:'italic',track:'.12em', drop:'56pt', shSize:'11pt',   shWeight:'600', gap:'0.56in' },
+  beauty:     { chNum:'82pt', chOp:'.09', hSize:'23pt', hWeight:'700', bSize:'11pt',   lh:'1.62', pqSize:'14pt', pqStyle:'italic', track:'.14em', drop:'60pt', shSize:'12pt',   shWeight:'700', gap:'0.54in' },
+  selfdev:    { chNum:'84pt', chOp:'.09', hSize:'23pt', hWeight:'900', bSize:'11pt',   lh:'1.60', pqSize:'14pt', pqStyle:'normal', track:'.15em', drop:'60pt', shSize:'12pt',   shWeight:'700', gap:'0.52in' },
+  technology: { chNum:'76pt', chOp:'.10', hSize:'21pt', hWeight:'700', bSize:'10.5pt', lh:'1.62', pqSize:'13pt', pqStyle:'normal', track:'.13em', drop:'54pt', shSize:'11pt',   shWeight:'700', gap:'0.54in' },
+  aging:      { chNum:'82pt', chOp:'.09', hSize:'23pt', hWeight:'700', bSize:'11.5pt', lh:'1.68', pqSize:'14.5pt',pqStyle:'italic',track:'.13em', drop:'60pt', shSize:'12pt',   shWeight:'700', gap:'0.56in' },
+  creative:   { chNum:'74pt', chOp:'.11', hSize:'21pt', hWeight:'700', bSize:'11pt',   lh:'1.70', pqSize:'14pt', pqStyle:'italic', track:'.12em', drop:'58pt', shSize:'11pt',   shWeight:'600', gap:'0.56in' },
+  default:    { chNum:'76pt', chOp:'.12', hSize:'21pt', hWeight:'700', bSize:'11pt',   lh:'1.64', pqSize:'13.5pt',pqStyle:'italic',track:'.13em', drop:'56pt', shSize:'11.5pt', shWeight:'700', gap:'0.54in' },
+};
+
+/* ── Main export ─────────────────────────────────────── */
 export async function runFormattingAgent(project, manuscript, design) {
 
   /* ── Token resolution ── */
-  const p          = design?.design?.palette   || {};
-  const fontImport = design?.design?.fontImport || '';
-  const coverHtml  = design?.coverHtml         || '';
-
-  const accent       = p.accent         || '#2bb3a3';
-  const accentDim    = p.accentDim      || '#1d7a70';
-  const pageBg       = p.pageBackground || '#ffffff';
-  const pageFg       = p.pageFg         || '#16213e';
-  const ruleColor    = p.ruleColor      || '#d1dce8';
-  const pullBg       = p.pullBg         || '#eef4fb';
-  const pullBorder   = p.pullBorder     || accent;
-  const ctaBg        = p.ctaBg          || '#16213e';
-  const ctaFg        = p.ctaFg          || '#ffffff';
-  const eyebrow      = p.eyebrowColor   || accent;
-  const checkColor   = p.checkColor     || accent;
-  const chapterNum   = p.chapterNumFg   || accent;
-
+  const p           = design?.design?.palette   || {};
+  const fontImport  = design?.design?.fontImport || '';
+  const coverHtml   = design?.coverHtml          || '';
   const titleFont   = design?.design?.titleFont   || "'DM Sans', Arial, sans-serif";
   const headingFont = design?.design?.headingFont || "'DM Sans', Arial, sans-serif";
   const bodyFont    = design?.design?.bodyFont    || "'DM Sans', Arial, sans-serif";
 
-  const kdp     = project.kdpProfile || {};
-  const pageW   = kdp.pageWidthIn    || 6;
-  const pageH   = kdp.pageHeightIn   || 9;
-  const gutter  = kdp.safeMarginIn   || 0.75;
-  const margin  = 0.5;
+  const accent     = p.accent         || '#2bb3a3';
+  const pageBg     = p.pageBackground || '#ffffff';
+  const pageFg     = p.pageFg         || '#16213e';
+  const ruleColor  = p.ruleColor      || '#d1dce8';
+  const pullBg     = p.pullBg         || '#eef4fb';
+  const pullBorder = p.pullBorder     || accent;
+  const ctaBg      = p.ctaBg          || '#16213e';
+  const ctaFg      = p.ctaFg          || '#ffffff';
+  const eyebrowClr = p.eyebrowColor   || accent;
+  const checkColor = p.checkColor     || accent;
+  const chNumClr   = p.chapterNumFg   || accent;
+
+  /* ── KDP page spec ── */
+  const kdp    = project.kdpProfile || {};
+  const pageW  = kdp.pageWidthIn    || 6;
+  const pageH  = kdp.pageHeightIn   || 9;
+  const gutter = kdp.safeMarginIn   || 0.75;
+  const margin = 0.5;
 
   const title     = manuscript?.title    || project.title    || 'Untitled';
   const author    = project.author       || '';
-  const publisher = project.publisher   || 'PathGuru Publishers';
+  const publisher = project.publisher    || 'PathGuru Publishers';
   const copyright = project.copyright   || `© ${new Date().getFullYear()} ${author}. All rights reserved.`;
   const sections  = manuscript?.sections || project.sections || [];
   const citations = manuscript?.citations || project.citations || [];
 
-  /* ══════════════════════════════════════════════════
-     BODY PARSER — handles plain text AND residual HTML
-  ══════════════════════════════════════════════════ */
-  function parseBody(raw = '', forCta = false) {
+  /* ── Detect niche for typography ── */
+  const { niche } = detectNiche(project.topic || title, project.writingMode || '');
+  const t = NICHE_TYPO[niche] || NICHE_TYPO.default;
+
+  /* ── Render report ── */
+  const renderReport = { niche, sections: [], totalSections: sections.length, warnings: [] };
+
+  /* ════════════════════════════════════════════════
+     BODY PARSER
+  ════════════════════════════════════════════════ */
+  function parseBody(raw = '', opts = {}) {
     if (!raw.trim()) return '';
+    const { forCta = false, subheadings = [] } = opts;
 
-    // If residual HTML tags slipped through, sanitise to safe subset then process
-    const hasHtml = /<[a-z][\s\S]*?>/i.test(raw);
+    /* sanitise residual HTML */
     let text = raw;
-
-    if (hasHtml) {
-      // Convert safe semantic tags to our markers, strip the rest
+    if (/<[a-z]/i.test(text)) {
       text = text
         .replace(/<strong>([\s\S]*?)<\/strong>/gi, '**$1**')
-        .replace(/<b>([\s\S]*?)<\/b>/gi, '**$1**')
-        .replace(/<em>([\s\S]*?)<\/em>/gi, '_$1_')
-        .replace(/<i>([\s\S]*?)<\/i>/gi, '_$1_')
+        .replace(/<b>([\s\S]*?)<\/b>/gi,           '**$1**')
+        .replace(/<em>([\s\S]*?)<\/em>/gi,          '_$1_')
+        .replace(/<i>([\s\S]*?)<\/i>/gi,            '_$1_')
         .replace(/<h[2-6][^>]*>([\s\S]*?)<\/h[2-6]>/gi, '\n\n$1\n\n')
-        .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<p[^>]*>/gi, '')
-        .replace(/<[^>]+>/g, '')  // strip remaining tags
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'")
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+        .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi,     '\n- $1')
+        .replace(/<br\s*\/?>/gi,                    '\n')
+        .replace(/<\/p>/gi,                         '\n\n')
+        .replace(/<p[^>]*>/gi,                      '')
+        .replace(/<[^>]+>/g,                        '')
+        .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#039;/g,"'")
+        .replace(/\n{3,}/g,'\n\n').trim();
     }
 
-    // Split on double newlines into blocks
     const blocks = text.split(/\n{2,}/);
     const out = [];
+    let paraIdx = 0;
+    let shIdx   = 0;
 
     for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i].trim();
-      if (!block) continue;
+      const b = blocks[i].trim();
+      if (!b) continue;
 
-      // Pull-quote marker >>
-      if (block.startsWith('>>')) {
-        const q = block.replace(/^>>\s*/, '');
-        out.push(`<blockquote class="inline-pull">${renderInline(q)}</blockquote>`);
+      /* inject subheading from designIntent at paragraph 3 and 6 */
+      if (subheadings.length && shIdx < subheadings.length && (paraIdx === 3 || paraIdx === 6)) {
+        out.push(`<h3 class="body-subhead">${esc(subheadings[shIdx++])}</h3>`);
+      }
+
+      /* pull-quote >> */
+      if (b.startsWith('>>')) {
+        out.push(`<blockquote class="inline-pull">${ri(b.replace(/^>>\s*/,''))}</blockquote>`);
         continue;
       }
 
-      // Bullet list block — collect consecutive bullet lines
-      if (/^[-•]\s/.test(block)) {
-        const items = block.split('\n')
-          .map(l => l.trim())
-          .filter(l => /^[-•]\s/.test(l))
-          .map(l => `<li>${renderInline(l.replace(/^[-•]\s/, ''))}</li>`)
-          .join('');
-        out.push(`<ul class="body-list">${items}</ul>`);
-        continue;
+      /* bullet list */
+      if (/^[-•]\s/.test(b)) {
+        const items = b.split('\n').filter(l=>/^[-•]\s/.test(l.trim()))
+          .map(l=>`<li>${ri(l.replace(/^[-•]\s/,''))}</li>`).join('');
+        if (items) { out.push(`<ul class="body-list">${items}</ul>`); continue; }
       }
 
-      // Numbered list block
-      if (/^\d+\.\s/.test(block)) {
-        const items = block.split('\n')
-          .map(l => l.trim())
-          .filter(l => /^\d+\.\s/.test(l))
-          .map(l => `<li>${renderInline(l.replace(/^\d+\.\s/, ''))}</li>`)
-          .join('');
-        out.push(`<ol class="body-list">${items}</ol>`);
-        continue;
+      /* numbered list */
+      if (/^\d+\.\s/.test(b)) {
+        const items = b.split('\n').filter(l=>/^\d+\.\s/.test(l.trim()))
+          .map(l=>`<li>${ri(l.replace(/^\d+\.\s/,''))}</li>`).join('');
+        if (items) { out.push(`<ol class="body-list">${items}</ol>`); continue; }
       }
 
-      // ALL CAPS sub-heading (6+ chars, no lowercase)
-      if (/^[A-Z][A-Z\s\d:,'-]{5,}$/.test(block) && block.length < 80) {
-        out.push(`<h3 class="body-subhead">${renderInline(block)}</h3>`);
-        continue;
+      /* ALL CAPS subheading */
+      if (/^[A-Z][A-Z\s\d:,'\-–]{5,}$/.test(b) && b.length < 80) {
+        out.push(`<h3 class="body-subhead">${ri(b)}</h3>`); continue;
       }
 
-      // Normal paragraph
-      const indent = (i === 0 || out.length === 0) ? '' : ' class="indented"';
-      const textColor = forCta ? 'style="color:rgba(255,255,255,.82)"' : '';
-      out.push(`<p${indent} ${textColor}>${renderInline(block)}</p>`);
+      /* normal paragraph */
+      const cls   = (paraIdx === 0) ? '' : ' class="indented"';
+      const color = forCta ? ' style="color:rgba(255,255,255,.82)"' : '';
+      out.push(`<p${cls}${color}>${ri(b)}</p>`);
+      paraIdx++;
     }
-
     return out.join('\n');
   }
 
-  /* Inline formatting: **bold**, _italic_ */
-  function renderInline(text) {
+  /* inline formatting */
+  function ri(text) {
     return esc(text)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/_(.+?)_/g, '<em>$1</em>');
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/_(.+?)_/g,'<em>$1</em>');
   }
 
-  /* Drop-cap on first letter of first paragraph */
-  function dropCapBody(raw) {
-    const html = parseBody(raw);
+  /* drop cap */
+  function dropCap(raw, subheadings = []) {
+    const html = parseBody(raw, { subheadings });
     return html.replace(/(<p[^>]*>)([A-Z"'"«])/, '$1<span class="drop-cap">$2</span>');
   }
 
-  /* ══════════════════════════════════════════════════
+  /* callout stat */
+  function calloutStat(stat) {
+    if (!stat) return '';
+    const m = stat.match(/^([\d.,]+[%x+k]*)\s+(.+)$/);
+    if (m) return `<div class="callout-stat"><span class="callout-stat-value">${esc(m[1])}</span><span class="callout-stat-label">${esc(m[2])}</span></div>`;
+    return `<div class="callout-stat-text">${esc(stat)}</div>`;
+  }
+
+  /* auto pull-quote extractor */
+  function autoPull(body = '') {
+    const clean = body.replace(/<[^>]+>/g,'').replace(/\*\*|_/g,'');
+    const sents = clean.match(/[^.!?]{45,130}[.!?]/g) || [];
+    const power = /\b(never|always|every|secret|truth|power|change|transform|only|real|stop|start|must|key|best|worst|fact)\b/i;
+    return sents.find(s => power.test(s))?.trim() || sents[2]?.trim() || null;
+  }
+
+  /* section quality checker */
+  function checkSection(s) {
+    const issues = [];
+    const wc = (s.body||'').split(/\s+/).filter(Boolean).length;
+    const type = (s.designIntent?.layout || s.type || 'chapter').toLowerCase();
+    if (['chapter','section','introduction','intro','conclusion'].includes(type)) {
+      if (wc < 300)                        issues.push(`body too short (${wc} words, need 500+)`);
+      if (!s.body?.includes('>>') && !s.designIntent?.pullQuote) issues.push('no pull quote — add >> sentence');
+      if (/<[a-z]/i.test(s.body||''))      issues.push('HTML tags detected in body');
+    }
+    if (type === 'checklist') {
+      const lines = (s.body||'').split('\n').filter(l=>l.trim()).length;
+      if (lines < 5) issues.push(`checklist has only ${lines} items (need 5+)`);
+    }
+    if (type === 'cta' && wc < 60) issues.push('CTA body too short');
+    return issues;
+  }
+
+  /* ════════════════════════════════════════════════
      SECTION RENDERERS
-  ══════════════════════════════════════════════════ */
+  ════════════════════════════════════════════════ */
 
   function renderFrontmatter(s) {
+    renderReport.sections.push({ title: s.title, type: 'frontmatter', issues: [] });
     return `
-<section class="pg-section pg-frontmatter" aria-label="Frontmatter">
+<section class="pg-section pg-frontmatter">
   <div class="frontmatter-inner">
     <p class="fm-publisher">${esc(publisher)}</p>
     <h1 class="fm-title">${esc(title)}</h1>
@@ -159,17 +213,18 @@ export async function runFormattingAgent(project, manuscript, design) {
 </section>`;
   }
 
-  function renderToc(allSections) {
-    const items = allSections
+  function renderToc(all) {
+    const items = all
       .filter(s => !['frontmatter','copyright','toc','references'].includes(s.type))
-      .map((s, i) => `
+      .map((s,i) => `
       <li class="toc-item">
-        <span class="toc-num">${i + 1}</span>
+        <span class="toc-num">${i+1}</span>
         <span class="toc-dots"></span>
         <span class="toc-title">${esc(s.title)}</span>
       </li>`).join('');
+    renderReport.sections.push({ title:'TOC', type:'toc', issues:[] });
     return `
-<section class="pg-section pg-toc" aria-label="Table of Contents">
+<section class="pg-section pg-toc">
   <p class="eyebrow">Contents</p>
   <h2 class="section-heading">Table of Contents</h2>
   <ul class="toc-list">${items}</ul>
@@ -177,10 +232,12 @@ export async function runFormattingAgent(project, manuscript, design) {
   }
 
   function renderChapter(s, num) {
-    const intent    = s.designIntent || '';
-    const pullMatch = intent.match(/pull[- ]?quote[:\s]+[""']?([^""'.\n]{20,120})/i);
-    const pullQuote = pullMatch ? pullMatch[1].trim() : extractPullQuote(s.body);
-
+    const intent  = s.designIntent || {};
+    const pull    = intent.pullQuote || autoPull(s.body);
+    const stat    = intent.calloutStat || null;
+    const subh    = Array.isArray(intent.subheadings) ? intent.subheadings : [];
+    const issues  = checkSection(s);
+    renderReport.sections.push({ title: s.title, type: 'chapter', issues, wordCount: (s.body||'').split(/\s+/).length });
     return `
 <section class="pg-section pg-chapter" aria-label="${esc(s.title)}">
   <div class="chapter-opener">
@@ -189,62 +246,42 @@ export async function runFormattingAgent(project, manuscript, design) {
     <h2 class="section-heading">${esc(s.title)}</h2>
     <div class="chapter-rule"></div>
   </div>
-  <div class="chapter-body">
-    ${dropCapBody(s.body)}
-  </div>
-  ${pullQuote ? `
-  <aside class="pull-quote" aria-label="Pull quote">
+  ${stat ? calloutStat(stat) : ''}
+  <div class="chapter-body">${dropCap(s.body, subh)}</div>
+  ${pull ? `
+  <aside class="pull-quote">
     <div class="pull-quote-mark" aria-hidden="true">"</div>
-    <blockquote>${esc(pullQuote)}</blockquote>
+    <blockquote>${esc(pull)}</blockquote>
   </aside>` : ''}
 </section>`;
   }
 
-  /* Extract a compelling sentence from body for auto pull-quote */
-  function extractPullQuote(body = '') {
-    if (!body) return null;
-    const clean = body.replace(/<[^>]+>/g, '').replace(/\*\*|_/g, '');
-    const sentences = clean.match(/[^.!?]{40,120}[.!?]/g) || [];
-    // Pick the most impactful-sounding sentence (contains power words)
-    const power = /\b(secret|truth|never|always|every|power|change|transform|must|real|only|best|worst|key|stop|start)\b/i;
-    return sentences.find(s => power.test(s))?.trim() || sentences[1]?.trim() || null;
-  }
-
   function renderChecklist(s) {
-    const lines = s.body.split('\n')
-      .map(l => l.replace(/^[-•✓☐✗\d.]+\s*/, '').trim())
-      .filter(l => l.length > 2);
-
-    const items = lines.map(line => `
+    const lines = (s.body||'').split('\n')
+      .map(l => l.replace(/^[-•✓☐✗\d.]+\s*/,'').trim()).filter(l=>l.length>2);
+    const items = lines.map(l=>`
       <li class="check-item">
-        <span class="check-box" aria-hidden="true"></span>
-        <span class="check-text">${renderInline(line)}</span>
+        <span class="check-box"></span>
+        <span class="check-text">${ri(l)}</span>
       </li>`).join('');
-
+    renderReport.sections.push({ title:s.title, type:'checklist', issues:checkSection(s) });
     return `
 <section class="pg-section pg-checklist" aria-label="${esc(s.title)}">
   <p class="eyebrow">Checklist</p>
   <h2 class="section-heading">${esc(s.title)}</h2>
-  ${s.designIntent ? `<p class="section-intro">${esc(s.designIntent)}</p>` : ''}
   <ul class="check-list">${items}</ul>
 </section>`;
   }
 
   function renderWorksheet(s) {
-    const lines = s.body.split('\n')
-      .map(l => l.replace(/^[-•\d.]+\s*/, '').trim())
-      .filter(l => l.length > 2);
-
-    const items = lines.map(line => `
+    const lines = (s.body||'').split('\n')
+      .map(l=>l.replace(/^[-•\d.]+\s*/,'').trim()).filter(l=>l.length>2);
+    const items = lines.map(l=>`
       <div class="ws-item">
-        <p class="ws-prompt">${renderInline(line)}</p>
-        <div class="ws-lines">
-          <div class="ws-line"></div>
-          <div class="ws-line"></div>
-          <div class="ws-line"></div>
-        </div>
+        <p class="ws-prompt">${ri(l)}</p>
+        <div class="ws-lines"><div class="ws-line"></div><div class="ws-line"></div><div class="ws-line"></div></div>
       </div>`).join('');
-
+    renderReport.sections.push({ title:s.title, type:'worksheet', issues:[] });
     return `
 <section class="pg-section pg-worksheet" aria-label="${esc(s.title)}">
   <p class="eyebrow">Exercise</p>
@@ -254,42 +291,44 @@ export async function runFormattingAgent(project, manuscript, design) {
   }
 
   function renderCta(s) {
-    // designIntent must NOT appear in the rendered body — only use s.body
+    const issues = checkSection(s);
+    renderReport.sections.push({ title:s.title, type:'cta', issues });
     return `
 <section class="pg-section pg-cta" aria-label="Call to action">
   <div class="cta-inner">
     <p class="eyebrow cta-eyebrow">Your Next Step</p>
     <div class="cta-rule"></div>
     <h2 class="cta-heading">${esc(s.title)}</h2>
-    <div class="cta-body">${parseBody(s.body, true)}</div>
+    <div class="cta-body">${parseBody(s.body, { forCta:true })}</div>
   </div>
 </section>`;
   }
 
   function renderPullquote(s) {
-    const quote = s.body.replace(/^[""']|[""']$/g, '').trim();
+    const quote = (s.body||s.title||'').replace(/^[""']|[""']$/g,'').trim();
+    renderReport.sections.push({ title:s.title, type:'pullquote', issues:[] });
     return `
 <section class="pg-section pg-pullquote" aria-label="Quote">
   <div class="standalone-quote">
     <div class="sq-mark" aria-hidden="true">"</div>
     <blockquote class="sq-text">${esc(quote)}</blockquote>
-    ${s.title ? `<cite class="sq-attr">— ${esc(s.title)}</cite>` : ''}
+    ${s.title && s.title !== quote ? `<cite class="sq-attr">— ${esc(s.title)}</cite>` : ''}
   </div>
 </section>`;
   }
 
   function renderStatblock(s) {
-    const lines = s.body.split('\n').map(l => l.trim()).filter(Boolean);
-    const stats  = lines.map(line => {
-      const m = line.match(/^([^:–—]+)[:\s–—]+(.+)$/);
-      return m ? { label: m[1].trim(), value: m[2].trim() } : { label: '', value: line };
+    const lines = (s.body||'').split('\n').map(l=>l.trim()).filter(Boolean);
+    const stats = lines.map(l => {
+      const m = l.match(/^([^:–—]+)[:\s–—]+(.+)$/);
+      return m ? { label:m[1].trim(), value:m[2].trim() } : { label:'', value:l };
     });
-    const cols = stats.map(st => `
+    const cols = stats.map(st=>`
       <div class="stat-col">
         <p class="stat-value">${esc(st.value)}</p>
         <p class="stat-label">${esc(st.label)}</p>
       </div>`).join('');
-
+    renderReport.sections.push({ title:s.title, type:'statblock', issues:[] });
     return `
 <section class="pg-section pg-statblock" aria-label="${esc(s.title)}">
   <p class="eyebrow">By the numbers</p>
@@ -300,13 +339,13 @@ export async function runFormattingAgent(project, manuscript, design) {
 
   function renderReferences(cits) {
     if (!cits.length) return '';
-    const items = cits.map((c, i) => `
+    const items = cits.map((c,i)=>`
       <li class="ref-item">
-        <span class="ref-num">${i + 1}.</span>
+        <span class="ref-num">${i+1}.</span>
         <div class="ref-body">
-          <strong>${esc(c.title || 'Source')}</strong>
+          <strong>${esc(c.title||'Source')}</strong>
           ${c.url ? `<br><a href="${esc(c.url)}" class="ref-link">${esc(c.url)}</a>` : ''}
-          ${c.content ? `<br><em class="ref-excerpt">${esc(c.content.slice(0, 180))}</em>` : ''}
+          ${c.content ? `<br><em class="ref-excerpt">${esc(c.content.slice(0,180))}</em>` : ''}
         </div>
       </li>`).join('');
     return `
@@ -318,58 +357,49 @@ export async function runFormattingAgent(project, manuscript, design) {
   }
 
   function renderDefault(s) {
+    const issues = checkSection(s);
+    renderReport.sections.push({ title:s.title, type:'default', issues });
     return `
 <section class="pg-section pg-default" aria-label="${esc(s.title)}">
-  <p class="eyebrow">${esc(s.type || 'Section')}</p>
+  <p class="eyebrow">${esc(s.type||'Section')}</p>
   <h2 class="section-heading">${esc(s.title)}</h2>
   <div class="section-body">${parseBody(s.body)}</div>
 </section>`;
   }
 
-  /* ── Section router ── */
-  function routeSection(s, chapterNum, allSections) {
-    const t = s.type.toLowerCase().trim();
-    switch (t) {
-      case 'frontmatter':
-      case 'copyright':       return renderFrontmatter(s);
-      case 'toc':             return renderToc(allSections);
-      case 'chapter':
-      case 'section':
-      case 'introduction':
-      case 'intro':
-      case 'conclusion':      return renderChapter(s, chapterNum);
-      case 'checklist':       return renderChecklist(s);
-      case 'worksheet':
-      case 'exercise':        return renderWorksheet(s);
-      case 'cta':             return renderCta(s);
-      case 'pullquote':
-      case 'quote':           return renderPullquote(s);
-      case 'statblock':
-      case 'stats':           return renderStatblock(s);
-      default:
-        // Infer from designIntent
-        if (/checklist/i.test(s.designIntent))        return renderChecklist(s);
-        if (/worksheet|exercise/i.test(s.designIntent)) return renderWorksheet(s);
-        if (/cta|call.to.action/i.test(s.designIntent)) return renderCta(s);
-        return renderDefault(s);
+  /* ── Router ── */
+  const CHAPTER_TYPES = new Set(['chapter','section','introduction','intro','conclusion']);
+  function route(s, num, all) {
+    const layout = (s.designIntent?.layout || s.type || 'chapter').toLowerCase().trim();
+    switch (layout) {
+      case 'frontmatter': case 'copyright': return renderFrontmatter(s);
+      case 'toc':                           return renderToc(all);
+      case 'chapter': case 'section':
+      case 'introduction': case 'intro':
+      case 'conclusion':                    return renderChapter(s, num);
+      case 'checklist':                     return renderChecklist(s);
+      case 'worksheet': case 'exercise':    return renderWorksheet(s);
+      case 'cta':                           return renderCta(s);
+      case 'pullquote': case 'quote':       return renderPullquote(s);
+      case 'statblock': case 'stats':       return renderStatblock(s);
+      default:                              return renderDefault(s);
     }
   }
 
-  /* ── Render all sections ── */
-  const CHAPTER_TYPES = new Set(['chapter','section','introduction','intro','conclusion']);
-  let chapterCount = 0;
-  const sectionsHtml = sections.map(s =>
-    routeSection(s, CHAPTER_TYPES.has(s.type) ? ++chapterCount : chapterCount, sections)
-  ).join('\n');
+  let chCount = 0;
+  const sectionsHtml = sections.map(s => {
+    if (CHAPTER_TYPES.has((s.designIntent?.layout || s.type || '').toLowerCase())) chCount++;
+    return route(s, chCount, sections);
+  }).join('\n');
 
-  const refsHtml = renderReferences(citations);
+  const refsHtml    = renderReferences(citations);
+  const coverBlock  = coverHtml ? `<div class="cover-frame">${coverHtml}</div>` : '';
+  const weakCount   = renderReport.sections.filter(s => s.issues?.length > 0).length;
+  if (weakCount) renderReport.warnings.push(`${weakCount} section(s) flagged for feedback loop`);
 
-  /* ── Cover page (injected as separate framed page) ── */
-  const coverSection = coverHtml
-    ? `<div class="cover-frame">${coverHtml}</div>`
-    : '';
-
-  /* ── Complete HTML document ── */
+  /* ════════════════════════════════════════════════
+     FULL HTML DOCUMENT
+  ════════════════════════════════════════════════ */
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -378,247 +408,137 @@ export async function runFormattingAgent(project, manuscript, design) {
   <title>${esc(title)}</title>
   ${fontImport ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="${fontImport}" rel="stylesheet">` : ''}
   <style>
-
-    /* ── KDP Page spec ── */
+    /* KDP @page */
     @page {
       size: ${pageW}in ${pageH}in;
-      margin-top:    ${margin}in;
-      margin-bottom: ${margin + 0.12}in;
-      margin-outside: ${margin}in;
-      margin-inside:  ${gutter}in;
+      margin-top: ${margin}in; margin-bottom: ${margin+0.14}in;
+      margin-outside: ${margin}in; margin-inside: ${gutter}in;
     }
-    @page :left  { @top-left   { content: "${esc(title)}"; font-family: ${bodyFont}; font-size: 7.5pt; color: #aaa; } @bottom-center { content: counter(page); font-family: ${bodyFont}; font-size: 8pt; color: #aaa; } }
-    @page :right { @top-right  { content: "${esc(author)}"; font-family: ${bodyFont}; font-size: 7.5pt; color: #aaa; } @bottom-center { content: counter(page); font-family: ${bodyFont}; font-size: 8pt; color: #aaa; } }
-    @page .cover-frame { margin: 0; }
+    @page :left  { @top-left   { content:"${esc(title)}";  font-family:${bodyFont}; font-size:7pt; color:#aaa; letter-spacing:.04em; } @bottom-center { content:counter(page); font-family:${bodyFont}; font-size:7.5pt; color:#bbb; } }
+    @page :right { @top-right  { content:"${esc(author)}"; font-family:${bodyFont}; font-size:7pt; color:#aaa; letter-spacing:.04em; } @bottom-center { content:counter(page); font-family:${bodyFont}; font-size:7.5pt; color:#bbb; } }
+    @page :first { @top-left:none; @top-right:none; @bottom-center:none; }
 
-    /* ── Reset ── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    *,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
+    html { font-size:11pt; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     body {
-      font-family: ${bodyFont};
-      font-size: 1rem;
-      line-height: 1.64;
-      color: ${pageFg};
-      background: ${pageBg};
-      hyphens: auto;
-      -webkit-hyphens: auto;
+      font-family:${bodyFont}; font-size:${t.bSize}; line-height:${t.lh};
+      color:${pageFg}; background:${pageBg};
+      hyphens:auto; -webkit-hyphens:auto;
+      orphans:3; widows:3;
+      text-rendering:optimizeLegibility;
     }
+    .book-wrap { max-width:${pageW}in; margin:0 auto; background:${pageBg}; }
+    @media screen { body{padding:.4in;background:#dde0e6;} .book-wrap{padding:${margin}in ${gutter}in;box-shadow:0 2px 48px rgba(0,0,0,.18);} }
 
-    /* ── Screen wrapper ── */
-    .book-wrap { max-width: ${pageW}in; margin: 0 auto; background: ${pageBg}; }
-    @media screen { .book-wrap { box-shadow: 0 0 48px rgba(0,0,0,.12); } }
+    .cover-frame { width:100%; break-after:page; page-break-after:always; overflow:hidden; }
 
-    /* ── Cover frame ── */
-    .cover-frame {
-      width: 100%;
-      break-after: page;
-      page-break-after: always;
-      overflow: hidden;
-    }
-    .cover-frame html, .cover-frame body { width: 100% !important; height: auto !important; }
+    .pg-section { padding:${t.gap} 0 0.44in; border-bottom:.5pt solid ${ruleColor}; break-inside:avoid; page-break-inside:avoid; }
+    .pg-section:last-child { border-bottom:none; }
 
-    /* ── Section base ── */
-    .pg-section {
-      padding: 0.52in 0 0.46in;
-      border-bottom: 0.5pt solid ${ruleColor};
-      break-inside: avoid;
-      page-break-inside: avoid;
-    }
-    .pg-section:last-child { border-bottom: none; }
+    .eyebrow { display:block; font-family:${bodyFont}; font-size:7pt; font-weight:700; letter-spacing:${t.track}; text-transform:uppercase; color:${eyebrowClr}; margin:0 0 9pt; }
+    .section-heading { font-family:${headingFont}; font-size:${t.hSize}; font-weight:${t.hWeight}; line-height:1.10; letter-spacing:-.022em; color:${pageFg}; margin:0 0 14pt; }
 
-    /* ── Typography ── */
-    .eyebrow {
-      font-family: ${bodyFont};
-      font-size: 7.5pt;
-      font-weight: 700;
-      letter-spacing: .13em;
-      text-transform: uppercase;
-      color: ${eyebrow};
-      margin: 0 0 8pt;
-      display: block;
-    }
-    .section-heading {
-      font-family: ${headingFont};
-      font-size: 21pt;
-      font-weight: 700;
-      line-height: 1.12;
-      letter-spacing: -.02em;
-      color: ${pageFg};
-      margin: 0 0 13pt;
-    }
-    .section-intro {
-      font-size: 10pt;
-      color: #777;
-      font-style: italic;
-      margin: 0 0 16pt;
-      border-left: 2pt solid ${ruleColor};
-      padding-left: 10pt;
-    }
+    p { margin:0 0 8pt; font-size:${t.bSize}; line-height:${t.lh}; }
+    p.indented { text-indent:1.5em; }
+    strong { font-weight:700; }
+    em { font-style:italic; }
+    h3.body-subhead { font-family:${headingFont}; font-size:${t.shSize}; font-weight:${t.shWeight}; margin:18pt 0 8pt; color:${pageFg}; letter-spacing:-.01em; break-after:avoid; }
+    .body-list { padding-left:15pt; margin:7pt 0 12pt; }
+    .body-list li { margin-bottom:5pt; font-size:${t.bSize}; line-height:1.56; }
+    ol.body-list li::marker { color:${eyebrowClr}; font-weight:700; }
+    blockquote.inline-pull { background:${pullBg}; border-left:3pt solid ${pullBorder}; padding:10pt 14pt; margin:15pt 0; font-size:10.5pt; font-style:italic; color:${pageFg}; border-radius:0 4pt 4pt 0; break-inside:avoid; }
 
-    /* Body text */
-    p { margin: 0 0 9pt; font-size: 11pt; line-height: 1.64; }
-    p.indented { text-indent: 1.4em; }
-    strong { font-weight: 700; }
-    em { font-style: italic; }
+    .callout-stat { display:flex; flex-direction:column; align-items:center; padding:14pt 0 18pt; text-align:center; break-inside:avoid; }
+    .callout-stat-value { font-family:${titleFont}; font-size:38pt; font-weight:900; color:${accent}; line-height:1; letter-spacing:-.03em; }
+    .callout-stat-label { font-size:9pt; font-weight:600; text-transform:uppercase; letter-spacing:.10em; color:#888; margin-top:4pt; }
+    .callout-stat-text { background:${pullBg}; border-left:3pt solid ${accent}; padding:10pt 14pt; margin:14pt 0; font-size:10.5pt; font-weight:600; }
 
-    h3.body-subhead {
-      font-family: ${headingFont};
-      font-size: 12pt;
-      font-weight: 700;
-      margin: 16pt 0 7pt;
-      color: ${pageFg};
-      letter-spacing: -.01em;
-    }
-    .body-list { padding-left: 15pt; margin: 8pt 0 13pt; }
-    .body-list li { margin-bottom: 5pt; font-size: 10.5pt; line-height: 1.55; }
-    ol.body-list li::marker { color: ${eyebrow}; font-weight: 700; }
-
-    blockquote.inline-pull {
-      background: ${pullBg};
-      border-left: 3pt solid ${pullBorder};
-      padding: 10pt 14pt;
-      margin: 16pt 0;
-      font-size: 10.5pt;
-      font-style: italic;
-      color: ${pageFg};
-      border-radius: 0 4pt 4pt 0;
-    }
-
-    /* ── Frontmatter ── */
-    .pg-frontmatter { min-height: 5.5in; display:flex; align-items:center; break-after:page; page-break-after:always; }
-    .frontmatter-inner { max-width: 5in; }
-    .fm-publisher { font-size:8pt; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:${eyebrow}; margin-bottom:16pt; }
-    .fm-title { font-family:${titleFont}; font-size:24pt; font-weight:700; line-height:1.08; letter-spacing:-.02em; margin:0 0 7pt; }
-    .fm-subtitle { font-size:12pt; color:#666; font-style:italic; margin:0 0 20pt; }
-    .fm-rule { width:26pt; height:2pt; background:${accent}; margin:0 0 20pt; border-radius:1pt; }
+    .pg-frontmatter { min-height:5.8in; display:flex; align-items:center; break-after:page; page-break-after:always; }
+    .frontmatter-inner { max-width:5in; }
+    .fm-publisher { font-size:7.5pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:${eyebrowClr}; margin-bottom:18pt; }
+    .fm-title { font-family:${titleFont}; font-size:26pt; font-weight:700; line-height:1.06; letter-spacing:-.022em; margin:0 0 8pt; }
+    .fm-subtitle { font-size:12pt; color:#666; font-style:italic; margin:0 0 22pt; }
+    .fm-rule { width:28pt; height:2pt; background:${accent}; margin:0 0 22pt; border-radius:1pt; }
     .fm-body p { font-size:9pt; color:#555; margin-bottom:5pt; }
-    .fm-copyright { margin-top:22pt; font-size:8pt; color:#999; }
+    .fm-copyright { margin-top:24pt; font-size:8pt; color:#aaa; }
 
-    /* ── TOC ── */
     .pg-toc { break-after:page; page-break-after:always; }
-    .toc-list { list-style:none; margin-top:10pt; }
-    .toc-item { display:flex; align-items:baseline; gap:6pt; padding:6pt 0; border-bottom:.5pt dotted ${ruleColor}; font-size:10.5pt; }
+    .toc-list { list-style:none; margin-top:12pt; }
+    .toc-item { display:flex; align-items:baseline; gap:6pt; padding:7pt 0; border-bottom:.5pt dotted ${ruleColor}; }
     .toc-item:last-child { border-bottom:none; }
-    .toc-num { font-family:${headingFont}; font-weight:700; font-size:9pt; color:${chapterNum}; min-width:16pt; flex-shrink:0; }
+    .toc-num { font-family:${headingFont}; font-weight:700; font-size:8.5pt; color:${chNumClr}; min-width:16pt; flex-shrink:0; }
     .toc-dots { flex:1; border-bottom:1pt dotted ${ruleColor}; margin-bottom:3pt; }
     .toc-title { font-size:10.5pt; color:${pageFg}; }
 
-    /* ── Chapter opener ── */
     .pg-chapter { break-before:page; page-break-before:always; }
-    .chapter-opener { margin-bottom:20pt; }
-    .chapter-number {
-      display:block;
-      font-family:${titleFont};
-      font-size:72pt;
-      font-weight:900;
-      line-height:1;
-      color:${accent};
-      opacity:.14;
-      letter-spacing:-.04em;
-      margin-bottom:-22pt;
-    }
-    .chapter-rule { width:100%; height:.5pt; background:${ruleColor}; margin:16pt 0 20pt; }
-    .drop-cap {
-      float:left;
-      font-family:${titleFont};
-      font-size:54pt;
-      line-height:.82;
-      font-weight:700;
-      color:${accent};
-      margin:4pt 6pt 0 0;
-    }
+    .chapter-opener { margin-bottom:18pt; }
+    .chapter-number { display:block; font-family:${titleFont}; font-size:${t.chNum}; font-weight:900; line-height:1; color:${accent}; opacity:${t.chOp}; letter-spacing:-.05em; margin-bottom:-26pt; user-select:none; }
+    .chapter-rule { width:100%; height:.5pt; background:${ruleColor}; margin:16pt 0 22pt; }
+    .drop-cap { float:left; font-family:${titleFont}; font-size:${t.drop}; line-height:.80; font-weight:700; color:${accent}; margin:4pt 7pt 0 0; }
     .chapter-body { clear:both; }
     .chapter-body p { text-align:justify; }
-    .pull-quote { margin:22pt 0; padding:18pt 20pt; background:${pullBg}; border-top:2pt solid ${pullBorder}; border-bottom:2pt solid ${pullBorder}; text-align:center; break-inside:avoid; }
-    .pull-quote-mark { font-family:${titleFont}; font-size:44pt; line-height:.7; color:${pullBorder}; opacity:.35; margin-bottom:5pt; }
-    .pull-quote blockquote { font-family:${titleFont}; font-size:13.5pt; font-style:italic; line-height:1.45; color:${pageFg}; max-width:4in; margin:0 auto; }
+    .chapter-body p:first-child { text-indent:0; }
+    .pull-quote { margin:24pt 0; padding:18pt 22pt; background:${pullBg}; border-top:2pt solid ${pullBorder}; border-bottom:2pt solid ${pullBorder}; text-align:center; break-inside:avoid; }
+    .pull-quote-mark { font-family:${titleFont}; font-size:46pt; line-height:.68; color:${pullBorder}; opacity:.32; margin-bottom:5pt; }
+    .pull-quote blockquote { font-family:${titleFont}; font-size:${t.pqSize}; font-style:${t.pqStyle}; line-height:1.45; color:${pageFg}; max-width:4.1in; margin:0 auto; }
 
-    /* ── Checklist ── */
-    .check-list { list-style:none; margin:0; }
+    .check-list { list-style:none; margin:10pt 0 0; }
     .check-item { display:flex; align-items:flex-start; gap:10pt; padding:9pt 0; border-bottom:.5pt solid ${ruleColor}; break-inside:avoid; }
     .check-item:last-child { border-bottom:none; }
     .check-box { flex-shrink:0; width:13pt; height:13pt; border:1.5pt solid ${checkColor}; border-radius:3pt; margin-top:1pt; }
-    .check-text { font-size:10.5pt; line-height:1.5; flex:1; }
+    .check-text { font-size:10.5pt; line-height:1.52; flex:1; }
 
-    /* ── Worksheet ── */
-    .ws-grid { display:flex; flex-direction:column; gap:18pt; margin-top:10pt; }
+    .ws-grid { display:flex; flex-direction:column; gap:18pt; margin-top:12pt; }
     .ws-item { break-inside:avoid; }
     .ws-prompt { font-size:10.5pt; font-weight:600; margin-bottom:8pt; }
-    .ws-lines { display:flex; flex-direction:column; gap:9pt; }
+    .ws-lines { display:flex; flex-direction:column; gap:10pt; }
     .ws-line { height:0; border-bottom:1pt solid ${ruleColor}; }
 
-    /* ── CTA spread ── */
     .pg-cta { background:${ctaBg}; color:${ctaFg}; border:none; padding:0; }
-    .cta-inner { padding:.58in .52in; min-height:3.8in; display:flex; flex-direction:column; justify-content:center; }
+    .cta-inner { padding:.62in .55in; min-height:3.8in; display:flex; flex-direction:column; justify-content:center; }
     .cta-eyebrow { color:${accent}; }
-    .cta-rule { width:30pt; height:2.5pt; background:${accent}; border-radius:1.5pt; margin:0 0 18pt; }
-    .cta-heading { font-family:${titleFont}; font-size:24pt; font-weight:700; line-height:1.1; color:${ctaFg}; letter-spacing:-.02em; margin:0 0 16pt; max-width:4.4in; }
-    .cta-body p { color:rgba(255,255,255,.82); font-size:11pt; line-height:1.62; text-align:left; }
-    .cta-body ul.body-list li, .cta-body ol.body-list li { color:rgba(255,255,255,.82); }
+    .cta-rule { width:32pt; height:3pt; background:${accent}; border-radius:1.5pt; margin:0 0 20pt; }
+    .cta-heading { font-family:${titleFont}; font-size:26pt; font-weight:700; line-height:1.08; color:${ctaFg}; letter-spacing:-.022em; margin:0 0 18pt; max-width:4.5in; }
+    .cta-body p { color:rgba(255,255,255,.82); font-size:11pt; line-height:1.64; }
+    .cta-body .body-list li { color:rgba(255,255,255,.82); }
 
-    /* ── Standalone pullquote ── */
-    .pg-pullquote { min-height:4.5in; display:flex; align-items:center; justify-content:center; break-before:page; page-break-before:always; border:none; }
+    .pg-pullquote { min-height:4.8in; display:flex; align-items:center; justify-content:center; break-before:page; page-break-before:always; border:none; }
     .standalone-quote { text-align:center; max-width:4.2in; }
-    .sq-mark { font-family:${titleFont}; font-size:68pt; line-height:.7; color:${accent}; opacity:.3; display:block; margin-bottom:10pt; }
-    .sq-text { font-family:${titleFont}; font-size:15.5pt; font-style:italic; line-height:1.45; color:${pageFg}; }
-    .sq-attr { display:block; margin-top:12pt; font-size:9pt; color:${eyebrow}; letter-spacing:.06em; text-transform:uppercase; }
+    .sq-mark { font-family:${titleFont}; font-size:72pt; line-height:.68; color:${accent}; opacity:.28; display:block; margin-bottom:12pt; }
+    .sq-text { font-family:${titleFont}; font-size:16pt; font-style:italic; line-height:1.44; color:${pageFg}; }
+    .sq-attr { display:block; margin-top:14pt; font-size:8.5pt; color:${eyebrowClr}; letter-spacing:.08em; text-transform:uppercase; }
 
-    /* ── Stat block ── */
-    .stat-grid { display:flex; gap:0; margin-top:14pt; border-top:2pt solid ${accent}; border-bottom:2pt solid ${accent}; }
+    .stat-grid { display:flex; margin-top:14pt; border-top:2pt solid ${accent}; border-bottom:2pt solid ${accent}; }
     .stat-col { flex:1; padding:15pt 12pt; text-align:center; border-right:.5pt solid ${ruleColor}; }
     .stat-col:last-child { border-right:none; }
-    .stat-value { font-family:${titleFont}; font-size:24pt; font-weight:900; color:${accent}; line-height:1; margin:0 0 4pt; }
+    .stat-value { font-family:${titleFont}; font-size:26pt; font-weight:900; color:${accent}; line-height:1; margin:0 0 4pt; }
     .stat-label { font-size:8pt; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#888; margin:0; }
 
-    /* ── References ── */
     .ref-list { list-style:none; margin-top:10pt; }
-    .ref-item { display:flex; gap:8pt; margin-bottom:10pt; font-size:9pt; break-inside:avoid; }
-    .ref-num { color:${eyebrow}; font-weight:700; flex-shrink:0; min-width:14pt; }
+    .ref-item { display:flex; gap:8pt; margin-bottom:10pt; font-size:8.5pt; break-inside:avoid; }
+    .ref-num { color:${eyebrowClr}; font-weight:700; flex-shrink:0; min-width:14pt; }
     .ref-body { flex:1; line-height:1.5; }
     .ref-link { color:${accent}; word-break:break-all; font-size:8pt; }
     .ref-excerpt { color:#777; display:block; margin-top:2pt; }
 
-    /* ── Book footer ── */
-    .book-footer { text-align:center; padding:16pt 0 22pt; font-size:8pt; color:#bbb; border-top:.5pt solid ${ruleColor}; margin-top:22pt; }
+    .book-footer { text-align:center; padding:16pt 0 22pt; font-size:7.5pt; color:#bbb; border-top:.5pt solid ${ruleColor}; margin-top:20pt; }
 
-    /* ── Print ── */
-    @media print {
-      body { background:#fff; }
-      .book-wrap { box-shadow:none; max-width:none; }
-    }
-
-    /* ── Screen extras ── */
-    @media screen {
-      body { padding:.3in; background:#e5e8ed; }
-      .book-wrap { padding:${margin}in ${gutter}in; }
-    }
+    @media print { body{background:#fff;padding:0;} .book-wrap{box-shadow:none;max-width:none;padding:0;} }
   </style>
 </head>
 <body>
 <div class="book-wrap">
-
-  ${coverSection}
-
+  ${coverBlock}
   ${sectionsHtml}
-
   ${refsHtml}
-
-  <footer class="book-footer">
-    ${esc(copyright)} &nbsp;·&nbsp; ${esc(publisher)}
-  </footer>
-
+  <footer class="book-footer">${esc(copyright)} &nbsp;·&nbsp; ${esc(publisher)}</footer>
 </div>
 </body>
 </html>`;
 
-  return { html };
+  return { html, renderReport };
 }
 
 function esc(s = '') {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
