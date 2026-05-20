@@ -319,7 +319,7 @@
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
         <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
-        <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard</button>
+        <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
       </div>
 
       <!-- ── GENERATE VIEW ── -->
@@ -467,17 +467,24 @@
           <!-- Right: results -->
           <div class="blog-results-col">
             <div class="blog-meta-panel" id="blogMetaPanel" style="display:none">
-              <div class="compile-card">
-                <h2 class="compile-card-title">SEO</h2>
-                <dl class="strategy-list" id="blogSeoList"></dl>
-              </div>
-              <div class="compile-card">
-                <h2 class="compile-card-title">Social captions</h2>
-                <div id="blogSocialCaptions"></div>
-              </div>
-              <div class="compile-card" id="blogPublishResultsCard" style="display:none">
-                <h2 class="compile-card-title">Publish results</h2>
-                <div id="blogPublishList"></div>
+              <button class="blog-meta-toggle" id="blogMetaToggle" type="button" aria-expanded="true" aria-controls="blogMetaBody">
+                <svg class="blog-meta-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="blog-meta-title">SEO &amp; social</span>
+                <span class="blog-meta-hint" id="blogMetaHint">title, slug, meta, captions</span>
+              </button>
+              <div class="blog-meta-body" id="blogMetaBody">
+                <div class="compile-card">
+                  <h2 class="compile-card-title">SEO</h2>
+                  <dl class="strategy-list" id="blogSeoList"></dl>
+                </div>
+                <div class="compile-card">
+                  <h2 class="compile-card-title">Social captions</h2>
+                  <div id="blogSocialCaptions"></div>
+                </div>
+                <div class="compile-card" id="blogPublishResultsCard" style="display:none">
+                  <h2 class="compile-card-title">Publish results</h2>
+                  <div id="blogPublishList"></div>
+                </div>
               </div>
             </div>
             <div class="compile-preview" style="flex:1">
@@ -510,7 +517,7 @@
                 <option value="published">Published</option>
               </select>
             </div>
-            <div class="field" style="margin:0;width:160px">
+            <div class="field" style="margin:0;width:150px">
               <select id="blogDashType">
                 <option value="">All types</option>
                 <option value="guide">📘 Guide</option>
@@ -520,6 +527,13 @@
                 <option value="review">⭐ Review</option>
                 <option value="roundup">👥 Roundup</option>
                 <option value="opinion">💭 Opinion</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;width:150px">
+              <select id="blogDashSort">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="title">Title A→Z</option>
               </select>
             </div>
             <button class="btn-secondary" id="blogDashRefresh">🔄 Refresh</button>
