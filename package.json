@@ -1,0 +1,23 @@
+{
+  "name": "pathguru-publishers",
+  "version": "2.0.0",
+  "private": true,
+  "description": "AI-powered publishing suite. Produces KDP-ready PDF and EPUB from a single prompt.",
+  "type": "module",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node --env-file=.env backend/server.js",
+    "check": "node --check backend/server.js",
+    "install-playwright": "npx playwright install --with-deps chromium",
+    "test": "node ./tests/skills.test.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.0",
+    "dotenv": "^16.4.5",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.39.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

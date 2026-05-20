@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PathGuru Publishers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar" role="navigation" aria-label="Main navigation">
+    <div class="sidebar-brand">
+      <div class="brand-mark">PG</div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-btn active" data-tab="brief" title="Brief & Research" aria-label="Brief and Research tab">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span class="nav-label">Brief</span>
+      </button>
+      <button class="nav-btn" data-tab="assets" title="Visual Assets" aria-label="Visual Assets tab">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label">Assets</span>
+      </button>
+      <button class="nav-btn" data-tab="compile" title="Compile & Export" aria-label="Compile and Export tab">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+        <span class="nav-label">Export</span>
+      </button>
+      <button class="nav-btn" data-tab="blog" title="Blog Publisher" aria-label="Blog Publisher tab">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="nav-label">Blog</span>
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Panel -->
+  <main class="main-panel" role="main">
+
+    <!-- ── TAB 1: BRIEF & RESEARCH ── -->
+    <section class="tab-panel active" id="tab-brief" aria-label="Brief and Research">
+      <div class="panel-header">
+        <div>
+          <p class="panel-eyebrow">Step 1 of 3</p>
+          <h1 class="panel-title">Brief &amp; Research</h1>
+        </div>
+        <div class="header-actions">
+          <span class="backend-url" id="backendUrlDisplay"></span>
+        </div>
+      </div>
+      <div class="form-scroll">
+        <form id="briefForm" novalidate>
+
+          <div class="form-section">
+            <h2 class="form-section-title">The Book Concept</h2>
+            <div class="field">
+              <label for="topic">Topic prompt <span class="required">*</span></label>
+              <textarea id="topic" name="topic" rows="4" placeholder="Example: A conversion-focused guide for salon owners who want to use Instagram Reels to book more high-ticket clients — without dancing or going viral."></textarea>
+              <p class="field-hint">Be specific about the reader, the result, and the emotional hook.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="title">Book title</label>
+                <input id="title" name="title" type="text" placeholder="Auto-generated if blank">
+              </div>
+              <div class="field">
+                <label for="subtitle">Subtitle</label>
+                <input id="subtitle" name="subtitle" type="text" placeholder="Auto-generated if blank">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h2 class="form-section-title">Audience &amp; Outcome</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="audience">Target audience</label>
+                <input id="audience" name="audience" type="text" placeholder="salon owners, coaches, first-time authors">
+              </div>
+              <div class="field">
+                <label for="outcome">Reader outcome</label>
+                <input id="outcome" name="outcome" type="text" placeholder="book 5 new clients per month from Reels">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="writingMode">Writing mode</label>
+                <select id="writingMode" name="writingMode">
+                  <option value="nonfiction guide">Nonfiction guide</option>
+                  <option value="workbook">Workbook</option>
+                  <option value="sales lead magnet">Sales lead magnet</option>
+                  <option value="memoir">Memoir</option>
+                  <option value="fiction">Fiction</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="writingPersonality">Voice personality</label>
+                <select id="writingPersonality" name="writingPersonality">
+                  <option value="trusted mentor: clear, reassuring, practical">Trusted mentor</option>
+                  <option value="premium strategist: polished, persuasive, commercially sharp">Premium strategist</option>
+                  <option value="friendly coach: warm, energetic, action-oriented">Friendly coach</option>
+                  <option value="bold copywriter: direct, punchy, benefit-led, conversion-focused">Bold copywriter</option>
+                  <option value="academic explainer: precise, structured, evidence-aware">Academic explainer</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="tone">Tone</label>
+                <select id="tone" name="tone">
+                  <option value="expert, clear, persuasive">Expert &amp; clear</option>
+                  <option value="warm, practical, encouraging">Warm &amp; practical</option>
+                  <option value="bold, direct, conversion-focused">Bold &amp; direct</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="style">Design style</label>
+                <select id="style" name="style">
+                  <option value="modern">Modern authority</option>
+                  <option value="premium">Premium editorial</option>
+                  <option value="bold">Bold conversion</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h2 class="form-section-title">Publishing Details</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="author">Author name</label>
+                <input id="author" name="author" type="text" placeholder="Author name">
+              </div>
+              <div class="field">
+                <label for="publisher">Publisher</label>
+                <input id="publisher" name="publisher" type="text" placeholder="PathGuru Publishers">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="publisherProfile">Publisher profile</label>
+                <select id="publisherProfile" name="publisherProfile">
+                  <option value="custom">Custom / freeform</option>
+                  <option value="pathfinda">PathFinda Publishers</option>
+                  <option value="digitalNation">Digital Nation Inc.</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="copyright">Copyright line</label>
+                <input id="copyright" name="copyright" type="text" placeholder="Copyright 2026 Author Name. All rights reserved.">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h2 class="form-section-title">Format &amp; KDP Spec</h2>
+            <div class="field-row three-col">
+              <div class="field">
+                <label for="format">Output format</label>
+                <select id="format" name="format">
+                  <option value="pdf">PDF</option>
+                  <option value="epub">EPUB</option>
+                  <option value="both">PDF + EPUB</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="trimSize">KDP trim size</label>
+                <select id="trimSize" name="trimSize">
+                  <option value="6x9">6 × 9 in (standard)</option>
+                  <option value="5.5x8.5">5.5 × 8.5 in (trade)</option>
+                  <option value="8.5x11">8.5 × 11 in (workbook)</option>
+                  <option value="5x8">5 × 8 in (compact)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="length">Content length</label>
+                <select id="length" name="length">
+                  <option value="concise">Concise (20–30 pages)</option>
+                  <option value="standard">Standard (40–60 pages)</option>
+                  <option value="deep">Deep guide (80–120 pages)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="generate-zone">
+            <div class="generate-status" id="generateStatus" aria-live="polite">
+              <div class="status-idle" id="statusIdle"><p>Ready to generate your publish-ready draft.</p></div>
+              <div class="status-loading hidden" id="statusLoading">
+                <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+                <p class="status-message" id="statusMessage">Initialising agents...</p>
+              </div>
+              <div class="status-error hidden" id="statusError"><p id="errorMessage"></p></div>
+            </div>
+            <button type="submit" class="btn-generate" id="generateBtn">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Generate Draft
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </section>
+
+    <!-- ── TAB 2: VISUAL ASSETS ── -->
+    <section class="tab-panel" id="tab-assets" aria-label="Visual Assets">
+      <div class="panel-header">
+        <div>
+          <p class="panel-eyebrow">Step 2 of 3</p>
+          <h1 class="panel-title">Visual Assets</h1>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="assets-search-bar">
+          <div class="search-input-wrap">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="pexelsQuery" placeholder="Search Pexels — e.g. salon, business strategy..." class="search-input">
+          </div>
+          <select id="aspectFilter" class="select-sm">
+            <option value="">Any ratio</option>
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait (cover)</option>
+            <option value="square">Square</option>
+          </select>
+          <button class="btn-secondary" id="searchAssetsBtn">Search</button>
+        </div>
+        <div class="assets-grid" id="assetsGrid">
+          <div class="assets-empty">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <p>Search for images above, or generate your brief first to get AI-suggested keywords.</p>
+          </div>
+        </div>
+        <div class="selected-assets-tray" id="selectedAssetsTray" style="display:none">
+          <h3 class="tray-title">Selected assets <span id="selectedCount">0</span></h3>
+          <div class="tray-items" id="trayItems"></div>
+          <button class="btn-secondary" id="uploadToR2Btn">Upload to R2 storage</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TAB 3: COMPILE & EXPORT ── -->
+    <section class="tab-panel" id="tab-compile" aria-label="Compile and Export">
+      <div class="panel-header">
+        <div>
+          <p class="panel-eyebrow">Step 3 of 3</p>
+          <h1 class="panel-title">Compile &amp; Export</h1>
+        </div>
+        <div class="header-actions">
+          <button class="btn-secondary btn-sm" id="downloadHtmlBtn" disabled>HTML</button>
+          <button class="btn-secondary btn-sm" id="downloadJsonBtn" disabled>JSON</button>
+          <button class="btn-primary btn-sm" id="downloadPdfBtn" disabled>Download PDF</button>
+          <button class="btn-primary btn-sm" id="downloadEpubBtn" disabled>Download EPUB</button>
+        </div>
+      </div>
+      <div class="compile-layout">
+        <div class="compile-sidebar">
+          <div class="compile-card">
+            <h2 class="compile-card-title">KDP Compliance</h2>
+            <div id="complianceChecks" class="compliance-list">
+              <div class="compliance-empty">Generate a draft to see compliance checks.</div>
+            </div>
+          </div>
+          <div class="compile-card">
+            <h2 class="compile-card-title">Book Strategy</h2>
+            <dl class="strategy-list" id="strategyList">
+              <div class="strategy-empty">Generate a draft to see strategy details.</div>
+            </dl>
+          </div>
+          <div class="compile-card">
+            <h2 class="compile-card-title">Proofreader Notes</h2>
+            <ul class="notes-list" id="proofreaderNotes">
+              <li class="notes-empty">AI proofreader notes will appear here.</li>
+            </ul>
+          </div>
+          <div class="compile-card" id="storageCard" style="display:none">
+            <h2 class="compile-card-title">Cloud Storage</h2>
+            <div id="storageUrls" class="storage-urls"></div>
+          </div>
+        </div>
+        <div class="compile-preview">
+          <div class="preview-chrome">
+            <div class="preview-chrome-dots"><span></span><span></span><span></span></div>
+            <span class="preview-chrome-label">Document Preview</span>
+          </div>
+          <div class="preview-empty" id="previewEmpty">
+            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <p>Your generated document preview will appear here.</p>
+          </div>
+          <iframe id="previewFrame" title="Document preview" style="display:none"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TAB 4: BLOG PUBLISHER ── -->
+    <section class="tab-panel" id="tab-blog" aria-label="Blog Publisher">
+      <div class="panel-header">
+        <div>
+          <p class="panel-eyebrow">Blog Publisher</p>
+          <h1 class="panel-title">Write & Publish</h1>
+        </div>
+        <div class="header-actions">
+          <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>Preview</button>
+          <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>View results</button>
+          <button class="btn-generate" id="blogGenerateBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Generate Post
+          </button>
+        </div>
+      </div>
+
+      <!-- Blog Sub-tabs: Generate | Dashboard -->
+      <div class="blog-subtabs">
+        <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
+        <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard</button>
+      </div>
+
+      <!-- ── GENERATE VIEW ── -->
+      <div class="blog-view active" id="blogViewGenerate">
+        <div class="blog-layout">
+          <!-- Left: form -->
+          <div class="blog-form-col">
+            <div class="form-section">
+              <h2 class="form-section-title">Post Brief</h2>
+              <div class="field">
+                <label for="blogTopic">Topic / angle <span class="required">*</span></label>
+                <textarea id="blogTopic" rows="3" placeholder="E.g. 7 Instagram Reel strategies that booked our salon 23 new clients in 30 days (no dancing required)"></textarea>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="blogPostType">Post type</label>
+                  <select id="blogPostType">
+                    <option value="guide">📘 Guide</option>
+                    <option value="listicle">🔢 Listicle</option>
+                    <option value="how-to">🛠️ How-To</option>
+                    <option value="case-study">📊 Case Study</option>
+                    <option value="review">⭐ Review</option>
+                    <option value="roundup">👥 Expert Roundup</option>
+                    <option value="opinion">💭 Opinion</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="blogAudience">Target audience</label>
+                  <input type="text" id="blogAudience" placeholder="salon owners, coaches, freelancers">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="blogGoal">Post goal</label>
+                  <select id="blogGoal">
+                    <option value="build authority and get shares">Build authority + shares</option>
+                    <option value="drive leads and email signups">Drive leads + signups</option>
+                    <option value="rank on Google for target keyword">Rank on Google</option>
+                    <option value="convert readers to buyers">Convert to buyers</option>
+                    <option value="grow social following">Grow social following</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="blogTone">Tone</label>
+                  <select id="blogTone">
+                    <option value="conversational, expert, punchy">Conversational + expert</option>
+                    <option value="bold, direct, conversion-focused">Bold + direct</option>
+                    <option value="warm, encouraging, practical">Warm + practical</option>
+                    <option value="professional, authoritative, data-driven">Professional + data-driven</option>
+                    <option value="storytelling, personal, relatable">Storytelling + personal</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="blogWordCount">Word count</label>
+                  <select id="blogWordCount">
+                    <option value="800-1000 words">Short (800–1000)</option>
+                    <option value="1200-1600 words" selected>Standard (1200–1600)</option>
+                    <option value="2000-2500 words">Long-form (2000–2500)</option>
+                    <option value="3000+ words">Pillar (3000+)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="blogSeoKeyword">SEO focus keyword</label>
+                  <input type="text" id="blogSeoKeyword" placeholder="instagram reels for salons">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="blogCtaGoal">CTA goal</label>
+                  <input type="text" id="blogCtaGoal" placeholder="subscribe to newsletter, book a call...">
+                </div>
+                <div class="field">
+                  <label for="blogAuthor">Author name</label>
+                  <input type="text" id="blogAuthor" placeholder="Your name">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <h2 class="form-section-title">Publish destinations</h2>
+              <p class="field-hint" style="margin-bottom:16px">Leave all blank to generate only — no publishing.</p>
+
+              <div class="platform-block">
+                <div class="platform-toggle">
+                  <label class="platform-label">
+                    <input type="checkbox" id="wpEnabled" class="platform-check">
+                    <span class="platform-name">WordPress</span>
+                  </label>
+                </div>
+                <div class="platform-fields" id="wpFields" style="display:none">
+                  <div class="field"><label for="wpUrl">Site URL</label><input type="url" id="wpUrl" placeholder="https://yoursite.com"></div>
+                  <div class="field-row">
+                    <div class="field"><label for="wpUser">Username</label><input type="text" id="wpUser" placeholder="admin"></div>
+                    <div class="field"><label for="wpPass">Application password</label><input type="password" id="wpPass" placeholder="xxxx xxxx xxxx xxxx"></div>
+                  </div>
+                  <div class="field"><label for="wpStatus">Publish as</label><select id="wpStatus"><option value="draft">Draft</option><option value="publish">Published</option></select></div>
+                </div>
+              </div>
+
+              <div class="platform-block">
+                <div class="platform-toggle">
+                  <label class="platform-label">
+                    <input type="checkbox" id="ghostEnabled" class="platform-check">
+                    <span class="platform-name">Ghost</span>
+                  </label>
+                </div>
+                <div class="platform-fields" id="ghostFields" style="display:none">
+                  <div class="field"><label for="ghostUrl">Ghost site URL</label><input type="url" id="ghostUrl" placeholder="https://yoursite.ghost.io"></div>
+                  <div class="field"><label for="ghostKey">Admin API key</label><input type="password" id="ghostKey" placeholder="id:secret (from Ghost admin)"></div>
+                  <div class="field"><label for="ghostStatus">Publish as</label><select id="ghostStatus"><option value="draft">Draft</option><option value="published">Published</option></select></div>
+                </div>
+              </div>
+
+              <div class="platform-block">
+                <div class="platform-toggle">
+                  <label class="platform-label">
+                    <input type="checkbox" id="wfEnabled" class="platform-check">
+                    <span class="platform-name">Webflow</span>
+                  </label>
+                </div>
+                <div class="platform-fields" id="wfFields" style="display:none">
+                  <div class="field"><label for="wfKey">API token</label><input type="password" id="wfKey" placeholder="Webflow API token"></div>
+                  <div class="field-row">
+                    <div class="field"><label for="wfCollection">Collection ID</label><input type="text" id="wfCollection" placeholder="collection id"></div>
+                    <div class="field"><label for="wfSite">Site ID</label><input type="text" id="wfSite" placeholder="site id"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="generate-zone" style="border-top:0">
+              <div class="generate-status" id="blogStatus" aria-live="polite">
+                <div id="blogStatusIdle"><p>Ready to generate your blog post.</p></div>
+                <div id="blogStatusLoading" class="hidden">
+                  <div class="progress-track"><div class="progress-bar" id="blogProgressBar"></div></div>
+                  <p class="status-message" id="blogStatusMsg">Initialising...</p>
+                </div>
+                <div id="blogStatusError" class="hidden"><p id="blogErrorMsg" style="color:var(--red)"></p></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: results -->
+          <div class="blog-results-col">
+            <div class="blog-meta-panel" id="blogMetaPanel" style="display:none">
+              <div class="compile-card">
+                <h2 class="compile-card-title">SEO</h2>
+                <dl class="strategy-list" id="blogSeoList"></dl>
+              </div>
+              <div class="compile-card">
+                <h2 class="compile-card-title">Social captions</h2>
+                <div id="blogSocialCaptions"></div>
+              </div>
+              <div class="compile-card" id="blogPublishResultsCard" style="display:none">
+                <h2 class="compile-card-title">Publish results</h2>
+                <div id="blogPublishList"></div>
+              </div>
+            </div>
+            <div class="compile-preview" style="flex:1">
+              <div class="preview-chrome">
+                <div class="preview-chrome-dots"><span></span><span></span><span></span></div>
+                <span class="preview-chrome-label">Post Preview</span>
+              </div>
+              <div class="preview-empty" id="blogPreviewEmpty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                <p>Your generated blog post will appear here.</p>
+              </div>
+              <iframe id="blogPreviewFrame" title="Blog post preview" style="display:none;flex:1;border:none;width:100%;background:#fff"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── DASHBOARD VIEW ── -->
+      <div class="blog-view" id="blogViewDashboard">
+        <div class="blog-dashboard">
+          <!-- Filter bar -->
+          <div class="blog-dash-filters">
+            <div class="field" style="margin:0;flex:1">
+              <input type="text" id="blogDashSearch" placeholder="Search posts..." style="margin:0">
+            </div>
+            <div class="field" style="margin:0;width:160px">
+              <select id="blogDashStatus">
+                <option value="">All status</option>
+                <option value="draft">Drafts</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;width:160px">
+              <select id="blogDashType">
+                <option value="">All types</option>
+                <option value="guide">📘 Guide</option>
+                <option value="listicle">🔢 Listicle</option>
+                <option value="how-to">🛠️ How-To</option>
+                <option value="case-study">📊 Case Study</option>
+                <option value="review">⭐ Review</option>
+                <option value="roundup">👥 Roundup</option>
+                <option value="opinion">💭 Opinion</option>
+              </select>
+            </div>
+            <button class="btn-secondary" id="blogDashRefresh">🔄 Refresh</button>
+          </div>
+
+          <!-- Posts list -->
+          <div class="blog-dash-list" id="blogDashList">
+            <div class="blog-dash-empty">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <p>No posts yet. Generate your first post!</p>
+            </div>
+          </div>
+
+          <!-- Loading -->
+          <div class="blog-dash-loading hidden" id="blogDashLoading">
+            <p>Loading posts...</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-label="Settings" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Settings</h2>
+        <button class="modal-close" id="closeSettings" aria-label="Close settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="backendUrl">Backend URL</label>
+          <input type="url" id="backendUrl" placeholder="http://localhost:8787">
+          <p class="field-hint">Your Render service URL, e.g. https://pathguru-publishers.onrender.com</p>
+        </div>
+        <div class="field">
+          <label for="brandLogoUrl">Brand logo URL</label>
+          <input type="url" id="brandLogoUrl" placeholder="https://...">
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="brandPrimaryColor">Primary colour</label><input type="text" id="brandPrimaryColor" placeholder="#16213e"></div>
+          <div class="field"><label for="brandSecondaryColor">Accent colour</label><input type="text" id="brandSecondaryColor" placeholder="#2bb3a3"></div>
+        </div>
+        <div class="field">
+          <label for="brandFontStack">Font stack</label>
+          <input type="text" id="brandFontStack" placeholder="Georgia, Inter, Arial">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelSettings">Cancel</button>
+        <button class="btn-primary" id="saveSettings">Save settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="blog.js"></script>
+</body>
+</html>

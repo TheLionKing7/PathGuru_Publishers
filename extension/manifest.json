@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "PathGuru Publishers — Research Clipper",
+  "version": "2.0.0",
+  "description": "Clip any web page to PathGuru Publishers for AI research and publishing.",
+  "permissions": ["activeTab", "storage"],
+  "action": {
+    "default_popup": "clipper.html",
+    "default_title": "Clip to PathGuru Publishers"
+  },
+  "icons": {
+    "16":  "assets/icon16.png",
+    "48":  "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}

@@ -1,0 +1,29 @@
+# Environment variables — never commit these
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Playwright browsers
+/ms-playwright/
+
+# Build outputs & temp files
+dist/
+*.pdf
+*.epub
+/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

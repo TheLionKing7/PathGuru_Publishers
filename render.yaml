@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: pathguru-publishers-api
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx playwright install --with-deps chromium
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # ── AI Provider ──────────────────────────────
+      - key: AI_PROVIDER
+        value: gemini            # gemini | cerebras | deepseek
+      - key: GEMINI_API_KEY
+        sync: false              # set in Render dashboard
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: AI_MAX_TOKENS
+        value: "5000"
+      # ── Research ─────────────────────────────────
+      - key: TAVILY_API_KEY
+        sync: false
+      # ── Assets ───────────────────────────────────
+      - key: PEXELS_API_KEY
+        sync: false
+      # ── Storage ──────────────────────────────────
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_PUBLIC_URL
+        sync: false
+      # ── KDP Defaults ─────────────────────────────
+      - key: KDP_DEFAULT_TRIM_WIDTH_IN
+        value: "6"
+      - key: KDP_DEFAULT_TRIM_HEIGHT_IN
+        value: "9"
+      - key: KDP_DEFAULT_BLEED
+        value: "false"
+      - key: KDP_DEFAULT_INTERIOR
+        value: black-and-white
+      - key: KDP_MIN_FONT_SIZE_PT
+        value: "7"
+      - key: KDP_MIN_IMAGE_DPI
+        value: "300"
