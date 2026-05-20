@@ -997,10 +997,10 @@ select option { background: var(--surface-2); }
 .blog-meta-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
+  gap: 0;
+  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md);
   overflow-y: auto;
-  max-height: 300px;
+  max-height: 38vh;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -1095,6 +1095,9 @@ select option { background: var(--surface-2); }
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all .2s var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .blog-subtab:hover {
   color: var(--text-primary);
@@ -1152,60 +1155,52 @@ select option { background: var(--surface-2); }
 .blog-dash-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: border-color .2s var(--ease-out);
+  transition: border-color .2s var(--ease-out), background .2s var(--ease-out);
 }
 .blog-dash-item:hover {
   border-color: var(--border-light);
+  background: rgba(255,255,255,.02);
 }
-.dash-item-main {
-  flex: 1;
-  min-width: 0;
-}
-.dash-item-type {
-  font-size: 11px;
+.dash-status-pill {
+  flex-shrink: 0;
+  font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  letter-spacing: .04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
+.dash-status-pill.published { color: var(--green); background: rgba(62,207,142,.10); border: 1px solid rgba(62,207,142,.22); }
+.dash-status-pill.draft     { color: var(--gold);  background: rgba(201,168,76,.10); border: 1px solid rgba(201,168,76,.22); }
+.dash-item-main { flex: 1; min-width: 0; }
 .dash-item-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.dash-item-meta {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--text-muted);
-  align-items: center;
-  flex-wrap: wrap;
+.dash-item-meta { display: flex; gap: 8px; font-size: 11px; color: var(--text-muted); align-items: center; flex-wrap: wrap; }
+.dash-item-type { text-transform: capitalize; letter-spacing: .02em; }
+.dash-meta-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--border-light); flex-shrink: 0; }
+.dash-slug { font-family: 'SF Mono', 'Fira Code', monospace; color: var(--text-muted); }
+.dash-item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.dash-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--gold); text-decoration: none;
+  padding: 6px 10px; border-radius: var(--radius-sm);
+  transition: background .2s var(--ease-out);
 }
-.dash-status {
-  font-weight: 600;
-}
-.dash-status.published {
-  color: var(--green);
-}
-.dash-status.draft {
-  color: var(--yellow);
-}
-.dash-item-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
+.dash-link:hover { background: rgba(201,168,76,.10); }
 .btn-danger {
   background: rgba(239,68,68,.1);
   color: var(--red);
@@ -1222,3 +1217,67 @@ select option { background: var(--surface-2); }
   background: rgba(239,68,68,.2);
   border-color: var(--red);
 }
+
+
+/* ── Blog UI polish additions ─────────────────── */
+.blog-subtab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+.blog-subtab.active .blog-subtab-count { background: rgba(201,168,76,.18); color: var(--gold); }
+.blog-subtab-count[hidden] { display: none; }
+
+.blog-meta-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 14px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui); font-size: 12px; font-weight: 600; letter-spacing: .02em;
+  cursor: pointer;
+  transition: border-color .2s var(--ease-out), background .2s var(--ease-out);
+}
+.blog-meta-toggle:hover { border-color: var(--border-light); background: rgba(255,255,255,.03); }
+.blog-meta-caret { transition: transform .2s var(--ease-out); color: var(--gold); flex-shrink: 0; }
+.blog-meta-toggle.is-collapsed .blog-meta-caret { transform: rotate(-90deg); }
+.blog-meta-title { color: var(--gold); }
+.blog-meta-hint { color: var(--text-muted); font-weight: 400; margin-left: 4px; }
+.blog-meta-body { display: flex; flex-direction: column; gap: var(--spacing-md); margin-top: var(--spacing-md); }
+.blog-meta-body[hidden] { display: none; }
+
+.dash-menu { position: relative; }
+.dash-menu-trigger {
+  width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--radius-sm); color: var(--text-muted); cursor: pointer;
+  transition: all .2s var(--ease-out);
+}
+.dash-menu-trigger:hover { color: var(--text-primary); background: rgba(255,255,255,.04); border-color: var(--border); }
+.dash-menu-popover {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 30;
+  min-width: 160px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px rgba(0,0,0,.45);
+  padding: 4px; display: flex; flex-direction: column;
+}
+.dash-menu-item {
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; border: none;
+  color: var(--text-primary); font-family: var(--font-ui); font-size: 12px;
+  padding: 8px 10px; border-radius: var(--radius-sm); cursor: pointer; text-align: left;
+}
+.dash-menu-item:hover { background: rgba(255,255,255,.05); }
+.dash-menu-item.dash-menu-danger { color: var(--red); }
+.dash-menu-item.dash-menu-danger:hover { background: rgba(239,68,68,.10); }
