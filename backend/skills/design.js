@@ -24,6 +24,7 @@
  */
 
 import { searchPexels } from '../pexelsAssets.js';
+import { getInlineFontCss } from '../fontEmbedder.js';
 
 /* ── Style token library ──────────────────────────────────────────────── */
 const STYLE_TOKENS = {
@@ -138,7 +139,7 @@ function buildCoverKeyword(niche, topic) {
 }
 
 /* ── Cover compositor ─────────────────────────────────────────────────── */
-function composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport }) {
+function composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport, inlineFontCss }) {
   const title     = esc(manuscript?.title    || project.title    || 'Untitled');
   const subtitle  = manuscript?.subtitle || project.subtitle || '';
   const author    = project.author || '';
@@ -189,8 +190,7 @@ function composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport 
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="${fontImport}" rel="stylesheet">
+  ${inlineFontCss || `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="${fontImport}" rel="stylesheet">`}
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: ${tokens.coverBg}; }
@@ -284,7 +284,9 @@ export async function runDesignAgent(input, project, research, manuscript) {
 
   const coverImage = await fetchCoverImage(project, manuscript);
 
-  const coverHtml = composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport });
+  const inlineFontCss = await getInlineFontCss(style).catch(() => '');
+
+  const coverHtml = composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport, inlineFontCss });
 
   return {
     design: {
@@ -295,6 +297,7 @@ export async function runDesignAgent(input, project, research, manuscript) {
       headingFont: tokens.headingFont,
       bodyFont:    tokens.bodyFont,
       fontImport,
+      inlineFontCss,
       coverImage,
       tokens,
     },

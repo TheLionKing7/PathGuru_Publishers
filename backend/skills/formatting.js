@@ -35,7 +35,8 @@ export async function runFormattingAgent(project, manuscript, design) {
 
   /* ── Token resolution ── */
   const p           = design?.design?.palette   || {};
-  const fontImport  = design?.design?.fontImport || '';
+  const fontImport    = design?.design?.fontImport || '';
+  const inlineFontCss = design?.design?.inlineFontCss || '';
   const coverHtml   = design?.coverHtml          || '';
   const titleFont   = design?.design?.titleFont   || "'DM Sans', Arial, sans-serif";
   const headingFont = design?.design?.headingFont || "'DM Sans', Arial, sans-serif";
@@ -406,7 +407,7 @@ export async function runFormattingAgent(project, manuscript, design) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>${esc(title)}</title>
-  ${fontImport ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="${fontImport}" rel="stylesheet">` : ''}
+  ${inlineFontCss || (fontImport ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="${fontImport}" rel="stylesheet">` : '')}
   <style>
     /* KDP @page */
     @page {

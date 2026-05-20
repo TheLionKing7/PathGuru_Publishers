@@ -33,6 +33,7 @@ import { buildProject }                   from './designGuru.js';
 import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost }     from './blogPublisher.js';
+import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
   listPosts,
   getPostBySlug,
@@ -87,7 +88,9 @@ const server = createServer(async (req, res) => {
 
   // ── Health ──────────────────────────────────────
   if (path === '/health') {
-    json(res, { status: 'ok', service: 'PathGuru Publishers', version: '3.0', ts: new Date().toISOString() });
+    const fonts = await describeEmbeddedFonts().catch(() => []);
+    json(res, { status: 'ok', service: 'PathGuru Publishers', version: '3.0', ts: new Date().toISOString(),
+                fonts: fonts.map(f => ({ family: f.family, italic: f.italic, weight: f.weightRange.join('-'), loaded: f.loaded, kb: Math.round(f.bytes / 1024) })) });
     return;
   }
 
@@ -285,6 +288,8 @@ const server = createServer(async (req, res) => {
 
   err(res, `Not found: ${path}`, 404);
 });
+
+prewarmFonts().catch((e) => console.warn('[fontEmbedder] prewarm failed:', e.message));
 
 server.listen(PORT, () => {
   console.log(`
