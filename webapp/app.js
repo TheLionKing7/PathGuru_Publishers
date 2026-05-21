@@ -106,11 +106,17 @@ const UI = (() => {
     });
   }
 
-  /* Sub-tabs — show the matching tab-panel and highlight the module-tab */
+  /* Sub-tabs — show the matching tab-panel, swap the visible panel-header,
+     and highlight the module-tab button. */
   function renderTabs () {
     const tab = State.get('activeTab');
     document.querySelectorAll('.tab-panel').forEach(p => {
       p.classList.toggle('active', p.id === `tab-${tab}`);
+    });
+    // Toggle the matching .panel-header[data-for] (lifted out of tab-panels
+    // so the header sits ABOVE the topnav at module level).
+    document.querySelectorAll('.panel-header[data-for]').forEach(h => {
+      h.classList.toggle('active', h.dataset.for === tab);
     });
     document.querySelectorAll('.module-tab[data-subtab]').forEach(b => {
       const isActive = b.dataset.subtab === tab;

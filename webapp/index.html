@@ -45,6 +45,38 @@
          MODULE: PDF PUBLISHING  (Brief / Assets / Export)
     ══════════════════════════════════════════════ -->
     <div class="module-shell active" id="module-publishing" data-module="publishing">
+
+      <!-- Per-tab headers — only the active one is shown. Sits ABOVE the topnav. -->
+      <div class="module-headers">
+        <header class="panel-header active" data-for="brief">
+          <div>
+            <p class="panel-eyebrow">Publishing</p>
+            <h1 class="panel-title">Brief &amp; Research</h1>
+          </div>
+          <div class="header-actions">
+            <span class="backend-url" id="backendUrlDisplay"></span>
+          </div>
+        </header>
+        <header class="panel-header" data-for="assets">
+          <div>
+            <p class="panel-eyebrow">Publishing</p>
+            <h1 class="panel-title">Project assets</h1>
+          </div>
+        </header>
+        <header class="panel-header" data-for="compile">
+          <div>
+            <p class="panel-eyebrow">Publishing</p>
+            <h1 class="panel-title">Compile &amp; Export</h1>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary btn-sm" id="downloadHtmlBtn" disabled>HTML</button>
+            <button class="btn-secondary btn-sm" id="downloadJsonBtn" disabled>JSON</button>
+            <button class="btn-primary btn-sm" id="downloadPdfBtn" disabled>Download PDF</button>
+            <button class="btn-primary btn-sm" id="downloadEpubBtn" disabled>Download EPUB</button>
+          </div>
+        </header>
+      </div>
+
       <div class="module-topnav" role="tablist" aria-label="Publishing sections">
         <button class="module-tab active" data-subtab="brief" role="tab" aria-selected="true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -64,15 +96,6 @@
 
     <!-- ── TAB 1: BRIEF & RESEARCH ── -->
     <section class="tab-panel active" id="tab-brief" aria-label="Brief and Research">
-      <div class="panel-header">
-        <div>
-          <p class="panel-eyebrow">Step 1 of 3</p>
-          <h1 class="panel-title">Brief &amp; Research</h1>
-        </div>
-        <div class="header-actions">
-          <span class="backend-url" id="backendUrlDisplay"></span>
-        </div>
-      </div>
       <div class="form-scroll">
         <form id="briefForm" novalidate>
 
@@ -227,56 +250,124 @@
       </div>
     </section>
 
-    <!-- ── TAB 2: VISUAL ASSETS ── -->
-    <section class="tab-panel" id="tab-assets" aria-label="Visual Assets">
-      <div class="panel-header">
-        <div>
-          <p class="panel-eyebrow">Step 2 of 3</p>
-          <h1 class="panel-title">Visual Assets</h1>
-        </div>
+    <!-- ── TAB 2: PROJECT ASSETS ── -->
+    <section class="tab-panel" id="tab-assets" aria-label="Project assets">
+
+      <div class="assets-subnav" role="tablist" aria-label="Publishing asset categories">
+        <button class="assets-subtab active" data-asubtab="pa-branding"  role="tab" aria-selected="true">Project branding</button>
+        <button class="assets-subtab"        data-asubtab="pa-templates" role="tab" aria-selected="false">PDF Templates</button>
+        <button class="assets-subtab"        data-asubtab="pa-library"   role="tab" aria-selected="false">Learning Library</button>
       </div>
-      <div class="panel-body">
-        <div class="assets-search-bar">
-          <div class="search-input-wrap">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="pexelsQuery" placeholder="Search Pexels — e.g. salon, business strategy..." class="search-input">
+
+      <div class="assets-subpanels">
+
+        <!-- Project branding — book-specific brand assets + image search -->
+        <div class="assets-subpanel active" id="pa-branding">
+          <div class="form-section">
+            <h2 class="form-section-title">Project brand assets</h2>
+            <p class="field-hint" style="margin-bottom:16px">Branding for this specific book project. Used on the cover, chapter art, and interior styling.</p>
+            <div class="field-row">
+              <div class="field"><label for="projBrandLogo">Project logo / mark</label><input type="file" id="projBrandLogo" accept="image/*"></div>
+              <div class="field"><label for="projBrandPalette">Palette (comma-separated hex)</label><input type="text" id="projBrandPalette" placeholder="#16213e, #2bb3a3, #f5c842"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="projCoverImage">Custom cover image (optional)</label><input type="file" id="projCoverImage" accept="image/*"></div>
+              <div class="field"><label for="projCharacterRefs">Character / scene references (PDF or images)</label><input type="file" id="projCharacterRefs" accept="image/*,application/pdf" multiple></div>
+            </div>
           </div>
-          <select id="aspectFilter" class="select-sm">
-            <option value="">Any ratio</option>
-            <option value="landscape">Landscape</option>
-            <option value="portrait">Portrait (cover)</option>
-            <option value="square">Square</option>
-          </select>
-          <button class="btn-secondary" id="searchAssetsBtn">Search</button>
-        </div>
-        <div class="assets-grid" id="assetsGrid">
-          <div class="assets-empty">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            <p>Search for images above, or generate your brief first to get AI-suggested keywords.</p>
+
+          <div class="form-section">
+            <h2 class="form-section-title">Stock imagery</h2>
+            <p class="field-hint" style="margin-bottom:16px">Pull from Pexels for interior art, chapter openers, and supporting imagery.</p>
+            <div class="assets-search-bar">
+              <div class="search-input-wrap">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="pexelsQuery" placeholder="Search Pexels — e.g. salon, business strategy..." class="search-input">
+              </div>
+              <select id="aspectFilter" class="select-sm">
+                <option value="">Any ratio</option>
+                <option value="landscape">Landscape</option>
+                <option value="portrait">Portrait (cover)</option>
+                <option value="square">Square</option>
+              </select>
+              <button class="btn-secondary" id="searchAssetsBtn">Search</button>
+            </div>
+            <div class="assets-grid" id="assetsGrid">
+              <div class="assets-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <p>Search for images above, or generate your brief first to get AI-suggested keywords.</p>
+              </div>
+            </div>
+            <div class="selected-assets-tray" id="selectedAssetsTray" style="display:none">
+              <h3 class="tray-title">Selected assets <span id="selectedCount">0</span></h3>
+              <div class="tray-items" id="trayItems"></div>
+              <button class="btn-secondary" id="uploadToR2Btn">Upload to R2 storage</button>
+            </div>
           </div>
         </div>
-        <div class="selected-assets-tray" id="selectedAssetsTray" style="display:none">
-          <h3 class="tray-title">Selected assets <span id="selectedCount">0</span></h3>
-          <div class="tray-items" id="trayItems"></div>
-          <button class="btn-secondary" id="uploadToR2Btn">Upload to R2 storage</button>
+
+        <!-- PDF Templates — predefined design references the agent pulls from -->
+        <div class="assets-subpanel" id="pa-templates">
+          <div class="form-section">
+            <h2 class="form-section-title">Design templates</h2>
+            <p class="field-hint" style="margin-bottom:16px">Predefined PDF templates that guide the publishing agent on layout, typography, and visual rhythm. Pick one to anchor this project's design.</p>
+            <div class="template-grid" id="templateGrid">
+              <div class="template-card" data-template="modern-business">
+                <div class="template-thumb" style="background:linear-gradient(135deg,#1a2236,#263047)"></div>
+                <div class="template-meta">
+                  <div class="template-name">Modern Business</div>
+                  <div class="template-desc">Sharp typography, geometric chapter openers, data-friendly callouts.</div>
+                </div>
+              </div>
+              <div class="template-card" data-template="editorial-luxe">
+                <div class="template-thumb" style="background:linear-gradient(135deg,#2a1f10,#3a2810)"></div>
+                <div class="template-meta">
+                  <div class="template-name">Editorial Luxe</div>
+                  <div class="template-desc">Playfair display, generous white space, magazine-style pull quotes.</div>
+                </div>
+              </div>
+              <div class="template-card" data-template="wellness-warmth">
+                <div class="template-thumb" style="background:linear-gradient(135deg,#2d3a1f,#3e5028)"></div>
+                <div class="template-meta">
+                  <div class="template-name">Wellness Warmth</div>
+                  <div class="template-desc">Rounded shapes, earth tones, gentle pacing for self-help and wellness.</div>
+                </div>
+              </div>
+              <div class="template-card" data-template="technical-bench">
+                <div class="template-thumb" style="background:linear-gradient(135deg,#1a1f2e,#2c3340)"></div>
+                <div class="template-meta">
+                  <div class="template-name">Technical Bench</div>
+                  <div class="template-desc">Monospaced accents, diagram captions, footnote-heavy technical books.</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+
+        <!-- Learning Library — user uploads PDFs to train the agent -->
+        <div class="assets-subpanel" id="pa-library">
+          <div class="form-section">
+            <h2 class="form-section-title">Learning library</h2>
+            <p class="field-hint" style="margin-bottom:16px">Upload PDFs the publishing agent should study. The agent extracts design patterns, voice, and layout decisions from these to inform its own work.</p>
+            <div class="library-upload">
+              <input type="file" id="libraryFiles" accept="application/pdf" multiple>
+              <label for="libraryFiles" class="library-upload-label">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span class="library-upload-title">Drop PDFs here or click to upload</span>
+                <span class="library-upload-hint">The agent reads each PDF and learns its design language.</span>
+              </label>
+            </div>
+            <div class="library-list" id="libraryList">
+              <div class="library-empty">No PDFs in the library yet. Upload reference books to teach the agent your house style.</div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </section>
 
     <!-- ── TAB 3: COMPILE & EXPORT ── -->
     <section class="tab-panel" id="tab-compile" aria-label="Compile and Export">
-      <div class="panel-header">
-        <div>
-          <p class="panel-eyebrow">Step 3 of 3</p>
-          <h1 class="panel-title">Compile &amp; Export</h1>
-        </div>
-        <div class="header-actions">
-          <button class="btn-secondary btn-sm" id="downloadHtmlBtn" disabled>HTML</button>
-          <button class="btn-secondary btn-sm" id="downloadJsonBtn" disabled>JSON</button>
-          <button class="btn-primary btn-sm" id="downloadPdfBtn" disabled>Download PDF</button>
-          <button class="btn-primary btn-sm" id="downloadEpubBtn" disabled>Download EPUB</button>
-        </div>
-      </div>
       <div class="compile-layout">
         <div class="compile-sidebar">
           <div class="compile-card">
@@ -324,6 +415,31 @@
          (Compose still hosts its inner Generate / Dashboard switcher.)
     ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-blog" data-module="blog">
+
+      <!-- Per-tab headers — only the active one is shown. -->
+      <div class="module-headers">
+        <header class="panel-header active" data-for="blog">
+          <div>
+            <p class="panel-eyebrow">Blog Publisher</p>
+            <h1 class="panel-title">Write &amp; Publish</h1>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>Preview</button>
+            <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>View results</button>
+            <button class="btn-generate" id="blogGenerateBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Generate Post
+            </button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="blog-assets">
+          <div>
+            <p class="panel-eyebrow">Blog Assets</p>
+            <h1 class="panel-title">Brand identity, voice &amp; style</h1>
+          </div>
+        </header>
+      </div>
+
       <div class="module-topnav" role="tablist" aria-label="Blog sections">
         <button class="module-tab active" data-subtab="blog" role="tab" aria-selected="true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
@@ -339,21 +455,6 @@
 
     <!-- ── BLOG: COMPOSE (formerly the only blog view) ── -->
     <section class="tab-panel" id="tab-blog" aria-label="Blog Publisher">
-      <div class="panel-header">
-        <div>
-          <p class="panel-eyebrow">Blog Publisher</p>
-          <h1 class="panel-title">Write & Publish</h1>
-        </div>
-        <div class="header-actions">
-          <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>Preview</button>
-          <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>View results</button>
-          <button class="btn-generate" id="blogGenerateBtn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Generate Post
-          </button>
-        </div>
-      </div>
-
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
         <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
@@ -595,13 +696,6 @@
 
     <!-- ── BLOG: ASSETS  (Brand Identity / Voice / Style Guide) ── -->
     <section class="tab-panel" id="tab-blog-assets" aria-label="Blog Assets">
-      <div class="panel-header">
-        <div>
-          <p class="panel-eyebrow">Blog Assets</p>
-          <h1 class="panel-title">Brand identity, voice &amp; style</h1>
-        </div>
-      </div>
-
       <div class="assets-subnav" role="tablist" aria-label="Blog asset categories">
         <button class="assets-subtab active" data-asubtab="ba-identity" role="tab" aria-selected="true">Brand identity</button>
         <button class="assets-subtab" data-asubtab="ba-voice" role="tab" aria-selected="false">Voice &amp; persona</button>
@@ -628,9 +722,14 @@
               <textarea id="brandIdentityAbout" rows="4" placeholder="DigiFusion publishes practical guides for marketers, operators, and small teams shipping AI-assisted work."></textarea>
             </div>
             <div class="field-row">
-              <div class="field"><label for="brandIdentityLogo">Logo URL</label><input type="url" id="brandIdentityLogo" placeholder="https://..."></div>
-              <div class="field"><label for="brandIdentityFavicon">Favicon URL</label><input type="url" id="brandIdentityFavicon" placeholder="https://..."></div>
+              <div class="field"><label for="brandIdentityLogoFile">Logo (image upload)</label><input type="file" id="brandIdentityLogoFile" accept="image/*"></div>
+              <div class="field"><label for="brandIdentityFaviconFile">Favicon (image upload)</label><input type="file" id="brandIdentityFaviconFile" accept="image/x-icon,image/png,image/svg+xml"></div>
             </div>
+            <div class="field-row">
+              <div class="field"><label for="brandStrategyPdf">Brand strategy / brand book (PDF)</label><input type="file" id="brandStrategyPdf" accept="application/pdf"></div>
+              <div class="field"><label for="brandGuidelinesPdf">Visual guidelines (PDF)</label><input type="file" id="brandGuidelinesPdf" accept="application/pdf"></div>
+            </div>
+            <p class="field-hint" style="margin-top:8px">Uploaded PDFs are stored as reference material — the blog agent extracts tone, vocabulary, and visual cues from them when composing posts.</p>
           </div>
         </div>
 
@@ -638,15 +737,44 @@
         <div class="assets-subpanel" id="ba-voice">
           <div class="form-section">
             <h2 class="form-section-title">Author voice &amp; persona</h2>
-            <p class="field-hint" style="margin-bottom:16px">Pick which persona writes each post. Personas are stable identities with their own voice, rhythm, and writing samples — the AI imitates the picked persona.</p>
+            <p class="field-hint" style="margin-bottom:16px">Pick which persona writes each post. Each option is a master prompt aligned to a domain — the AI inherits its voice, rhythm, vocabulary, and ban-list. Persona overrides per-post are available on the Compose tab.</p>
+
             <div class="field">
               <label for="blogPersonaPicker">Default persona for new posts</label>
               <select id="blogPersonaPicker">
                 <option value="">— Use default editorial voice (no persona) —</option>
-                <!-- populated from listPersonas() at runtime -->
+                <!-- Master personas (hard-wired so the picker works even before /api/personas is live) -->
+                <option value="engineering_bench">AI Automation &amp; Systems Engineering Specialist</option>
+                <option value="marketing_desk">Award-winning Digital Media &amp; Marketing Expert</option>
+                <option value="senior_editor">Senior Copywriter / Editor</option>
+                <option value="strategy_room">Operator &amp; Founder Notes</option>
               </select>
-              <p class="field-hint">You can override this per-post on the Compose tab.</p>
+              <p class="field-hint">The picker auto-syncs with all personas in <code>backend/skills/personas.js</code> once the <code>/api/personas</code> endpoint is connected.</p>
             </div>
+
+            <div class="persona-master-prompts">
+              <h3 class="form-section-title" style="font-size:14px;margin-top:24px;margin-bottom:12px">Built-in master prompts</h3>
+              <p class="field-hint" style="margin-bottom:16px">These three personas cover the recurring blog archetypes. Reviews, listicles, and other post types fall back to the default editorial voice.</p>
+
+              <div class="persona-card">
+                <div class="persona-card-tag">AI &amp; Engineering</div>
+                <div class="persona-card-name">AI Automation &amp; Systems Engineering Specialist</div>
+                <div class="persona-card-desc">Seasoned engineer voice: precise, code-aware, allergic to vapor. Calls out failure modes. Best for AI automation, LLM-ops, agent design, MLOps posts.</div>
+              </div>
+
+              <div class="persona-card">
+                <div class="persona-card-tag">Digital Media</div>
+                <div class="persona-card-name">Award-winning Digital Media &amp; Marketing Expert</div>
+                <div class="persona-card-desc">Bold conversion copywriter: direct, benefit-led, evidence over hype. Best for marketing, paid acquisition, creative strategy, and brand-growth posts.</div>
+              </div>
+
+              <div class="persona-card">
+                <div class="persona-card-tag">Editorial</div>
+                <div class="persona-card-name">Senior Copywriter / Editor</div>
+                <div class="persona-card-desc">House editorial voice — precise, evidence-aware, polished. Use as the default for reviews, listicles, roundups, and general-interest posts.</div>
+              </div>
+            </div>
+
             <div class="persona-preview" id="blogPersonaPreview" style="display:none">
               <div class="persona-preview-head">
                 <div class="persona-preview-avatar" id="personaPreviewAvatar"></div>
@@ -706,6 +834,17 @@
          All tabs operate on DigiFusion's shop_* Supabase tables.
     ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-shop" data-module="shop">
+
+      <!-- Per-tab headers — only the active one is shown. -->
+      <div class="module-headers">
+        <header class="panel-header active" data-for="shop-subs"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div></header>
+        <header class="panel-header" data-for="shop-bookings"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Service bookings</h1></div></header>
+        <header class="panel-header" data-for="shop-payments"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; orders</h1></div></header>
+        <header class="panel-header" data-for="shop-terms"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Terms &amp; conditions</h1></div></header>
+        <header class="panel-header" data-for="shop-shipping"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shipping &amp; delivery</h1></div></header>
+        <header class="panel-header" data-for="shop-analytics"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales analytics</h1></div></header>
+      </div>
+
       <div class="module-topnav" role="tablist" aria-label="Shop sections">
         <button class="module-tab active" data-subtab="shop-subs"      role="tab" aria-selected="true">Subscriptions</button>
         <button class="module-tab"        data-subtab="shop-bookings"  role="tab" aria-selected="false">Bookings</button>
@@ -718,7 +857,6 @@
       <div class="module-body">
 
       <section class="tab-panel active" id="tab-shop-subs" aria-label="Subscriptions">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div></div>
         <div class="panel-body">
           <div class="shop-empty">
             <p>Connect to DigiFusion to load active subscribers, plans, MRR, and churn.</p>
@@ -729,7 +867,6 @@
       </section>
 
       <section class="tab-panel" id="tab-shop-bookings" aria-label="Bookings">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Service bookings</h1></div></div>
         <div class="panel-body">
           <div class="shop-empty">
             <p>Service bookings created at checkout. Track status (awaiting intake / scheduled / completed / cancelled) and the intake or calendar link sent to the buyer.</p>
@@ -740,7 +877,6 @@
       </section>
 
       <section class="tab-panel" id="tab-shop-payments" aria-label="Payments">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; orders</h1></div></div>
         <div class="panel-body">
           <div class="shop-empty">
             <p>Orders across Stripe, Flutterwave, and OPay. Mark off-platform payments as paid, refund, or re-run fulfillment.</p>
@@ -751,7 +887,6 @@
       </section>
 
       <section class="tab-panel" id="tab-shop-terms" aria-label="Terms and conditions">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Terms &amp; conditions</h1></div></div>
         <div class="panel-body">
           <div class="form-section">
             <div class="field">
@@ -772,7 +907,6 @@
       </section>
 
       <section class="tab-panel" id="tab-shop-shipping" aria-label="Shipping">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shipping &amp; delivery</h1></div></div>
         <div class="panel-body">
           <div class="form-section">
             <p class="field-hint" style="margin-bottom:16px">Digital downloads deliver instantly. Configure shipping only for physical SKUs.</p>
@@ -794,7 +928,6 @@
       </section>
 
       <section class="tab-panel" id="tab-shop-analytics" aria-label="Sales analytics">
-        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales analytics</h1></div></div>
         <div class="panel-body">
           <div class="shop-stats-grid">
             <div class="shop-stat-card"><div class="shop-stat-label">Revenue (30d)</div><div class="shop-stat-value" id="shopStatRevenue">—</div></div>
