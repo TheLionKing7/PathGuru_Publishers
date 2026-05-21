@@ -17,21 +17,17 @@
       <div class="brand-mark">PG</div>
     </div>
     <nav class="sidebar-nav">
-      <button class="nav-btn active" data-tab="brief" title="Brief & Research" aria-label="Brief and Research tab">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span class="nav-label">Brief</span>
+      <button class="nav-btn active" data-module="publishing" title="PDF Publishing — Brief, Assets, Export" aria-label="PDF Publishing module">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Publishing</span>
       </button>
-      <button class="nav-btn" data-tab="assets" title="Visual Assets" aria-label="Visual Assets tab">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        <span class="nav-label">Assets</span>
-      </button>
-      <button class="nav-btn" data-tab="compile" title="Compile & Export" aria-label="Compile and Export tab">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
-        <span class="nav-label">Export</span>
-      </button>
-      <button class="nav-btn" data-tab="blog" title="Blog Publisher" aria-label="Blog Publisher tab">
+      <button class="nav-btn" data-module="blog" title="Blog Publisher — Brief, Assets, Compose, Dashboard" aria-label="Blog module">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         <span class="nav-label">Blog</span>
+      </button>
+      <button class="nav-btn" data-module="shop" title="Shop Management — Subscriptions, Bookings, Payments, T&C, Shipping, Analytics" aria-label="Shop module">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span class="nav-label">Shop</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -44,6 +40,27 @@
 
   <!-- Main Panel -->
   <main class="main-panel" role="main">
+
+    <!-- ══════════════════════════════════════════════
+         MODULE: PDF PUBLISHING  (Brief / Assets / Export)
+    ══════════════════════════════════════════════ -->
+    <div class="module-shell active" id="module-publishing" data-module="publishing">
+      <div class="module-topnav" role="tablist" aria-label="Publishing sections">
+        <button class="module-tab active" data-subtab="brief" role="tab" aria-selected="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Brief
+        </button>
+        <button class="module-tab" data-subtab="assets" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Assets
+        </button>
+        <button class="module-tab" data-subtab="compile" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
+          Export
+        </button>
+      </div>
+
+      <div class="module-body">
 
     <!-- ── TAB 1: BRIEF & RESEARCH ── -->
     <section class="tab-panel active" id="tab-brief" aria-label="Brief and Research">
@@ -299,7 +316,28 @@
       </div>
     </section>
 
-    <!-- ── TAB 4: BLOG PUBLISHER ── -->
+      </div><!-- /module-body -->
+    </div><!-- /module-publishing -->
+
+    <!-- ══════════════════════════════════════════════
+         MODULE: BLOG PUBLISHER  (Compose / Assets)
+         (Compose still hosts its inner Generate / Dashboard switcher.)
+    ══════════════════════════════════════════════ -->
+    <div class="module-shell" id="module-blog" data-module="blog">
+      <div class="module-topnav" role="tablist" aria-label="Blog sections">
+        <button class="module-tab active" data-subtab="blog" role="tab" aria-selected="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Compose
+        </button>
+        <button class="module-tab" data-subtab="blog-assets" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Assets
+        </button>
+      </div>
+
+      <div class="module-body">
+
+    <!-- ── BLOG: COMPOSE (formerly the only blog view) ── -->
     <section class="tab-panel" id="tab-blog" aria-label="Blog Publisher">
       <div class="panel-header">
         <div>
@@ -554,6 +592,225 @@
         </div>
       </div>
     </section>
+
+    <!-- ── BLOG: ASSETS  (Brand Identity / Voice / Style Guide) ── -->
+    <section class="tab-panel" id="tab-blog-assets" aria-label="Blog Assets">
+      <div class="panel-header">
+        <div>
+          <p class="panel-eyebrow">Blog Assets</p>
+          <h1 class="panel-title">Brand identity, voice &amp; style</h1>
+        </div>
+      </div>
+
+      <div class="assets-subnav" role="tablist" aria-label="Blog asset categories">
+        <button class="assets-subtab active" data-asubtab="ba-identity" role="tab" aria-selected="true">Brand identity</button>
+        <button class="assets-subtab" data-asubtab="ba-voice" role="tab" aria-selected="false">Voice &amp; persona</button>
+        <button class="assets-subtab" data-asubtab="ba-style" role="tab" aria-selected="false">Style guide</button>
+      </div>
+
+      <div class="assets-subpanels">
+        <!-- Brand identity -->
+        <div class="assets-subpanel active" id="ba-identity">
+          <div class="form-section">
+            <h2 class="form-section-title">Brand identity</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="brandIdentityName">Brand / publisher name</label>
+                <input type="text" id="brandIdentityName" placeholder="DigiFusion">
+              </div>
+              <div class="field">
+                <label for="brandIdentityTagline">One-line tagline</label>
+                <input type="text" id="brandIdentityTagline" placeholder="Books &amp; tools for operators who ship.">
+              </div>
+            </div>
+            <div class="field">
+              <label for="brandIdentityAbout">About paragraph (used in author boxes &amp; footers)</label>
+              <textarea id="brandIdentityAbout" rows="4" placeholder="DigiFusion publishes practical guides for marketers, operators, and small teams shipping AI-assisted work."></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="brandIdentityLogo">Logo URL</label><input type="url" id="brandIdentityLogo" placeholder="https://..."></div>
+              <div class="field"><label for="brandIdentityFavicon">Favicon URL</label><input type="url" id="brandIdentityFavicon" placeholder="https://..."></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice & persona -->
+        <div class="assets-subpanel" id="ba-voice">
+          <div class="form-section">
+            <h2 class="form-section-title">Author voice &amp; persona</h2>
+            <p class="field-hint" style="margin-bottom:16px">Pick which persona writes each post. Personas are stable identities with their own voice, rhythm, and writing samples — the AI imitates the picked persona.</p>
+            <div class="field">
+              <label for="blogPersonaPicker">Default persona for new posts</label>
+              <select id="blogPersonaPicker">
+                <option value="">— Use default editorial voice (no persona) —</option>
+                <!-- populated from listPersonas() at runtime -->
+              </select>
+              <p class="field-hint">You can override this per-post on the Compose tab.</p>
+            </div>
+            <div class="persona-preview" id="blogPersonaPreview" style="display:none">
+              <div class="persona-preview-head">
+                <div class="persona-preview-avatar" id="personaPreviewAvatar"></div>
+                <div>
+                  <div class="persona-preview-name" id="personaPreviewName"></div>
+                  <div class="persona-preview-title" id="personaPreviewTitle"></div>
+                </div>
+              </div>
+              <p class="persona-preview-bio" id="personaPreviewBio"></p>
+              <div class="persona-preview-meta">
+                <div><strong>Voice:</strong> <span id="personaPreviewVoice"></span></div>
+                <div><strong>Rhythm:</strong> <span id="personaPreviewRhythm"></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Style guide -->
+        <div class="assets-subpanel" id="ba-style">
+          <div class="form-section">
+            <h2 class="form-section-title">House style guide</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="styleSpelling">Spelling</label>
+                <select id="styleSpelling">
+                  <option value="us">US English (color, organize)</option>
+                  <option value="uk">UK English (colour, organise)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="styleHeadingCase">Headings</label>
+                <select id="styleHeadingCase">
+                  <option value="sentence">Sentence case</option>
+                  <option value="title">Title Case</option>
+                </select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="styleBanList">House ban-list (clichés to never use, comma separated)</label>
+              <input type="text" id="styleBanList" placeholder="leverage, game-changer, in today's fast-paced world, synergy">
+            </div>
+            <div class="field">
+              <label for="styleNotes">Other house rules</label>
+              <textarea id="styleNotes" rows="4" placeholder="Numbers under 10 are spelled out. Always link sources. Cite stats with year."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+      </div><!-- /module-body -->
+    </div><!-- /module-blog -->
+
+    <!-- ══════════════════════════════════════════════
+         MODULE: SHOP MANAGEMENT
+         (Subscriptions / Bookings / Payments / T&C / Shipping / Analytics)
+         All tabs operate on DigiFusion's shop_* Supabase tables.
+    ══════════════════════════════════════════════ -->
+    <div class="module-shell" id="module-shop" data-module="shop">
+      <div class="module-topnav" role="tablist" aria-label="Shop sections">
+        <button class="module-tab active" data-subtab="shop-subs"      role="tab" aria-selected="true">Subscriptions</button>
+        <button class="module-tab"        data-subtab="shop-bookings"  role="tab" aria-selected="false">Bookings</button>
+        <button class="module-tab"        data-subtab="shop-payments"  role="tab" aria-selected="false">Payments</button>
+        <button class="module-tab"        data-subtab="shop-terms"     role="tab" aria-selected="false">T&amp;C</button>
+        <button class="module-tab"        data-subtab="shop-shipping"  role="tab" aria-selected="false">Shipping</button>
+        <button class="module-tab"        data-subtab="shop-analytics" role="tab" aria-selected="false">Analytics</button>
+      </div>
+
+      <div class="module-body">
+
+      <section class="tab-panel active" id="tab-shop-subs" aria-label="Subscriptions">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div></div>
+        <div class="panel-body">
+          <div class="shop-empty">
+            <p>Connect to DigiFusion to load active subscribers, plans, MRR, and churn.</p>
+            <button class="btn-secondary" id="shopSubsRefresh">Load subscriptions</button>
+          </div>
+          <div class="shop-table-wrap" id="shopSubsTable" hidden></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-shop-bookings" aria-label="Bookings">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Service bookings</h1></div></div>
+        <div class="panel-body">
+          <div class="shop-empty">
+            <p>Service bookings created at checkout. Track status (awaiting intake / scheduled / completed / cancelled) and the intake or calendar link sent to the buyer.</p>
+            <button class="btn-secondary" id="shopBookingsRefresh">Load bookings</button>
+          </div>
+          <div class="shop-table-wrap" id="shopBookingsTable" hidden></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-shop-payments" aria-label="Payments">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; orders</h1></div></div>
+        <div class="panel-body">
+          <div class="shop-empty">
+            <p>Orders across Stripe, Flutterwave, and OPay. Mark off-platform payments as paid, refund, or re-run fulfillment.</p>
+            <button class="btn-secondary" id="shopPaymentsRefresh">Load orders</button>
+          </div>
+          <div class="shop-table-wrap" id="shopPaymentsTable" hidden></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-shop-terms" aria-label="Terms and conditions">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Terms &amp; conditions</h1></div></div>
+        <div class="panel-body">
+          <div class="form-section">
+            <div class="field">
+              <label for="shopTcRefund">Refund policy</label>
+              <textarea id="shopTcRefund" rows="5" placeholder="14-day refund on digital products if undownloaded. Services refundable up to 24h before booking."></textarea>
+            </div>
+            <div class="field">
+              <label for="shopTcTerms">Terms of service</label>
+              <textarea id="shopTcTerms" rows="6" placeholder="Outline the legal terms governing the use of your storefront."></textarea>
+            </div>
+            <div class="field">
+              <label for="shopTcPrivacy">Privacy policy</label>
+              <textarea id="shopTcPrivacy" rows="5" placeholder="What data you collect, how it's stored, and the buyer's rights."></textarea>
+            </div>
+            <button class="btn-primary" id="shopTcSave">Publish to DigiFusion /terms</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-shop-shipping" aria-label="Shipping">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shipping &amp; delivery</h1></div></div>
+        <div class="panel-body">
+          <div class="form-section">
+            <p class="field-hint" style="margin-bottom:16px">Digital downloads deliver instantly. Configure shipping only for physical SKUs.</p>
+            <div class="field-row">
+              <div class="field"><label for="shipMethod">Default carrier</label><input type="text" id="shipMethod" placeholder="DHL / FedEx / Royal Mail"></div>
+              <div class="field"><label for="shipLeadTime">Lead time (days)</label><input type="number" id="shipLeadTime" min="0" placeholder="3"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label for="shipFlatRate">Flat rate ($)</label><input type="number" id="shipFlatRate" min="0" step="0.01" placeholder="9.95"></div>
+              <div class="field"><label for="shipFreeThreshold">Free-shipping threshold ($)</label><input type="number" id="shipFreeThreshold" min="0" step="0.01" placeholder="75"></div>
+            </div>
+            <div class="field">
+              <label for="shipZones">Shipping zones (one per line: country=rate)</label>
+              <textarea id="shipZones" rows="5" placeholder="US=9.95&#10;UK=12.50&#10;Nigeria=15.00&#10;Rest of world=24.00"></textarea>
+            </div>
+            <button class="btn-primary" id="shopShippingSave">Save shipping rules</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="tab-shop-analytics" aria-label="Sales analytics">
+        <div class="panel-header"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales analytics</h1></div></div>
+        <div class="panel-body">
+          <div class="shop-stats-grid">
+            <div class="shop-stat-card"><div class="shop-stat-label">Revenue (30d)</div><div class="shop-stat-value" id="shopStatRevenue">—</div></div>
+            <div class="shop-stat-card"><div class="shop-stat-label">Orders (30d)</div><div class="shop-stat-value" id="shopStatOrders">—</div></div>
+            <div class="shop-stat-card"><div class="shop-stat-label">AOV</div><div class="shop-stat-value" id="shopStatAov">—</div></div>
+            <div class="shop-stat-card"><div class="shop-stat-label">Conversion</div><div class="shop-stat-value" id="shopStatConv">—</div></div>
+          </div>
+          <div class="shop-empty" style="margin-top:24px">
+            <p>Trend charts (revenue, orders, top SKUs) will render once DigiFusion is connected.</p>
+            <button class="btn-secondary" id="shopAnalyticsRefresh">Refresh analytics</button>
+          </div>
+        </div>
+      </section>
+
+      </div><!-- /module-body -->
+    </div><!-- /module-shop -->
 
   </main>
 

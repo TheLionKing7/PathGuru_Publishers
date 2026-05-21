@@ -7,9 +7,28 @@
 'use strict';
 
 /* ── State ─────────────────────────────────── */
+/* Sub-tab → parent module map. Drives sidebar highlighting when a
+   sub-tab is activated, and lets us pick the module's default sub-tab
+   when the user clicks a sidebar module icon. */
+const MODULE_OF_TAB = {
+  // Publishing module
+  brief: 'publishing', assets: 'publishing', compile: 'publishing',
+  // Blog module
+  blog: 'blog', 'blog-assets': 'blog',
+  // Shop module
+  'shop-subs': 'shop', 'shop-bookings': 'shop', 'shop-payments': 'shop',
+  'shop-terms': 'shop', 'shop-shipping': 'shop', 'shop-analytics': 'shop',
+};
+const DEFAULT_TAB_OF_MODULE = {
+  publishing: 'brief',
+  blog: 'blog',
+  shop: 'shop-subs',
+};
+
 const State = (() => {
   const _data = {
     activeTab: 'brief',
+    activeModule: 'publishing',
     isGenerating: false,
     progress: 0,
     statusMessage: '',
@@ -32,6 +51,17 @@ const State = (() => {
 
     set (key, value) {
       _data[key] = value;
+      // When the sub-tab changes, derive and update activeModule so
+      // sidebar highlighting stays in sync without callers having to
+      // touch both pieces of state.
+      if (key === 'activeTab') {
+        const mod = MODULE_OF_TAB[value];
+        if (mod && mod !== _data.activeModule) {
+          _data.activeModule = mod;
+          _listeners.forEach(fn => fn('activeModule', mod));
+          UI.render('activeModule');
+        }
+      }
       _listeners.forEach(fn => fn(key, value));
       UI.render(key);
     },
@@ -54,6 +84,7 @@ const UI = (() => {
   function render (key) {
     switch (key) {
       case 'activeTab':     renderTabs();     break;
+      case 'activeModule':  renderModules();  break;
       case 'isGenerating':  renderGenerating(); break;
       case 'progress':      renderProgress(); break;
       case 'statusMessage': renderStatus();   break;
@@ -64,14 +95,27 @@ const UI = (() => {
     }
   }
 
-  /* Tabs */
+  /* Sidebar modules — show only the active shell */
+  function renderModules () {
+    const mod = State.get('activeModule');
+    document.querySelectorAll('.module-shell').forEach(s => {
+      s.classList.toggle('active', s.dataset.module === mod);
+    });
+    document.querySelectorAll('.nav-btn[data-module]').forEach(b => {
+      b.classList.toggle('active', b.dataset.module === mod);
+    });
+  }
+
+  /* Sub-tabs — show the matching tab-panel and highlight the module-tab */
   function renderTabs () {
     const tab = State.get('activeTab');
     document.querySelectorAll('.tab-panel').forEach(p => {
       p.classList.toggle('active', p.id === `tab-${tab}`);
     });
-    document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tab);
+    document.querySelectorAll('.module-tab[data-subtab]').forEach(b => {
+      const isActive = b.dataset.subtab === tab;
+      b.classList.toggle('active', isActive);
+      b.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
   }
 
@@ -511,9 +555,46 @@ async function uploadAssetsToR2 () {
 
 /* ── Event wiring ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Tab navigation
-  document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
-    btn.addEventListener('click', () => State.set('activeTab', btn.dataset.tab));
+  // Sidebar — pick a module (jumps to that module's default sub-tab).
+  document.querySelectorAll('.nav-btn[data-module]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mod = btn.dataset.module;
+      const defaultTab = DEFAULT_TAB_OF_MODULE[mod];
+      // Remember last-visited sub-tab per module so the user comes back to it.
+      const remembered = State.get(`lastTab_${mod}`);
+      State.set('activeTab', remembered || defaultTab);
+    });
+  });
+
+  // Top-tab strip — switch the sub-tab within the active module.
+  document.querySelectorAll('.module-tab[data-subtab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.subtab;
+      const mod = MODULE_OF_TAB[tab];
+      // Remember per-module last sub-tab.
+      if (mod) State.set(`lastTab_${mod}`, tab);
+      State.set('activeTab', tab);
+    });
+  });
+
+  // Blog > Assets sub-sub-tabs (Brand identity / Voice / Style guide).
+  document.querySelectorAll('.assets-subtab[data-asubtab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.asubtab;
+      // Toggle siblings within the same assets-subnav strip.
+      btn.parentElement.querySelectorAll('.assets-subtab').forEach(b => {
+        const on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      // Toggle the matching panel in the sibling .assets-subpanels container.
+      const panels = btn.closest('section').querySelector('.assets-subpanels');
+      if (panels) {
+        panels.querySelectorAll('.assets-subpanel').forEach(p => {
+          p.classList.toggle('active', p.id === target);
+        });
+      }
+    });
   });
 
   // Brief form submit
@@ -593,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initial render
   UI.render('settings');
+  UI.render('activeModule');
   UI.render('activeTab');
   UI.render('selectedAssets');
   UI.render('result');
