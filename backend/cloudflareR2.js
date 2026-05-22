@@ -2,9 +2,11 @@ function envValue(name) {
   return typeof process.env[name] === "string" ? process.env[name].trim() : "";
 }
 
-const accountId = envValue("CLOUDFLARE_ACCOUNT_ID");
-const bucket = envValue("CLOUDFLARE_R2_BUCKET");
-const apiToken = envValue("CLOUDFLARE_API_TOKEN");
+// Support both naming conventions
+const accountId = envValue("CLOUDFLARE_ACCOUNT_ID") || envValue("R2_ACCOUNT_ID");
+const bucket    = envValue("CLOUDFLARE_R2_BUCKET")  || envValue("R2_BUCKET_NAME");
+const apiToken  = envValue("CLOUDFLARE_API_TOKEN");
+const publicUrl = envValue("R2_PUBLIC_URL");    // e.g. https://cdn.digitafusion.com
 
 export const r2Config = {
   accountId,
@@ -78,7 +80,73 @@ export async function saveGeneratedProject(project, html, pdfBuffer) {
 
   return {
     projectJsonUrl: jsonUrl,
-    draftHtmlUrl: htmlUrl
-    , pdfUrl
+    draftHtmlUrl: htmlUrl,
+    pdfUrl,
   };
+}
+
+/* ── Blog media library ────────────────────────────────────────
+   Upload, list, and delete files under the blog-media/ prefix.
+   Requires CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_BUCKET, and
+   CLOUDFLARE_API_TOKEN.
+──────────────────────────────────────────────────────────────── */
+const MEDIA_PREFIX = 'blog-media/';
+
+/**
+ * Upload a single media asset.
+ * @param {string} filename — original filename (used to build the R2 key)
+ * @param {Buffer|Uint8Array} body — raw file bytes
+ * @param {string} contentType — e.g. 'image/jpeg'
+ * @returns {{ key: string, url: string }}
+ */
+export async function uploadMediaAsset (filename, body, contentType) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured. Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_BUCKET, and CLOUDFLARE_API_TOKEN in .env');
+  const safe = safeFileName(filename.replace(/\.[^.]+$/, '')) + '.' + (filename.split('.').pop() || 'bin');
+  const key  = `${MEDIA_PREFIX}${Date.now()}-${safe}`;
+  const r2Url = await uploadToR2(key, body, contentType);
+  // If R2_PUBLIC_URL is set, swap the storage URL for the CDN URL
+  const url = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${key}` : r2Url;
+  return { key, url };
+}
+
+/**
+ * List all objects in the blog-media/ prefix via Cloudflare REST API.
+ */
+export async function listMediaAssets () {
+  if (!isR2Enabled()) return [];
+  const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(MEDIA_PREFIX)}&limit=500`;
+  const res = await fetch(apiUrl, {
+    headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`R2 list failed: ${res.status} ${t.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const objects = data?.result?.objects || [];
+  return objects.map(o => ({
+    key:      o.key,
+    size:     o.size,
+    uploaded: o.uploaded,
+    url:      publicUrl
+      ? `${publicUrl.replace(/\/$/, '')}/${o.key}`
+      : `${getBaseUrl()}/${encodeKey(o.key)}`,
+  }));
+}
+
+/**
+ * Delete a media asset by its R2 key.
+ */
+export async function deleteMediaAsset (key) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  const url = getObjectUrl(key);
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${apiToken}` },
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`R2 delete failed: ${res.status} ${t.slice(0, 200)}`);
+  }
+  return { deleted: key };
 }

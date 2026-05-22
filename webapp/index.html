@@ -424,8 +424,8 @@
             <h1 class="panel-title">Write &amp; Publish</h1>
           </div>
           <div class="header-actions">
-            <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>Preview</button>
-            <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>View results</button>
+            <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>View preview</button>
+            <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>SEO &amp; Social</button>
             <button class="btn-generate" id="blogGenerateBtn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Generate Post
@@ -540,469 +540,504 @@
             </div>
 
             <div class="form-section">
+              <h2 class="form-section-title">Persona &amp; writer context</h2>
+              <div class="field-row">
+                <div class="field">
+                  <label for="blogComposePicker">Writer persona</label>
+                  <select id="blogComposePicker">
+                    <option value="">— Default editorial voice —</option>
+                  </select>
+                  <p class="field-hint">Synced from <code>/api/personas</code>.</p>
+                </div>
+                <div class="field">
+                  <label for="blogAiProvider">AI provider</label>
+                  <select id="blogAiProvider">ion value="gemini" selected>✨ Gemini (default)</option>
+                    <option value="claude">🤖 Claude (Anthropic)</option>
+                    <option value="deepseek">🔮 DeepSeek</option>
+                    <option value="cerebras">⚡ Cerebras</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Writer reference files -->
+              <div class="field">
+                <label>Reference files <span class="field-hint-inline">(PDFs, images — passed to writer agent)</span></label>
+                <div class="blog-media-zone">
+                  <input type="file" id="blogMediaFiles" multiple accept="image/*,.pdf" style="display:none">
+                  <button type="button" class="btn-secondary btn-sm" id="blogMediaAddBtn">+ Add file</button>
+                  <ul class="blog-media-list" id="blogMediaList"></ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- Publish Destinations -->
+            <div class="form-section">
               <h2 class="form-section-title">Publish destinations</h2>
-              <p class="field-hint" style="margin-bottom:16px">Leave all blank to generate only — no publishing.</p>
 
               <div class="platform-block">
-                <div class="platform-toggle">
-                  <label class="platform-label">
-                    <input type="checkbox" id="wpEnabled" class="platform-check">
-                    <span class="platform-name">WordPress</span>
-                  </label>
-                </div>
+                <label class="platform-toggle">
+                  <input type="checkbox" id="wpEnabled">
+                  <span class="platform-name">WordPress</span>
+                </label>
                 <div class="platform-fields" id="wpFields" style="display:none">
-                  <div class="field"><label for="wpUrl">Site URL</label><input type="url" id="wpUrl" placeholder="https://yoursite.com"></div>
                   <div class="field-row">
-                    <div class="field"><label for="wpUser">Username</label><input type="text" id="wpUser" placeholder="admin"></div>
-                    <div class="field"><label for="wpPass">Application password</label><input type="password" id="wpPass" placeholder="xxxx xxxx xxxx xxxx"></div>
+                    <div class="field"><label for="wpUrl">Site URL</label><input type="url" id="wpUrl" placeholder="https://yourblog.com"></div>
+                    <div class="field"><label for="wpUser">Username</label><input type="text" id="wpUser"></div>
                   </div>
-                  <div class="field"><label for="wpStatus">Publish as</label><select id="wpStatus"><option value="draft">Draft</option><option value="publish">Published</option></select></div>
+                  <div class="field"><label for="wpPass">App password</label><input type="password" id="wpPass" placeholder="xxxx xxxx xxxx xxxx xxxx xxxx"></div>
                 </div>
               </div>
 
               <div class="platform-block">
-                <div class="platform-toggle">
-                  <label class="platform-label">
-                    <input type="checkbox" id="ghostEnabled" class="platform-check">
-                    <span class="platform-name">Ghost</span>
-                  </label>
-                </div>
+                <label class="platform-toggle">
+                  <input type="checkbox" id="ghostEnabled">
+                  <span class="platform-name">Ghost</span>
+                </label>
                 <div class="platform-fields" id="ghostFields" style="display:none">
-                  <div class="field"><label for="ghostUrl">Ghost site URL</label><input type="url" id="ghostUrl" placeholder="https://yoursite.ghost.io"></div>
-                  <div class="field"><label for="ghostKey">Admin API key</label><input type="password" id="ghostKey" placeholder="id:secret (from Ghost admin)"></div>
-                  <div class="field"><label for="ghostStatus">Publish as</label><select id="ghostStatus"><option value="draft">Draft</option><option value="published">Published</option></select></div>
-                </div>
-              </div>
-
-              <div class="platform-block">
-                <div class="platform-toggle">
-                  <label class="platform-label">
-                    <input type="checkbox" id="wfEnabled" class="platform-check">
-                    <span class="platform-name">Webflow</span>
-                  </label>
-                </div>
-                <div class="platform-fields" id="wfFields" style="display:none">
-                  <div class="field"><label for="wfKey">API token</label><input type="password" id="wfKey" placeholder="Webflow API token"></div>
                   <div class="field-row">
-                    <div class="field"><label for="wfCollection">Collection ID</label><input type="text" id="wfCollection" placeholder="collection id"></div>
-                    <div class="field"><label for="wfSite">Site ID</label><input type="text" id="wfSite" placeholder="site id"></div>
+                    <div class="field"><label for="ghostUrl">Ghost URL</label><input type="url" id="ghostUrl" placeholder="https://your.ghost.io"></div>
+                    <div class="field"><label for="ghostKey">Admin API key</label><input type="password" id="ghostKey"></div>
                   </div>
                 </div>
               </div>
 
               <div class="platform-block">
-                <div class="platform-toggle">
-                  <label class="platform-label">
-                    <input type="checkbox" id="dfEnabled" class="platform-check">
-                    <span class="platform-name">DigiFusion</span>
-                  </label>
-                </div>
-                <div class="platform-fields" id="dfFields" style="display:none">
-                  <div class="field">
-                    <label for="dfStatus">Publish as</label>
-                    <select id="dfStatus">
-                      <option value="published">Published</option>
-                      <option value="draft">Draft</option>
-                    </select>
+                <label class="platform-toggle">
+                  <input type="checkbox" id="wfEnabled">
+                  <span class="platform-name">Webflow</span>
+                </label>
+                <div class="platform-fields" id="wfFields" style="display:none">
+                  <div class="field-row">
+                    <div class="field"><label for="wfToken">API token</label><input type="password" id="wfToken"></div>
+                    <div class="field"><label for="wfCollectionId">Collection ID</label><input type="text" id="wfCollectionId"></div>
                   </div>
-                  <p class="field-hint" style="margin-top:6px">Uses <code>DIGIFUSION_API_URL</code> + <code>DIGIFUSION_CMS_TOKEN</code> from backend <code>.env</code></p>
+                </div>
+              </div>
+
+              <div class="platform-block">
+                <label class="platform-toggle">
+                  <input type="checkbox" id="dfEnabled">
+                  <span class="platform-name">DigiFusion CMS</span>
+                </label>
+                <div class="platform-fields" id="dfFields" style="display:none">
+                  <div class="field"><label for="dfApiUrl">DigiFusion API URL</label><input type="url" id="dfApiUrl" placeholder="https://api.digitafusion.com"></div>
                 </div>
               </div>
             </div>
 
-            <div class="generate-zone" style="border-top:0">
-              <div class="generate-status" id="blogStatus" aria-live="polite">
-                <div id="blogStatusIdle"><p>Ready to generate your blog post.</p></div>
-                <div id="blogStatusLoading" class="hidden">
-                  <div class="progress-track"><div class="progress-bar" id="blogProgressBar"></div></div>
-                  <p class="status-message" id="blogStatusMsg">Initialising...</p>
-                </div>
-                <div id="blogStatusError" class="hidden"><p id="blogErrorMsg" style="color:var(--red)"></p></div>
-              </div>
-            </div>
-          </div>
+          </div><!-- /.blog-form-col -->
 
-          <!-- Right: results -->
+          <!-- Right: preview + SEO -->
           <div class="blog-results-col">
-            <div class="blog-meta-panel" id="blogMetaPanel" style="display:none">
-              <button class="blog-meta-toggle" id="blogMetaToggle" type="button" aria-expanded="true" aria-controls="blogMetaBody">
-                <svg class="blog-meta-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                <span class="blog-meta-title">SEO &amp; social</span>
-                <span class="blog-meta-hint" id="blogMetaHint">title, slug, meta, captions</span>
-              </button>
-              <div class="blog-meta-body" id="blogMetaBody">
-                <div class="compile-card">
-                  <h2 class="compile-card-title">SEO</h2>
-                  <dl class="strategy-list" id="blogSeoList"></dl>
+
+            <div class="blog-preview-toolbar">
+              <div class="blog-preview-tabs">
+                <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
+                <button class="blog-preview-tab" data-previewtab="seo">SEO &amp; Social</button>
+              </div>
+              <button class="btn-secondary btn-sm" id="blogEditToggle" style="display:none">Edit draft</button>
+            </div>
+
+            <!-- Preview pane -->
+            <div class="blog-preview-pane active" id="blogPreviewPane">
+              <div class="blog-preview-empty" id="blogPreviewEmpty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                <p>Your post preview will appear here after generation.</p>
+              </div>
+              <div class="blog-post-content" id="blogPostContent" contenteditable="false" hidden></div>
+            </div>
+
+            <!-- SEO & Social pane -->
+            <div class="blog-preview-pane" id="blogSeoPane">
+              <div class="blog-seo-scroll">
+                <div class="result-card" id="blogSeoCard" hidden>
+                  <h3 class="result-card-title">SEO</h3>
+                  <ul class="result-list" id="blogSeoList"></ul>
                 </div>
-                <div class="compile-card">
-                  <h2 class="compile-card-title">Social captions</h2>
+                <div class="result-card" id="blogSocialCard" hidden>
+                  <h3 class="result-card-title">Social captions</h3>
                   <div id="blogSocialCaptions"></div>
                 </div>
-                <div class="compile-card" id="blogPublishResultsCard" style="display:none">
-                  <h2 class="compile-card-title">Publish results</h2>
-                  <div id="blogPublishList"></div>
+                <div class="result-card" id="blogPublishCard" hidden>
+                  <h3 class="result-card-title">Publish results</h3>
+                  <div id="blogPublishResults"></div>
                 </div>
               </div>
             </div>
-            <div class="compile-preview" style="flex:1">
-              <div class="preview-chrome">
-                <div class="preview-chrome-dots"><span></span><span></span><span></span></div>
-                <span class="preview-chrome-label">Post Preview</span>
-              </div>
-              <div class="preview-empty" id="blogPreviewEmpty">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                <p>Your generated blog post will appear here.</p>
-              </div>
-              <iframe id="blogPreviewFrame" title="Blog post preview" style="display:none;flex:1;border:none;width:100%;background:#fff"></iframe>
-            </div>
-          </div>
-        </div>
-      </div>
+
+          </div><!-- /.blog-results-col -->
+
+        </div><!-- /.blog-layout -->
+      </div><!-- /#blogViewGenerate -->
 
       <!-- ── DASHBOARD VIEW ── -->
       <div class="blog-view" id="blogViewDashboard">
-        <div class="blog-dashboard">
-          <!-- Filter bar -->
-          <div class="blog-dash-filters">
-            <div class="field" style="margin:0;flex:1">
-              <input type="text" id="blogDashSearch" placeholder="Search posts..." style="margin:0">
-            </div>
-            <div class="field" style="margin:0;width:160px">
-              <select id="blogDashStatus">
-                <option value="">All status</option>
-                <option value="draft">Drafts</option>
-                <option value="published">Published</option>
-              </select>
-            </div>
-            <div class="field" style="margin:0;width:150px">
-              <select id="blogDashType">
-                <option value="">All types</option>
-                <option value="guide">📘 Guide</option>
-                <option value="listicle">🔢 Listicle</option>
-                <option value="how-to">🛠️ How-To</option>
-                <option value="case-study">📊 Case Study</option>
-                <option value="review">⭐ Review</option>
-                <option value="roundup">👥 Roundup</option>
-                <option value="opinion">💭 Opinion</option>
-              </select>
-            </div>
-            <div class="field" style="margin:0;width:150px">
-              <select id="blogDashSort">
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="title">Title A→Z</option>
-              </select>
-            </div>
-            <button class="btn-secondary" id="blogDashRefresh">🔄 Refresh</button>
+        <div class="blog-dash-filters">
+          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search posts…"></div>
+          <div class="field">
+            <select id="blogDashStatus">
+              <option value="">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </select>
           </div>
-
-          <!-- Posts list -->
-          <div class="blog-dash-list" id="blogDashList">
-            <div class="blog-dash-empty">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              <p>No posts yet. Generate your first post!</p>
-            </div>
+          <div class="field">
+            <select id="blogDashType">
+              <option value="">All types</option>
+              <option value="guide">Guide</option>
+              <option value="listicle">Listicle</option>
+              <option value="how-to">How-To</option>
+              <option value="case-study">Case Study</option>
+              <option value="review">Review</option>
+              <option value="roundup">Roundup</option>
+              <option value="opinion">Opinion</option>
+            </select>
           </div>
-
-          <!-- Loading -->
-          <div class="blog-dash-loading hidden" id="blogDashLoading">
-            <p>Loading posts...</p>
+          <div class="field">
+            <select id="blogDashSort">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="title">Title A–Z</option>
+            </select>
           </div>
+          <button class="btn-secondary btn-sm" id="blogDashRefresh">Refresh</button>
         </div>
-      </div>
-    </section>
+        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading posts…</div>
+        <div class="blog-dash-list" id="blogDashList"></div>
+      </div><!-- /#blogViewDashboard -->
 
-    <!-- ── BLOG: ASSETS  (Brand Identity / Voice / Style Guide) ── -->
+    </section><!-- /#tab-blog -->
+
+    <!-- ── BLOG ASSETS ── -->
     <section class="tab-panel" id="tab-blog-assets" aria-label="Blog Assets">
-      <div class="assets-subnav" role="tablist" aria-label="Blog asset categories">
-        <button class="assets-subtab active" data-asubtab="ba-identity" role="tab" aria-selected="true">Brand identity</button>
-        <button class="assets-subtab" data-asubtab="ba-voice" role="tab" aria-selected="false">Voice &amp; persona</button>
-        <button class="assets-subtab" data-asubtab="ba-style" role="tab" aria-selected="false">Style guide</button>
-      </div>
 
-      <div class="assets-subpanels">
-        <!-- Brand identity -->
-        <div class="assets-subpanel active" id="ba-identity">
-          <div class="form-section">
-            <h2 class="form-section-title">Brand identity</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="brandIdentityName">Brand / publisher name</label>
-                <input type="text" id="brandIdentityName" placeholder="DigiFusion">
-              </div>
-              <div class="field">
-                <label for="brandIdentityTagline">One-line tagline</label>
-                <input type="text" id="brandIdentityTagline" placeholder="Books &amp; tools for operators who ship.">
-              </div>
-            </div>
-            <div class="field">
-              <label for="brandIdentityAbout">About paragraph (used in author boxes &amp; footers)</label>
-              <textarea id="brandIdentityAbout" rows="4" placeholder="DigiFusion publishes practical guides for marketers, operators, and small teams shipping AI-assisted work."></textarea>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="brandIdentityLogoFile">Logo (image upload)</label><input type="file" id="brandIdentityLogoFile" accept="image/*"></div>
-              <div class="field"><label for="brandIdentityFaviconFile">Favicon (image upload)</label><input type="file" id="brandIdentityFaviconFile" accept="image/x-icon,image/png,image/svg+xml"></div>
-            </div>
-            <div class="field-row">
-              <div class="field"><label for="brandStrategyPdf">Brand strategy / brand book (PDF)</label><input type="file" id="brandStrategyPdf" accept="application/pdf"></div>
-              <div class="field"><label for="brandGuidelinesPdf">Visual guidelines (PDF)</label><input type="file" id="brandGuidelinesPdf" accept="application/pdf"></div>
-            </div>
-            <p class="field-hint" style="margin-top:8px">Uploaded PDFs are stored as reference material — the blog agent extracts tone, vocabulary, and visual cues from them when composing posts.</p>
-          </div>
-        </div>
-
-        <!-- Voice & persona -->
-        <div class="assets-subpanel" id="ba-voice">
-          <div class="form-section">
-            <h2 class="form-section-title">Author voice &amp; persona</h2>
-            <p class="field-hint" style="margin-bottom:16px">Pick which persona writes each post. Each option is a master prompt aligned to a domain — the AI inherits its voice, rhythm, vocabulary, and ban-list. Persona overrides per-post are available on the Compose tab.</p>
-
-            <div class="field">
-              <label for="blogPersonaPicker">Default persona for new posts</label>
-              <select id="blogPersonaPicker">
-                <option value="">— Use default editorial voice (no persona) —</option>
-                <!-- Master personas (hard-wired so the picker works even before /api/personas is live) -->
-                <option value="engineering_bench">AI Automation &amp; Systems Engineering Specialist</option>
-                <option value="marketing_desk">Award-winning Digital Media &amp; Marketing Expert</option>
-                <option value="senior_editor">Senior Copywriter / Editor</option>
-                <option value="strategy_room">Operator &amp; Founder Notes</option>
-              </select>
-              <p class="field-hint">The picker auto-syncs with all personas in <code>backend/skills/personas.js</code> once the <code>/api/personas</code> endpoint is connected.</p>
-            </div>
-
-            <div class="persona-master-prompts">
-              <h3 class="form-section-title" style="font-size:14px;margin-top:24px;margin-bottom:12px">Built-in master prompts</h3>
-              <p class="field-hint" style="margin-bottom:16px">These three personas cover the recurring blog archetypes. Reviews, listicles, and other post types fall back to the default editorial voice.</p>
-
-              <div class="persona-card">
-                <div class="persona-card-tag">AI &amp; Engineering</div>
-                <div class="persona-card-name">AI Automation &amp; Systems Engineering Specialist</div>
-                <div class="persona-card-desc">Seasoned engineer voice: precise, code-aware, allergic to vapor. Calls out failure modes. Best for AI automation, LLM-ops, agent design, MLOps posts.</div>
-              </div>
-
-              <div class="persona-card">
-                <div class="persona-card-tag">Digital Media</div>
-                <div class="persona-card-name">Award-winning Digital Media &amp; Marketing Expert</div>
-                <div class="persona-card-desc">Bold conversion copywriter: direct, benefit-led, evidence over hype. Best for marketing, paid acquisition, creative strategy, and brand-growth posts.</div>
-              </div>
-
-              <div class="persona-card">
-                <div class="persona-card-tag">Editorial</div>
-                <div class="persona-card-name">Senior Copywriter / Editor</div>
-                <div class="persona-card-desc">House editorial voice — precise, evidence-aware, polished. Use as the default for reviews, listicles, roundups, and general-interest posts.</div>
-              </div>
-            </div>
-
-            <div class="persona-preview" id="blogPersonaPreview" style="display:none">
-              <div class="persona-preview-head">
-                <div class="persona-preview-avatar" id="personaPreviewAvatar"></div>
-                <div>
-                  <div class="persona-preview-name" id="personaPreviewName"></div>
-                  <div class="persona-preview-title" id="personaPreviewTitle"></div>
-                </div>
-              </div>
-              <p class="persona-preview-bio" id="personaPreviewBio"></p>
-              <div class="persona-preview-meta">
-                <div><strong>Voice:</strong> <span id="personaPreviewVoice"></span></div>
-                <div><strong>Rhythm:</strong> <span id="personaPreviewRhythm"></span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Style guide -->
-        <div class="assets-subpanel" id="ba-style">
-          <div class="form-section">
-            <h2 class="form-section-title">House style guide</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="styleSpelling">Spelling</label>
-                <select id="styleSpelling">
-                  <option value="us">US English (color, organize)</option>
-                  <option value="uk">UK English (colour, organise)</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="styleHeadingCase">Headings</label>
-                <select id="styleHeadingCase">
-                  <option value="sentence">Sentence case</option>
-                  <option value="title">Title Case</option>
-                </select>
-              </div>
-            </div>
-            <div class="field">
-              <label for="styleBanList">House ban-list (clichés to never use, comma separated)</label>
-              <input type="text" id="styleBanList" placeholder="leverage, game-changer, in today's fast-paced world, synergy">
-            </div>
-            <div class="field">
-              <label for="styleNotes">Other house rules</label>
-              <textarea id="styleNotes" rows="4" placeholder="Numbers under 10 are spelled out. Always link sources. Cite stats with year."></textarea>
-            </div>
-          </div>
+      <!-- Persona Manager -->
+      <div class="form-section" style="padding: 20px 32px;">
+        <h2 class="form-section-title">Writer personas</h2>
+        <p class="field-hint" style="margin-bottom:12px">Personas define the voice, style, and audience for each blog. Stored locally in <code>backend/skills/personas.js</code>.</p>
+        <div class="field">
+          <label for="blogPersonaPicker">Active persona</label>
+          <select id="blogPersonaPicker">
+            <option value="">— Default editorial voice —</option>
+          </select>
         </div>
       </div>
-    </section>
 
-      </div><!-- /module-body -->
-    </div><!-- /module-blog -->
+      <!-- Media Library -->
+      <div class="form-section" style="padding: 0 0 20px; border-top: 1px solid var(--border); margin-top: 8px; display:flex; flex-direction:column; flex:1; min-height:0;">
+        <div class="media-lib-header">
+          <h3>Media Library</h3>
+          <span style="font-size:11px;color:var(--text-muted)">Stored in Cloudflare R2 · blog-media/</span>
+          <button class="btn-secondary btn-sm" id="mediaLibRefresh" style="margin-left:auto">Refresh</button>
+        </div>
+
+        <!-- Drop zone -->
+        <div class="media-lib-drop-zone" id="mediaLibDropZone">
+          <input type="file" id="mediaLibInput" multiple accept="image/*,.pdf,.doc,.docx" style="display:none">
+          <span class="drop-icon">☁️</span>
+          <span class="drop-label">Drop files here or click to upload</span>
+          <span class="drop-hint">Images, PDFs, Word docs · max 20 MB each</span>
+        </div>
+
+        <!-- Upload progress -->
+        <div class="media-lib-upload-progress" id="mediaLibProgress">
+          <div class="media-lib-progress-bar"><div class="media-lib-progress-fill" id="mediaLibProgressFill"></div></div>
+          <span class="media-lib-progress-label" id="mediaLibProgressLabel">Uploading…</span>
+        </div>
+
+        <!-- Toolbar -->
+        <div class="media-lib-toolbar">
+          <input type="search" id="mediaLibSearch" placeholder="Search assets…">
+          <select id="mediaLibType">
+            <option value="">All types</option>
+            <option value="image">Images</option>
+            <option value="pdf">PDFs</option>
+            <option value="other">Other</option>
+          </select>
+          <span class="media-lib-count" id="mediaLibCount"></span>
+        </div>
+
+        <!-- Asset grid -->
+        <div class="media-lib-grid" id="mediaLibGrid">
+          <div class="media-lib-loading">Loading assets…</div>
+        </div>
+      </div>
+
+    </section><!-- /#tab-blog-assets -->
+
+      </div><!-- /.module-body -->
+    </div><!-- /#module-blog -->
 
     <!-- ══════════════════════════════════════════════
-         MODULE: SHOP MANAGEMENT
-         (Subscriptions / Bookings / Payments / T&C / Shipping / Analytics)
-         All tabs operate on DigiFusion's shop_* Supabase tables.
+         MODULE: SHOP  (6 sub-tabs)
     ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-shop" data-module="shop">
 
-      <!-- Per-tab headers — only the active one is shown. -->
+      <!-- Per-tab headers -->
       <div class="module-headers">
-        <header class="panel-header active" data-for="shop-subs"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div></header>
-        <header class="panel-header" data-for="shop-bookings"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Service bookings</h1></div></header>
-        <header class="panel-header" data-for="shop-payments"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; orders</h1></div></header>
-        <header class="panel-header" data-for="shop-terms"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Terms &amp; conditions</h1></div></header>
-        <header class="panel-header" data-for="shop-shipping"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shipping &amp; delivery</h1></div></header>
-        <header class="panel-header" data-for="shop-analytics"><div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales analytics</h1></div></header>
+        <header class="panel-header active" data-for="shop-subs">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-bookings">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Bookings</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-payments">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-analytics">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Analytics</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-products">
+          <div>
+            <p class="panel-eyebrow">Shop</p>
+            <h1 class="panel-title">Products &amp; Services</h1>
+          </div>
+          <div class="header-actions">
+            <button class="btn-primary btn-sm" id="shopProductAddBtn">+ Add Product</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="shop-settings">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Settings</h1></div>
+        </header>
       </div>
 
       <div class="module-topnav" role="tablist" aria-label="Shop sections">
-        <button class="module-tab active" data-subtab="shop-subs"      role="tab" aria-selected="true">Subscriptions</button>
-        <button class="module-tab"        data-subtab="shop-bookings"  role="tab" aria-selected="false">Bookings</button>
-        <button class="module-tab"        data-subtab="shop-payments"  role="tab" aria-selected="false">Payments</button>
-        <button class="module-tab"        data-subtab="shop-terms"     role="tab" aria-selected="false">T&amp;C</button>
-        <button class="module-tab"        data-subtab="shop-shipping"  role="tab" aria-selected="false">Shipping</button>
-        <button class="module-tab"        data-subtab="shop-analytics" role="tab" aria-selected="false">Analytics</button>
+        <button class="shop-tab module-tab active" data-subtab="subs" role="tab" aria-selected="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Subs
+        </button>
+        <button class="shop-tab module-tab" data-subtab="bookings" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Bookings
+        </button>
+        <button class="shop-tab module-tab" data-subtab="payments" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          Payments
+        </button>
+        <button class="shop-tab module-tab" data-subtab="analytics" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Analytics
+        </button>
+        <button class="shop-tab module-tab" data-subtab="products" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Products
+        </button>
+        <button class="shop-tab module-tab" data-subtab="settings" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
       </div>
 
       <div class="module-body">
 
-      <section class="tab-panel active" id="tab-shop-subs" aria-label="Subscriptions">
-        <div class="panel-body">
-          <div class="shop-empty">
-            <p>Connect to DigiFusion to load active subscribers, plans, MRR, and churn.</p>
-            <button class="btn-secondary" id="shopSubsRefresh">Load subscriptions</button>
-          </div>
-          <div class="shop-table-wrap" id="shopSubsTable" hidden></div>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="tab-shop-bookings" aria-label="Bookings">
-        <div class="panel-body">
-          <div class="shop-empty">
-            <p>Service bookings created at checkout. Track status (awaiting intake / scheduled / completed / cancelled) and the intake or calendar link sent to the buyer.</p>
-            <button class="btn-secondary" id="shopBookingsRefresh">Load bookings</button>
-          </div>
-          <div class="shop-table-wrap" id="shopBookingsTable" hidden></div>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="tab-shop-payments" aria-label="Payments">
-        <div class="panel-body">
-          <div class="shop-empty">
-            <p>Orders across Stripe, Flutterwave, and OPay. Mark off-platform payments as paid, refund, or re-run fulfillment.</p>
-            <button class="btn-secondary" id="shopPaymentsRefresh">Load orders</button>
-          </div>
-          <div class="shop-table-wrap" id="shopPaymentsTable" hidden></div>
-        </div>
-      </section>
-
-      <section class="tab-panel" id="tab-shop-terms" aria-label="Terms and conditions">
-        <div class="panel-body">
-          <div class="form-section">
-            <div class="field">
-              <label for="shopTcRefund">Refund policy</label>
-              <textarea id="shopTcRefund" rows="5" placeholder="14-day refund on digital products if undownloaded. Services refundable up to 24h before booking."></textarea>
+        <!-- Subscriptions -->
+        <section class="tab-panel active" id="tab-shop-subs" aria-label="Subscriptions">
+          <div class="shop-panel-body">
+            <div class="shop-toolbar">
+              <h2 class="shop-section-title">Active subscriptions</h2>
+              <button class="btn-secondary btn-sm" id="shopSubsRefresh">Refresh</button>
             </div>
-            <div class="field">
-              <label for="shopTcTerms">Terms of service</label>
-              <textarea id="shopTcTerms" rows="6" placeholder="Outline the legal terms governing the use of your storefront."></textarea>
-            </div>
-            <div class="field">
-              <label for="shopTcPrivacy">Privacy policy</label>
-              <textarea id="shopTcPrivacy" rows="5" placeholder="What data you collect, how it's stored, and the buyer's rights."></textarea>
-            </div>
-            <button class="btn-primary" id="shopTcSave">Publish to DigiFusion /terms</button>
+            <div id="shopSubsTable"><div class="shop-empty"><p>Click Refresh to load subscriptions.</p></div></div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="tab-panel" id="tab-shop-shipping" aria-label="Shipping">
-        <div class="panel-body">
-          <div class="form-section">
-            <p class="field-hint" style="margin-bottom:16px">Digital downloads deliver instantly. Configure shipping only for physical SKUs.</p>
-            <div class="field-row">
-              <div class="field"><label for="shipMethod">Default carrier</label><input type="text" id="shipMethod" placeholder="DHL / FedEx / Royal Mail"></div>
-              <div class="field"><label for="shipLeadTime">Lead time (days)</label><input type="number" id="shipLeadTime" min="0" placeholder="3"></div>
+        <!-- Bookings -->
+        <section class="tab-panel" id="tab-shop-bookings" aria-label="Bookings">
+          <div class="shop-panel-body">
+            <div class="shop-toolbar">
+              <h2 class="shop-section-title">Service bookings</h2>
+              <button class="btn-secondary btn-sm" id="shopBookingsRefresh">Refresh</button>
             </div>
-            <div class="field-row">
-              <div class="field"><label for="shipFlatRate">Flat rate ($)</label><input type="number" id="shipFlatRate" min="0" step="0.01" placeholder="9.95"></div>
-              <div class="field"><label for="shipFreeThreshold">Free-shipping threshold ($)</label><input type="number" id="shipFreeThreshold" min="0" step="0.01" placeholder="75"></div>
+            <div id="shopBookingsTable"><div class="shop-empty"><p>Click Refresh to load bookings.</p></div></div>
+          </div>
+        </section>
+
+        <!-- Payments / Orders -->
+        <section class="tab-panel" id="tab-shop-payments" aria-label="Payments">
+          <div class="shop-panel-body">
+            <div class="shop-toolbar">
+              <h2 class="shop-section-title">Orders &amp; payments</h2>
+              <button class="btn-secondary btn-sm" id="shopPaymentsRefresh">Refresh</button>
             </div>
-            <div class="field">
-              <label for="shipZones">Shipping zones (one per line: country=rate)</label>
-              <textarea id="shipZones" rows="5" placeholder="US=9.95&#10;UK=12.50&#10;Nigeria=15.00&#10;Rest of world=24.00"></textarea>
+            <div id="shopPaymentsTable"><div class="shop-empty"><p>Click Refresh to load payments.</p></div></div>
+          </div>
+        </section>
+
+        <!-- Analytics -->
+        <section class="tab-panel" id="tab-shop-analytics" aria-label="Analytics">
+          <div class="shop-panel-body">
+            <div class="shop-toolbar">
+              <h2 class="shop-section-title">Analytics</h2>
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+                <button class="shop-analytics-tab btn-secondary btn-sm active" data-atab="sales">Sales</button>
+                <button class="shop-analytics-tab btn-secondary btn-sm" data-atab="traffic">Site Traffic</button>
+                <button class="btn-secondary btn-sm" id="shopAnalyticsRefresh">Refresh</button>
+              </div>
             </div>
-            <button class="btn-primary" id="shopShippingSave">Save shipping rules</button>
+
+            <!-- Sales pane -->
+            <div class="shop-analytics-pane active" id="shopAnalyticsPaneSales">
+              <div class="shop-stat-grid">
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">—</div><div class="shop-stat-label">Revenue (30d)</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">—</div><div class="shop-stat-label">Orders paid</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">—</div><div class="shop-stat-label">Avg order value</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">—</div><div class="shop-stat-label">Conversion</div></div>
+              </div>
+              <div class="shop-empty"><p>Click Refresh to load sales analytics.</p></div>
+            </div>
+
+            <!-- Site Traffic pane -->
+            <div class="shop-analytics-pane" id="shopAnalyticsPaneTraffic">
+              <div class="shop-toolbar" style="margin-bottom:16px">
+                <select id="shopTrafficRange" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d" selected>Last 30 days</option>
+                  <option value="90d">Last 90 days</option>
+                </select>
+                <button class="btn-secondary btn-sm" id="shopTrafficRefresh">Refresh</button>
+              </div>
+              <div class="shop-stat-grid">
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatViews">—</div><div class="shop-stat-label">Total pageviews</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatSessions">—</div><div class="shop-stat-label">Unique sessions</div></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+                <div>
+                  <h3 style="font-size:12px;font-weight:700;margin:0 0 8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Top pages</h3>
+                  <div id="shopTopPages"><div class="shop-empty-sm">No data yet.</div></div>
+                </div>
+                <div>
+                  <h3 style="font-size:12px;font-weight:700;margin:0 0 8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Top referrers</h3>
+                  <div id="shopTopReferrers"><div class="shop-empty-sm">No data yet.</div></div>
+                </div>
+              </div>
+              <div style="margin-top:16px">
+                <h3 style="font-size:12px;font-weight:700;margin:0 0 8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Daily views</h3>
+                <div id="shopDailyChart" style="height:60px"></div>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="tab-panel" id="tab-shop-analytics" aria-label="Sales analytics">
-        <div class="panel-body">
-          <div class="shop-stats-grid">
-            <div class="shop-stat-card"><div class="shop-stat-label">Revenue (30d)</div><div class="shop-stat-value" id="shopStatRevenue">—</div></div>
-            <div class="shop-stat-card"><div class="shop-stat-label">Orders (30d)</div><div class="shop-stat-value" id="shopStatOrders">—</div></div>
-            <div class="shop-stat-card"><div class="shop-stat-label">AOV</div><div class="shop-stat-value" id="shopStatAov">—</div></div>
-            <div class="shop-stat-card"><div class="shop-stat-label">Conversion</div><div class="shop-stat-value" id="shopStatConv">—</div></div>
+        <!-- Products & Services -->
+        <section class="tab-panel" id="tab-shop-products" aria-label="Products &amp; Services">
+          <div class="prod-panel-body">
+            <div class="prod-toolbar">
+              <input type="search" id="shopProductSearch" placeholder="Search products…" style="flex:1;max-width:260px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px">
+              <select id="shopProductType" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
+                <option value="">All types</option>
+                <option value="ebook">eBook</option>
+                <option value="paperback">Paperback</option>
+                <option value="saas">SaaS</option>
+                <option value="course">Course</option>
+                <option value="extension">Extension</option>
+                <option value="bundle">Bundle</option>
+              </select>
+              <select id="shopProductStatus" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+              </select>
+              <button class="btn-secondary btn-sm" id="shopProductRefresh">Refresh</button>
+            </div>
+            <div class="prod-list" id="shopProductsTable">
+              <div class="shop-empty"><p>Loading products…</p></div>
+            </div>
+
+            <!-- Slide-in product form -->
+            <div class="prod-form-overlay" id="prodFormOverlay">
+              <div class="prod-form-panel" id="prodFormPanel">
+                <div class="prod-form-header">
+                  <h3 id="prodFormTitle">Add Product</h3>
+                  <button class="btn-secondary btn-sm" id="prodFormCancel">✕ Close</button>
+                </div>
+                <form class="prod-form-body" id="prodFormEl">
+                  <div class="prod-form-section">
+                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. Instagram Growth Blueprint" required></div>
+                    <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="prodFormType">Type</label>
+                        <select id="prodFormType">
+                          <option value="ebook">📗 eBook</option>
+                          <option value="paperback">📘 Paperback</option>
+                          <option value="saas">☁️ SaaS</option>
+                          <option value="course">🎓 Course</option>
+                          <option value="extension">🔌 Extension</option>
+                          <option value="bundle">📦 Bundle</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="prodFormStatus">Status</label>
+                        <select id="prodFormStatus">
+                          <option value="active">Active</option>
+                          <option value="draft">Draft</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
+                      <div class="field">
+                        <label for="prodFormCurrency">Currency</label>
+                        <select id="prodFormCurrency">
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option>
+                          <option value="CAD">CAD</option>
+                          <option value="AUD">AUD</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description…"></textarea></div>
+                    <div class="field"><label for="prodFormVariants">Variants (JSON)</label><textarea id="prodFormVariants" rows="3" placeholder='[{"name":"Basic","price_usd":1900},{"name":"Pro","price_usd":4900}]'></textarea></div>
+                  </div>
+                  <div class="prod-form-error" id="prodFormError" hidden></div>
+                  <div class="prod-form-actions">
+                    <button type="button" class="btn-secondary" id="prodFormCancel2" onclick="document.getElementById('prodFormCancel').click()">Cancel</button>
+                    <button type="submit" class="btn-primary" id="prodFormSave">Save product</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
           </div>
-          <div class="shop-empty" style="margin-top:24px">
-            <p>Trend charts (revenue, orders, top SKUs) will render once DigiFusion is connected.</p>
-            <button class="btn-secondary" id="shopAnalyticsRefresh">Refresh analytics</button>
+        </section>
+
+        <!-- Settings -->
+        <section class="tab-panel" id="tab-shop-settings" aria-label="Settings">
+          <div class="shop-panel-body">
+
+            <div class="form-section">
+              <h2 class="form-section-title">Terms &amp; Conditions</h2>
+              <div class="field"><label for="shopTcRefund">Refund policy</label><textarea id="shopTcRefund" rows="4" placeholder="e.g. 30-day money-back guarantee…"></textarea></div>
+              <div class="field"><label for="shopTcTerms">Terms of service</label><textarea id="shopTcTerms" rows="4" placeholder="General terms…"></textarea></div>
+              <div class="field"><label for="shopTcPrivacy">Privacy policy</label><textarea id="shopTcPrivacy" rows="4" placeholder="How you handle customer data…"></textarea></div>
+              <button class="btn-primary" id="shopTcSave">Save &amp; publish</button>
+            </div>
+
+            <div class="form-section">
+              <h2 class="form-section-title">Shipping</h2>
+              <div class="field-row">
+                <div class="field"><label for="shipMethod">Carrier</label><input type="text" id="shipMethod" placeholder="e.g. USPS, FedEx, Royal Mail"></div>
+                <div class="field"><label for="shipLeadTime">Lead time (days)</label><input type="number" id="shipLeadTime" min="0" value="3"></div>
+              </div>
+              <div class="field-row">
+                <div class="field"><label for="shipFlatRate">Flat rate ($)</label><input type="number" id="shipFlatRate" min="0" step="0.01" placeholder="4.99"></div>
+                <div class="field"><label for="shipFreeThreshold">Free shipping above ($)</label><input type="number" id="shipFreeThreshold" min="0" step="0.01" placeholder="50.00"></div>
+              </div>
+              <div class="field"><label for="shipZones">Shipping zones (one per line)</label><textarea id="shipZones" rows="3" placeholder="US, CA, UK&#10;AU, NZ"></textarea></div>
+              <button class="btn-primary" id="shopShippingSave">Save shipping</button>
+            </div>
+
           </div>
-        </div>
-      </section>
+        </section>
 
-      </div><!-- /module-body -->
-    </div><!-- /module-shop -->
+      </div><!-- /.module-body -->
+    </div><!-- /#module-shop -->
 
-  </main>
+  </div><!-- /.app-body -->
 
-  <!-- Settings Modal -->
-  <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-label="Settings" style="display:none">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>Settings</h2>
-        <button class="modal-close" id="closeSettings" aria-label="Close settings">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <div class="field">
-          <label for="backendUrl">Backend URL</label>
-          <input type="url" id="backendUrl" placeholder="http://localhost:8787">
-          <p class="field-hint">Your Render service URL, e.g. https://pathguru-publishers.onrender.com</p>
-        </div>
-        <div class="field">
-          <label for="brandLogoUrl">Brand logo URL</label>
-          <input type="url" id="brandLogoUrl" placeholder="https://...">
-        </div>
-        <div class="field-row">
-          <div class="field"><label for="brandPrimaryColor">Primary colour</label><input type="text" id="brandPrimaryColor" placeholder="#16213e"></div>
-          <div class="field"><label for="brandSecondaryColor">Accent colour</label><input type="text" id="brandSecondaryColor" placeholder="#2bb3a3"></div>
-        </div>
-        <div class="field">
-          <label for="brandFontStack">Font stack</label>
-          <input type="text" id="brandFontStack" placeholder="Georgia, Inter, Arial">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelSettings">Cancel</button>
-        <button class="btn-primary" id="saveSettings">Save settings</button>
-      </div>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
-  <script src="blog.js"></script>
-  <script src="shop.js"></script>
+  <script type="module" src="/app.js"></script>
+  <script type="module" src="/blog.js"></script>
+  <script type="module" src="/shop.js"></script>
 </body>
 </html>

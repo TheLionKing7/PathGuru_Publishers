@@ -19,6 +19,7 @@ import { buildBlogPrompt, parseBlogResponse, normalizeSection, stripHtmlTags } f
 import { searchPexels } from './pexelsAssets.js';
 import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
 import { selectPersonaForNiche } from './skills/personas.js';
+import { resolveProvider, callAiProvider } from './aiPipeline.js';
 
 /* ── Build blog post HTML from sections ───────────────── */
 function buildBlogHtml(post, design = {}) {
@@ -418,26 +419,12 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
   // 3. Build prompt and inject persona voice + samples
   const basePrompt = buildBlogPrompt(input, research);
   const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
-  let rawResponse = '';
+  // 3b. Pick provider (per-request override → env AI_PROVIDER → first available)
+  const provider = resolveProvider(input.aiProvider || null);
+  if (!provider) throw new Error('No AI provider configured. Set GEMINI_API_KEY, CLAUDE_API_KEY, or DEEPSEEK_API_KEY in .env');
 
-  if (process.env.GEMINI_API_KEY) {
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
-          generationConfig: { temperature: 0.75, responseMimeType: 'application/json' },
-        }),
-      }
-    );
-    const data = await res.json();
-    rawResponse = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('').trim();
-  } else {
-    throw new Error('No AI provider configured. Set GEMINI_API_KEY.');
-  }
+  const blogSystemHint = 'You are an expert blog copywriter. Return strict, valid JSON only — no markdown fences, no commentary outside the JSON object.';
+  const rawResponse = await callAiProvider(provider, finalPrompt, blogSystemHint);
 
   // 3. Parse response
   const post = parseBlogResponse(rawResponse);

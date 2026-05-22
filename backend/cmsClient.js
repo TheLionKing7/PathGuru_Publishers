@@ -213,3 +213,8 @@ export async function saveTerms (content) {
 export async function saveShipping (payload) {
   return cmsRequest('PUT', '/api/cms/settings/shipping', payload);
 }
+
+/* ── Site analytics (pageviews) ───────────────────────────── */
+export async function getPageviewAnalytics (range = '30d') {
+  return cmsRequest('GET', `/api/cms/analytics/pageviews?range=${encodeURIComponent(range)}`);
+}

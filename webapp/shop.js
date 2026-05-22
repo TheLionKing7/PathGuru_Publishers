@@ -368,22 +368,350 @@
     }
   }
 
-  /* ── Wire all buttons ─────────────────────────────────────────── */
-  function wireShopTab () {
-    const on = (id, event, fn) => {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener(event, fn);
-    };
+  /* ── PRODUCTS & SERVICES ──────────────────────────────────────── */
+  let allProducts = [];
 
-    on('shopSubsRefresh',     'click', loadSubscriptions);
-    on('shopBookingsRefresh', 'click', loadBookings);
-    on('shopPaymentsRefresh', 'click', loadOrders);
-    on('shopTcSave',          'click', saveTerms);
-    on('shopShippingSave',    'click', saveShipping);
-    on('shopAnalyticsRefresh','click', loadAnalytics);
+  function slugify (s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 100);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireShopTab);
-  else wireShopTab();
+  function fmtPrice (product) {
+    const p = product.price_usd != null ? (product.price_usd / 100) : (product.price || 0);
+    const currency = product.currency || 'USD';
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(p); }
+    catch { return `${currency} ${Number(p).toFixed(2)}`; }
+  }
 
+  async function loadProducts () {
+    const wrap   = document.getElementById('shopProductsTable');ById('shopProductSearch');
+    const typeFilter   = document.getElementById('shopProductType');
+    const statusFilter = document.getElementById('shopProductStatus');
+
+    const searchVal = search?.value?.trim().toLowerCase() || '';
+    const typeVal   = typeFilter?.value  || '';
+    const statusVal = statusFilter?.value || '';
+
+    try {
+      const params = new URLSearchParams();
+      if (typeVal)   params.set('type',   typeVal);
+      if (statusVal) params.set('active', statusVal === 'active' ? 'true' : 'false');
+      const res  = await fetch(`${getBackendUrl()}/api/shop/products?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      allProducts = (data.data || data.products || data || []);
+
+      const filtered = allProducts.filter(p => {
+        if (searchVal && !(p.name || '').toLowerCase().includes(searchVal)) return false;
+        if (statusVal === 'active'   && p.status === 'archived') return false;
+        if (statusVal === 'archived' && p.status !== 'archived') return false;
+        return true;
+      });
+
+      if (wrap) renderProductsTable(filtered, wrap);
+    } catch (e) {
+      shopToast(e.message, 'error');
+      if (wrap) wrap.innerHTML = `<div class="shop-empty"><p style="color:var(--red)">Error: ${esc(e.message)}</p></div>`;
+    }
+  }
+
+  function renderProductsTable (products, wrap) {
+    if (!products.length) {
+      wrap.innerHTML = '<div class="shop-empty"><p>No products found. Click <strong>+ Add Product</strong> to create one.</p></div>';
+      return;
+    }
+    const typeLabel = { ebook: '📗 eBook', paperback: '📘 Paperback', saas: '☁️ SaaS', course: '🎓 Course', extension: '🔌 Extension', bundle: '📦 Bundle' };
+    wrap.innerHTML = products.map(p => {
+      const badge   = typeLabel[p.type] || p.type || '—';
+      const price   = fmtPrice(p);
+      const status  = p.status || 'active';
+      const isArch  = status === 'archived';
+      return `<div class="prod-row" data-id="${esc(p.id)}">
+        <span class="prod-type-badge">${badge}</span>
+        <div class="prod-name">
+          <span>${esc(p.name || 'Untitled')}</span>
+          ${p.slug ? `<span class="prod-meta">/${esc(p.slug)}</span>` : ''}
+        </div>
+        <span class="prod-price">${price}</span>
+        <span class="prod-status-pill ${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${!isArch ? `<button class="btn-sm btn-secondary prod-edit-btn" data-id="${esc(p.id)}">Edit</button>` : ''}
+          ${!isArch ? `<button class="btn-sm btn-danger prod-archive-btn" data-id="${esc(p.id)}">Archive</button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    wrap.querySelectorAll('.prod-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prod = allProducts.find(p => p.id === btn.dataset.id);
+        if (prod) openProductForm(prod);
+      });
+    });
+    wrap.querySelectorAll('.prod-archive-btn').forEach(btn => {
+      btn.addEventListener('click', () => archiveProduct(btn.dataset.id));
+    });
+  }
+
+  let editingProductId = null;
+
+  function openProductForm (product = null) {
+    editingProductId = product?.id || null;
+    const overlay = document.getElementById('prodFormOverlay');
+    const panel   = document.getElementById('prodFormPanel');
+    const title   = document.getElementById('prodFormTitle');
+    if (!overlay || !panel) return;
+
+    document.getElementById('prodFormName')?.value !== undefined &&
+      (document.getElementById('prodFormName').value     = product?.name     || '');
+    document.getElementById('prodFormSlug') &&
+      (document.getElementById('prodFormSlug').value     = product?.slug     || '');
+    document.getElementById('prodFormType') &&
+      (document.getElementById('prodFormType').value     = product?.type     || 'ebook');
+    document.getElementById('prodFormStatus') &&
+      (document.getElementById('prodFormStatus').value   = product?.status   || 'active');
+    document.getElementById('prodFormPrice') &&
+      (document.getElementById('prodFormPrice').value    = product?.price_usd != null ? (product.price_usd / 100).toFixed(2) : (product?.price || ''));
+    document.getElementById('prodFormCurrency') &&
+      (document.getElementById('prodFormCurrency').value = product?.currency  || 'USD');
+    document.getElementById('prodFormDesc') &&
+      (document.getElementById('prodFormDesc').value     = product?.description || '');
+    document.getElementById('prodFormVariants') &&
+      (document.getElementById('prodFormVariants').value = product?.variants
+        ? JSON.stringify(product.variants, null, 2)
+        : '');
+    if (title) title.textContent = product ? 'Edit Product' : 'Add Product';
+    const errEl = document.getElementById('prodFormError');
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+
+    overlay.classList.add('active');
+    panel.classList.add('active');
+  }
+
+  function closeProductForm () {
+    const overlay = document.getElementById('prodFormOverlay');
+    const panel   = document.getElementById('prodFormPanel');
+    if (overlay) overlay.classList.remove('active');
+    if (panel)   panel.classList.remove('active');
+    editingProductId = null;
+  }
+
+  async function saveProduct (e) {
+    e.preventDefault();
+    const errEl = document.getElementById('prodFormError');
+    const saveBtn = document.getElementById('prodFormSave');
+    const name    = document.getElementById('prodFormName')?.value.trim();
+    const slug    = document.getElementById('prodFormSlug')?.value.trim();
+    const type    = document.getElementById('prodFormType')?.value;
+    const status  = document.getElementById('prodFormStatus')?.value || 'active';
+    const priceRaw = parseFloat(document.getElementById('prodFormPrice')?.value || '0');
+    const currency = document.getElementById('prodFormCurrency')?.value || 'USD';
+    const desc     = document.getElementById('prodFormDesc')?.value.trim() || '';
+    const varStr   = document.getElementById('prodFormVariants')?.value.trim();
+
+    if (!name) {
+      if (errEl) { errEl.textContent = 'Product name is required.'; errEl.hidden = false; }
+      return;
+    }
+
+    let variants = null;
+    if (varStr) {
+      try { variants = JSON.parse(varStr); }
+      catch { if (errEl) { errEl.textContent = 'Variants must be valid JSON.'; errEl.hidden = false; } return; }
+    }
+
+    const payload = {
+      name, slug: slug || slugify(name), type, status,
+      price_usd: Math.round(priceRaw * 100), currency,
+      description: desc,
+      ...(variants ? { variants } : {}),
+    };
+
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+
+    try {
+      const url    = editingProductId
+        ? `${getBackendUrl()}/api/shop/products/${editingProductId}`
+        : `${getBackendUrl()}/api/shop/products`;
+      const method = editingProductId ? 'PUT' : 'POST';
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || `HTTP ${res.status}`); }
+      shopToast(editingProductId ? 'Product updated.' : 'Product created.', 'success');
+      closeProductForm();
+      loadProducts();
+    } catch (err) {
+      if (errEl) { errEl.textContent = err.message; errEl.hidden = false; }
+      shopToast(err.message, 'error');
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save product'; }
+    }
+  }
+
+  async function archiveProduct (id) {
+    if (!confirm('Archive this product?')) return;
+    try {
+      const res = await fetch(`${getBackendUrl()}/api/shop/products/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      shopToast('Product archived.', 'success');
+      loadProducts();
+    } catch (e) { shopToast(e.message, 'error'); }
+  }
+
+  function wireProducts () {
+    const addBtn = document.getElementById('shopProductAddBtn');
+    if (addBtn) addBtn.addEventListener('click', () => openProductForm());
+
+    const overlay = document.getElementById('prodFormOverlay');
+    const cancel  = document.getElementById('prodFormCancel');
+    if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeProductForm(); });
+    if (cancel)  cancel.addEventListener('click', closeProductForm);
+
+    const form = document.getElementById('prodFormEl');
+    if (form) form.addEventListener('submit', saveProduct);
+
+    const nameEl = document.getElementById('prodFormName');
+    const slugEl = document.getElementById('prodFormSlug');
+    if (nameEl && slugEl) {
+      nameEl.addEventListener('input', () => {
+        if (!editingProductId) slugEl.value = slugify(nameEl.value);
+      });
+    }
+
+    ['shopProductSearch', 'shopProductType', 'shopProductStatus'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        const ev = id === 'shopProductSearch' ? 'input' : 'change';
+        el.addEventListener(ev, debounceShop(loadProducts, 300));
+      }
+    });
+
+    const refreshBtn = document.getElementById('shopProductRefresh');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadProducts);
+
+    loadProducts();
+  }
+
+  /* ── SITE TRAFFIC ANALYTICS ──────────────────────────────────── */
+  async function loadTrafficAnalytics () {
+    const range   = document.getElementById('shopTrafficRange')?.value || '30d';
+    const btn     = document.getElementById('shopTrafficRefresh');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+    try {
+      const res  = await fetch(`${getBackendUrl()}/api/shop/analytics/pageviews?range=${range}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d    = await res.json();
+
+      const viewEl = document.getElementById('shopStatViews');
+      const sessEl = document.getElementById('shopStatSessions');
+      if (viewEl) viewEl.textContent = String(d.total_views   || 0);
+      if (sessEl) sessEl.textContent = String(d.unique_sessions || 0);
+
+      const pagesWrap = document.getElementById('shopTopPages');
+      if (pagesWrap) {
+        const pages = d.top_pages || [];
+        pagesWrap.innerHTML = pages.length
+          ? pages.map(p => `<div class="shop-table-row"><span class="dash-slug">${esc(p.path)}</span><span>${p.views} views</span></div>`).join('')
+          : '<div class="shop-empty-sm">No page data yet.</div>';
+      }
+
+      const refWrap = document.getElementById('shopTopReferrers');
+      if (refWrap) {
+        const refs = d.top_referrers || [];
+        refWrap.innerHTML = refs.length
+          ? refs.map(r => `<div class="shop-table-row"><span>${esc(r.referrer || '(direct)')}</span><span>${r.views} views</span></div>`).join('')
+          : '<div class="shop-empty-sm">No referrer data yet.</div>';
+      }
+
+      const chartWrap = document.getElementById('shopDailyChart');
+      if (chartWrap) {
+        const days  = d.daily_views || [];
+        const max   = Math.max(...days.map(d => d.views), 1);
+        chartWrap.innerHTML = `<div class="spark-chart">${days.map(day => {
+          const pct = Math.round((day.views / max) * 100);
+          return `<div class="spark-bar" style="height:${pct}%" title="${day.date}: ${day.views} views"></div>`;
+        }).join('')}</div>`;
+      }
+
+      shopToast('Traffic loaded', 'success');
+    } catch (e) {
+      shopToast(e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    }
+  }
+
+  /* ── DEBOUNCE ─────────────────────────────────────────────────── */
+  function debounceShop (fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+  }
+
+  /* ── WIRE SHOP ──────────────────────────────────────────────────
+     Called once on DOMContentLoaded.  Each tab lazily loads its
+     data the first time it is activated.
+  ──────────────────────────────────────────────────────────────── */
+  function wireShop () {
+    // Module-level tab switching (module-tab buttons inside module-shop)
+    const shopShell = document.getElementById('module-shop');
+    if (!shopShell) return;
+
+    // Wires sub-tab switching for all .shop-tab elements
+    shopShell.querySelectorAll('.shop-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        shopShell.querySelectorAll('.shop-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        const target = btn.dataset.subtab;
+        shopShell.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        const panel = document.getElementById(`tab-shop-${target}`);
+        if (panel) panel.classList.add('active');
+        // Lazy-load on first activation
+        if (target === 'subs')       loadSubscriptions();
+        if (target === 'bookings')   loadBookings();
+        if (target === 'payments')   loadPayments();
+        if (target === 'analytics')  loadAnalytics();
+        if (target === 'products')   { wireProducts(); }
+      });
+    });
+
+    // Analytics sub-tabs (Sales vs Site Traffic)
+    document.querySelectorAll('.shop-analytics-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.shop-analytics-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.shop-analytics-pane').forEach(p => p.classList.remove('active'));
+        const pane = document.getElementById(`shopAnalyticsPane${btn.dataset.atab.charAt(0).toUpperCase() + btn.dataset.atab.slice(1)}`);
+        if (pane) pane.classList.add('active');
+        if (btn.dataset.atab === 'traffic') loadTrafficAnalytics();
+      });
+    });
+
+    // Traffic range + refresh
+    document.getElementById('shopTrafficRange')?.addEventListener('change', loadTrafficAnalytics);
+    document.getElementById('shopTrafficRefresh')?.addEventListener('click', loadTrafficAnalytics);
+
+    // Refresh buttons wired statically
+    document.getElementById('shopSubsRefresh')?.addEventListener('click', loadSubscriptions);
+    document.getElementById('shopBookingsRefresh')?.addEventListener('click', loadBookings);
+    document.getElementById('shopPaymentsRefresh')?.addEventListener('click', loadPayments);
+    document.getElementById('shopAnalyticsRefresh')?.addEventListener('click', loadAnalytics);
+
+    // T&C save
+    document.getElementById('shopTcSave')?.addEventListener('click', saveTerms);
+
+    // Shipping save
+    document.getElementById('shopShippingSave')?.addEventListener('click', saveShipping);
+
+    // Wire products tab if it starts active
+    const activeTab = shopShell.querySelector('.shop-tab.active');
+    if (activeTab?.dataset?.subtab === 'products') wireProducts();
+  }
+
+  /* ── esc helper ───────────────────────────────────────────────── */
+  function esc (s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireShop);
+  else wireShop();
 })();

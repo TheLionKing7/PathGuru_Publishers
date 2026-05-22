@@ -36,6 +36,11 @@ import { generateAndPublishBlogPost }     from './blogPublisher.js';
 import * as cmsClient                    from './cmsClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
+  uploadMediaAsset,
+  listMediaAssets,
+  deleteMediaAsset,
+} from './cloudflareR2.js';
+import {
   listPosts,
   getPostBySlug,
   getPostById,
@@ -77,6 +82,14 @@ function readBody(req) {
     const chunks = [];
     req.on('data', c => chunks.push(c));
     req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { resolve({}); } });
+    req.on('error', reject);
+  });
+}
+function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', c => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -303,6 +316,46 @@ const server = createServer(async (req, res) => {
   // Token stays server-side, never exposed to the browser.
   // ═══════════════════════════════════════════════════
 
+  // ── GET /api/shop/products ───────────────────────
+  if (req.method === 'GET' && path === '/api/shop/products') {
+    try {
+      const params = Object.fromEntries(url.searchParams.entries());
+      const result = await cmsClient.listProducts(params);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── POST /api/shop/products ──────────────────────
+  if (req.method === 'POST' && path === '/api/shop/products') {
+    try {
+      const body   = await readBody(req);
+      const result = await cmsClient.createProduct(body);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── PUT /api/shop/products/:id ───────────────────
+  const shopProductMatch = path.match(/^\/api\/shop\/products\/([^/]+)$/);
+  if (req.method === 'PUT' && shopProductMatch) {
+    try {
+      const body   = await readBody(req);
+      const result = await cmsClient.updateProduct(shopProductMatch[1], body);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── DELETE /api/shop/products/:id ────────────────
+  if (req.method === 'DELETE' && shopProductMatch) {
+    try {
+      const result = await cmsClient.updateProduct(shopProductMatch[1], { status: 'archived' });
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
   // ── GET /api/shop/subscriptions ──────────────────
   if (req.method === 'GET' && path === '/api/shop/subscriptions') {
     try {
@@ -347,7 +400,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && shopRefundMatch) {
     try {
       const body   = await readBody(req);
-      const result = await cmsClient.refundOrder(shopRefundMatch[1], body);
+ent.refundOrder(shopRefundMatch[1], body);
       json(res, result);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;
@@ -358,6 +411,16 @@ const server = createServer(async (req, res) => {
     try {
       const range  = url.searchParams.get('range') || '30d';
       const result = await cmsClient.getAnalytics(range);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── GET /api/shop/analytics/pageviews ────────────
+  if (req.method === 'GET' && path === '/api/shop/analytics/pageviews') {
+    try {
+      const range  = url.searchParams.get('range') || '30d';
+      const result = await cmsClient.getPageviewAnalytics(range);
       json(res, result);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;
@@ -383,6 +446,45 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ═══════════════════════════════════════════════════
+  // MEDIA LIBRARY — Cloudflare R2 blog-media/ prefix
+  // ═══════════════════════════════════════════════════
+
+  // ── GET /api/media/list ──────────────────────────
+  if (req.method === 'GET' && path === '/api/media/list') {
+    try {
+      const assets = await listMediaAssets();
+      json(res, { assets });
+    } catch (e) { err(res, e.message || 'Failed to list media'); }
+    return;
+  }
+
+  // ── POST /api/media/upload ───────────────────────
+  // Expects raw binary body with ?filename=xxx&type=image/jpeg
+  if (req.method === 'POST' && path === '/api/media/upload') {
+    try {
+      const filename    = url.searchParams.get('filename') || 'upload.bin';
+      const contentType = url.searchParams.get('type')     || 'application/octet-stream';
+      const body        = await readRawBody(req);
+      if (!body.length) { err(res, 'Empty upload body', 400); return; }
+      const asset = await uploadMediaAsset(filename, body, contentType);
+      json(res, asset, 201);
+    } catch (e) { err(res, e.message || 'Upload failed'); }
+    return;
+  }
+
+  // ── DELETE /api/media/:key* ──────────────────────
+  // key may contain slashes (e.g. blog-media/123-file.jpg) — URL-encoded
+  const mediaDeleteMatch = path.match(/^\/api\/media\/(.+)$/);
+  if (req.method === 'DELETE' && mediaDeleteMatch) {
+    try {
+      const key    = decodeURIComponent(mediaDeleteMatch[1]);
+      const result = await deleteMediaAsset(key);
+      json(res, result);
+    } catch (e) { err(res, e.message || 'Delete failed'); }
+    return;
+  }
+
   err(res, `Not found: ${path}`, 404);
 });
 
@@ -399,6 +501,8 @@ server.listen(PORT, () => {
   │   GET  /api/assets   → Pexels search        │
   │   POST /api/blog     → Blog + publish       │
   │   POST /api/epub     → EPUB only            │
+  │   GET  /api/media/list   → R2 media list    │
+  │   POST /api/media/upload → R2 upload        │
   └─────────────────────────────────────────────┘
 `);
 });
