@@ -40,12 +40,36 @@
   function escapeHtml(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  async function loadPersonas() {
+    const picker = document.getElementById('blogPersonaPicker');
+    if (!picker) return;
+    const backendUrl = getBackendUrl();
+    if (!backendUrl.startsWith('http')) return;
+    try {
+      const res = await fetch(`${backendUrl}/api/personas`);
+      if (!res.ok) return;
+      const { personas = [] } = await res.json();
+      if (!personas.length) return;
+      // Preserve the blank "no persona" option, then replace the rest
+      const blank = picker.querySelector('option[value=""]');
+      picker.innerHTML = '';
+      if (blank) picker.appendChild(blank);
+      personas.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.displayName} — ${p.title}`;
+        picker.appendChild(opt);
+      });
+    } catch {}
+  }
+
   function renderBlogResult(data) {
     currentBlogResult = data;
-    const { seo, socialCaptions, publishResults, html } = data;
+    const { seo, socialCaptions, publishResults, html, persona } = data;
     const seoList = document.getElementById('blogSeoList');
     seoList.innerHTML = '';
     const pairs = [
+      ['Written by', persona ? `${persona.displayName} — ${persona.title}` : null],
       ['Title', seo.title], ['Slug', seo.slug], ['Meta description', seo.metaDescription],
       ['Focus keyword', seo.focusKeyword],
       ['Reading time', seo.readingTime ? `${seo.readingTime} min read` : null],
@@ -90,15 +114,18 @@
   }
   function collectBlogInput() {
     const g = id => document.getElementById(id)?.value?.trim() || '';
+    const personaId = document.getElementById('blogPersonaPicker')?.value || '';
     const input = {
       topic: g('blogTopic'), postType: g('blogPostType'), audience: g('blogAudience'),
       goal: g('blogGoal'), tone: g('blogTone'), wordCount: g('blogWordCount'),
       seoKeyword: g('blogSeoKeyword'), ctaGoal: g('blogCtaGoal'), author: g('blogAuthor'),
+      personaId: personaId || null,
       platforms: [],
     };
     if (document.getElementById('wpEnabled')?.checked) input.platforms.push({ type: 'wordpress', siteUrl: g('wpUrl'), username: g('wpUser'), appPassword: g('wpPass'), status: g('wpStatus') });
     if (document.getElementById('ghostEnabled')?.checked) input.platforms.push({ type: 'ghost', siteUrl: g('ghostUrl'), adminApiKey: g('ghostKey'), status: g('ghostStatus') });
     if (document.getElementById('wfEnabled')?.checked) input.platforms.push({ type: 'webflow', apiKey: g('wfKey'), collectionId: g('wfCollection'), siteId: g('wfSite') });
+    if (document.getElementById('dfEnabled')?.checked) input.platforms.push({ type: 'digifusion', status: g('dfStatus') || 'published' });
     return input;
   }
   async function runBlogGenerate() {
@@ -229,11 +256,12 @@
     } catch (e) { blogToast(e.message, 'error'); }
   }
   function wireBlogTab() {
-    ['wp', 'ghost', 'wf'].forEach(p => {
+    ['wp', 'ghost', 'wf', 'df'].forEach(p => {
       const cb = document.getElementById(`${p}Enabled`);
       const fields = document.getElementById(`${p}Fields`);
       if (cb && fields) cb.addEventListener('change', () => { fields.style.display = cb.checked ? '' : 'none'; });
     });
+    loadPersonas();
     const genBtn = document.getElementById('blogGenerateBtn');
     if (genBtn) genBtn.addEventListener('click', runBlogGenerate);
     const previewBtn = document.getElementById('blogPreviewBtn');

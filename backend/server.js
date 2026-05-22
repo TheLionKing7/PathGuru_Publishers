@@ -33,6 +33,7 @@ import { buildProject }                   from './designGuru.js';
 import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost }     from './blogPublisher.js';
+import * as cmsClient                    from './cmsClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
   listPosts,
@@ -55,11 +56,12 @@ const STATIC = {
   '/style.css':  { file: join(WEBAPP, 'style.css'),   mime: 'text/css; charset=utf-8' },
   '/app.js':     { file: join(WEBAPP, 'app.js'),      mime: 'application/javascript; charset=utf-8' },
   '/blog.js':    { file: join(WEBAPP, 'blog.js'),     mime: 'application/javascript; charset=utf-8' },
+  '/shop.js':    { file: join(WEBAPP, 'shop.js'),     mime: 'application/javascript; charset=utf-8' },
 };
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 function json(res, data, status = 200) {
@@ -153,6 +155,15 @@ const server = createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/epub+zip', 'Content-Disposition': `attachment; filename="pathguru-${Date.now()}.epub"`, 'Content-Length': buf.length });
       res.end(buf);
     } catch (e) { err(res, e.message || 'EPUB build failed'); }
+    return;
+  }
+
+  // ── GET /api/personas ──────────────────────────────
+  if (req.method === 'GET' && path === '/api/personas') {
+    try {
+      const { listPersonas } = await import('./skills/personas.js');
+      json(res, { personas: listPersonas() });
+    } catch (e) { err(res, e.message || 'Failed to list personas'); }
     return;
   }
 
@@ -283,6 +294,92 @@ const server = createServer(async (req, res) => {
       if (result.error) { err(res, result.error, 500); return; }
       json(res, { success: true });
     } catch (e) { err(res, e.message || 'Failed to delete post'); }
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // SHOP PROXY — forwards to DigiFusion CMS API
+  // Browser → PathGuru backend → DigiFusion /api/cms/*
+  // Token stays server-side, never exposed to the browser.
+  // ═══════════════════════════════════════════════════
+
+  // ── GET /api/shop/subscriptions ──────────────────
+  if (req.method === 'GET' && path === '/api/shop/subscriptions') {
+    try {
+      const result = await cmsClient.getSubscriptions();
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── GET /api/shop/bookings ───────────────────────
+  if (req.method === 'GET' && path === '/api/shop/bookings') {
+    try {
+      const params = Object.fromEntries(url.searchParams.entries());
+      const result = await cmsClient.listBookings(params);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── GET /api/shop/orders ─────────────────────────
+  if (req.method === 'GET' && path === '/api/shop/orders') {
+    try {
+      const params = Object.fromEntries(url.searchParams.entries());
+      const result = await cmsClient.listOrders(params);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── POST /api/shop/orders/:id/mark-paid ──────────
+  const shopMarkPaidMatch = path.match(/^\/api\/shop\/orders\/([^/]+)\/mark-paid$/);
+  if (req.method === 'POST' && shopMarkPaidMatch) {
+    try {
+      const result = await cmsClient.markOrderPaid(shopMarkPaidMatch[1]);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── POST /api/shop/orders/:id/refund ─────────────
+  const shopRefundMatch = path.match(/^\/api\/shop\/orders\/([^/]+)\/refund$/);
+  if (req.method === 'POST' && shopRefundMatch) {
+    try {
+      const body   = await readBody(req);
+      const result = await cmsClient.refundOrder(shopRefundMatch[1], body);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── GET /api/shop/analytics ──────────────────────
+  if (req.method === 'GET' && path === '/api/shop/analytics') {
+    try {
+      const range  = url.searchParams.get('range') || '30d';
+      const result = await cmsClient.getAnalytics(range);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── PUT /api/shop/settings/terms ─────────────────
+  if (req.method === 'PUT' && path === '/api/shop/settings/terms') {
+    try {
+      const body   = await readBody(req);
+      const result = await cmsClient.saveTerms(body.content || '');
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── PUT /api/shop/settings/shipping ──────────────
+  if (req.method === 'PUT' && path === '/api/shop/settings/shipping') {
+    try {
+      const body   = await readBody(req);
+      const result = await cmsClient.saveShipping(body);
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
     return;
   }
 

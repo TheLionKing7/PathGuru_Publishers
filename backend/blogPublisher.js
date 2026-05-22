@@ -17,6 +17,8 @@
 
 import { buildBlogPrompt, parseBlogResponse, normalizeSection, stripHtmlTags } from './skills/editorial.js';
 import { searchPexels } from './pexelsAssets.js';
+import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
+import { selectPersonaForNiche } from './skills/personas.js';
 
 /* ── Build blog post HTML from sections ───────────────── */
 function buildBlogHtml(post, design = {}) {
@@ -308,6 +310,47 @@ async function generateGhostJwt(keyId, secret) {
   return `${sigInput}.${sigB64}`;
 }
 
+/* ── DigiFusion CMS publisher ───────────────────────── */
+async function publishToDigiFusion (post, settings, html) {
+  const { upsertPost } = await import('./cmsClient.js');
+
+  const slug = post.slug || (post.title || 'post')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100);
+
+  const payload = {
+    title:                 post.title,
+    slug,
+    excerpt:               post.excerpt               || '',
+    content:               html,
+    post_type:             settings.postType          || 'blog_post',
+    status:                settings.status            || 'published',
+    meta_description:      post.metaDescription       || '',
+    focus_keyword:         post.focusKeyword          || '',
+    featured_image_url:    post.featuredImageUrl      || null,
+    featured_image_credit: post.featuredImageCredit   || null,
+    social_caption:        post.socialCaption         || '',
+    linkedin_caption:      post.linkedinCaption       || '',
+    categories:            post.categories            || [],
+    tags:                  post.tags                  || [],
+    author_name:           post.authorName            || 'DigiFusion Team',
+    reading_time_minutes:  post.readingTimeMinutes    || null,
+    word_count:            post.wordCount             || null,
+  };
+
+  const result = await upsertPost(payload);
+  const saved  = result?.data;
+
+  return {
+    platform: 'digifusion',
+    postId:   saved?.id   || null,
+    url:      saved?.slug ? `/blog/${saved.slug}` : null,
+    status:   saved?.status || settings.status || 'published',
+  };
+}
+
 /* ── Webflow publisher ───────────────────────────────── */
 async function publishToWebflow(post, settings, featuredImageUrl) {
   const { apiKey, collectionId, siteId } = settings;
@@ -366,8 +409,15 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
     research = await runResearchAgent({ topic: input.topic, audience: input.audience }, {});
   } catch {}
 
-  // 2. Generate post via AI
-  const prompt    = buildBlogPrompt(input, research);
+  // 2. Resolve persona — explicit pick > niche auto-select > null (default voice)
+  const persona = resolvePersona(
+    input.personaId || null,
+    () => input.niche ? selectPersonaForNiche(input.niche, input.postType) : null
+  );
+
+  // 3. Build prompt and inject persona voice + samples
+  const basePrompt = buildBlogPrompt(input, research);
+  const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
   let rawResponse = '';
 
   if (process.env.GEMINI_API_KEY) {
@@ -378,7 +428,7 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          contents: [{ role: 'user', parts: [{ text: finalPrompt }] }],
           generationConfig: { temperature: 0.75, responseMimeType: 'application/json' },
         }),
       }
@@ -416,9 +466,10 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
   for (const platform of platforms) {
     try {
       let result;
-      if (platform.type === 'wordpress') result = await publishToWordPress(post, platform, featuredImageUrl);
-      else if (platform.type === 'ghost')   result = await publishToGhost(post, platform, featuredImageUrl);
-      else if (platform.type === 'webflow') result = await publishToWebflow(post, platform, featuredImageUrl);
+      if (platform.type === 'wordpress')   result = await publishToWordPress(post, platform, featuredImageUrl);
+      else if (platform.type === 'ghost')       result = await publishToGhost(post, platform, featuredImageUrl);
+      else if (platform.type === 'webflow')     result = await publishToWebflow(post, platform, featuredImageUrl);
+      else if (platform.type === 'digifusion')  result = await publishToDigiFusion(post, platform, html);
       if (result) publishResults.push(result);
     } catch (err) {
       publishResults.push({ platform: platform.type, error: err.message });
@@ -463,8 +514,9 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
   return {
     post,
     html,
-    dbResult: dbResult?.data || null,
+    dbResult:      dbResult?.data || null,
     publishResults,
+    persona:       personaBylineMeta(persona),
     socialCaptions: {
       twitter:  post.socialCaption   || '',
       linkedin: post.linkedinCaption || '',

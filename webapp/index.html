@@ -589,6 +589,25 @@
                   </div>
                 </div>
               </div>
+
+              <div class="platform-block">
+                <div class="platform-toggle">
+                  <label class="platform-label">
+                    <input type="checkbox" id="dfEnabled" class="platform-check">
+                    <span class="platform-name">DigiFusion</span>
+                  </label>
+                </div>
+                <div class="platform-fields" id="dfFields" style="display:none">
+                  <div class="field">
+                    <label for="dfStatus">Publish as</label>
+                    <select id="dfStatus">
+                      <option value="published">Published</option>
+                      <option value="draft">Draft</option>
+                    </select>
+                  </div>
+                  <p class="field-hint" style="margin-top:6px">Uses <code>DIGIFUSION_API_URL</code> + <code>DIGIFUSION_CMS_TOKEN</code> from backend <code>.env</code></p>
+                </div>
+              </div>
             </div>
 
             <div class="generate-zone" style="border-top:0">
@@ -984,5 +1003,6 @@
 
   <script src="app.js"></script>
   <script src="blog.js"></script>
+  <script src="shop.js"></script>
 </body>
 </html>
