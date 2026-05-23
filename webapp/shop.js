@@ -661,7 +661,10 @@
         shopShell.querySelectorAll('.shop-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        const target = btn.dataset.subtab;
+        // data-subtab is now "shop-subs", "shop-bookings", etc.
+        // Strip the "shop-" prefix for panel ID construction and lazy-load checks.
+        const fullTab = btn.dataset.subtab;
+        const target  = fullTab.replace(/^shop-/, '');
         shopShell.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         const panel = document.getElementById(`tab-shop-${target}`);
         if (panel) panel.classList.add('active');
@@ -709,7 +712,7 @@
 
   /* ── esc helper ───────────────────────────────────────────────── */
   function esc (s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireShop);

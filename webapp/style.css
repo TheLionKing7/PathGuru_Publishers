@@ -1446,7 +1446,59 @@ select option { background: var(--surface-2); }
   display: flex;
 }
 
-/* Module 
+/* ── Module top-nav tab strip ── */
+.module-topnav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 16px;
+  background: var(--bg);
+  border-bottom: 2px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.module-topnav::-webkit-scrollbar { display: none; }
+
+.module-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted, #8a8f98);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  border-radius: 4px 4px 0 0;
+}
+.module-tab:hover {
+  color: var(--text, #e8eaf0);
+  background: var(--hover-bg, rgba(255,255,255,0.05));
+}
+.module-tab.active {
+  color: var(--accent, #7c6af7);
+  border-bottom-color: var(--accent, #7c6af7);
+  font-weight: 600;
+}
+.module-tab .tab-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* ── Module body — scrollable content area below the tab strip ── */
+.module-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── Media Library (Blog Assets subtab) ── */
 .media-lib-header {
