@@ -336,7 +336,7 @@ async function publishToDigiFusion (post, settings, html) {
     linkedin_caption:      post.linkedinCaption       || '',
     categories:            post.categories            || [],
     tags:                  post.tags                  || [],
-    author_name:           post.authorName            || 'DigiFusion Team',
+    author_name:           post.authorName            || 'Boroji',
     reading_time_minutes:  post.readingTimeMinutes    || 5,    // number, not nullable — default 5 min
     word_count:            post.wordCount             || 0,    // number, not nullable — default 0
   };
