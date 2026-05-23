@@ -26,10 +26,10 @@
     const loading = document.getElementById('blogStatusLoading');
     const errEl   = document.getElementById('blogStatusError');
     const btn     = document.getElementById('blogGenerateBtn');
-    idle.classList.toggle('hidden', on);
-    loading.classList.toggle('hidden', !on);
-    errEl.classList.add('hidden');
-    btn.disabled = on;
+    if (idle)   idle.classList.toggle('hidden', on);
+    if (loading) loading.classList.toggle('hidden', !on);
+    if (errEl)  errEl.classList.add('hidden');
+    if (btn)    btn.disabled = on;
   }
 
   function setBlogProgress(pct, msg) {
@@ -39,9 +39,8 @@
     if (txt) txt.textContent = msg;
   }
 
-  function setResultButtons(on) {
-    document.getElementById('blogPreviewBtn').disabled = !on;
-    document.getElementById('blogPublishBtn').disabled = !on;
+  function setResultButtons(_on) {
+    // Preview / SEO tabs are now in the sub-menu bar; nothing to enable/disable here.
   }
 
   function escapeHtml(s) {
@@ -250,10 +249,12 @@
       blogToast('Blog post generated!', 'success');
     } catch (e) {
       clearInterval(ticker);
-      document.getElementById('blogStatusIdle').classList.add('hidden');
-      document.getElementById('blogStatusLoading').classList.add('hidden');
-      document.getElementById('blogStatusError').classList.remove('hidden');
-      document.getElementById('blogErrorMsg').textContent = e.message;
+      document.getElementById('blogStatusIdle')?.classList.add('hidden');
+      document.getElementById('blogStatusLoading')?.classList.add('hidden');
+      const errEl = document.getElementById('blogStatusError');
+      if (errEl) errEl.classList.remove('hidden');
+      const errMsg = document.getElementById('blogErrorMsg');
+      if (errMsg) errMsg.textContent = e.message;
       blogToast(e.message, 'error');
     } finally {
       setBlogLoading(false);
@@ -627,23 +628,7 @@
     const genBtn = document.getElementById('blogGenerateBtn');
     if (genBtn) genBtn.addEventListener('click', runBlogGenerate);
 
-    // Header "View preview" button
-    const previewBtn = document.getElementById('blogPreviewBtn');
-    if (previewBtn) previewBtn.addEventListener('click', () => {
-      if (currentBlogResult?.html) { showBlogPreview(currentBlogResult.html); }
-    });
-
-    // Header "SEO & Social" button
-    const publishBtn = document.getElementById('blogPublishBtn');
-    if (publishBtn) publishBtn.addEventListener('click', () => {
-      if (!currentBlogResult) return;
-      switchPreviewTab('seo');
-      if (currentBlogResult.publishResults?.length) {
-        renderPublishResults(currentBlogResult.publishResults);
-      }
-    });
-
-    // Preview tab switcher (toolbar)
+    // Preview tab switcher — now lives in the blog-subtabs bar
     document.querySelectorAll('.blog-preview-tab').forEach(btn => {
       btn.addEventListener('click', () => switchPreviewTab(btn.dataset.previewtab));
     });

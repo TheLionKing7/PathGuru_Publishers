@@ -428,14 +428,7 @@
             <p class="panel-eyebrow">Blog Publisher</p>
             <h1 class="panel-title">Write &amp; Publish</h1>
           </div>
-          <div class="header-actions">
-            <button class="btn-secondary btn-sm" id="blogPreviewBtn" disabled>View preview</button>
-            <button class="btn-primary btn-sm" id="blogPublishBtn" disabled>SEO &amp; Social</button>
-            <button class="btn-generate" id="blogGenerateBtn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Generate Post
-            </button>
-          </div>
+
         </header>
         <header class="panel-header" data-for="blog-assets">
           <div>
@@ -462,8 +455,14 @@
     <section class="tab-panel" id="tab-blog" aria-label="Blog Publisher">
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
-        <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
-        <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
+        <div class="blog-subtabs-left">
+          <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
+          <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
+        </div>
+        <div class="blog-subtabs-right" id="blogPreviewTabsBar">
+          <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
+          <button class="blog-preview-tab" data-previewtab="seo">SEO &amp; Social</button>
+        </div>
       </div>
 
       <!-- ── GENERATE VIEW ── -->
@@ -630,16 +629,35 @@
               </div>
             </div>
 
+
+            <!-- ── Generate footer ── -->
+            <div class="blog-generate-footer">
+              <div class="blog-gen-status">
+                <div class="blog-status-idle" id="blogStatusIdle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Ready to generate your post.
+                </div>
+                <div class="blog-status-loading hidden" id="blogStatusLoading">
+                  <div class="blog-progress-track"><div class="blog-progress-bar" id="blogProgressBar"></div></div>
+                  <p class="blog-status-msg" id="blogStatusMsg">Initialising agents...</p>
+                </div>
+                <div class="blog-status-error hidden" id="blogStatusError">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span id="blogErrorMsg"></span>
+                </div>
+              </div>
+              <button class="btn-generate" id="blogGenerateBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Generate Post
+              </button>
+            </div>
+
           </div><!-- /.blog-form-col -->
 
           <!-- Right: preview + SEO -->
           <div class="blog-results-col">
 
-            <div class="blog-preview-toolbar">
-              <div class="blog-preview-tabs">
-                <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
-                <button class="blog-preview-tab" data-previewtab="seo">SEO &amp; Social</button>
-              </div>
+            <div class="blog-edit-toggle-row">
               <button class="btn-secondary btn-sm" id="blogEditToggle" style="display:none">Edit draft</button>
             </div>
 
