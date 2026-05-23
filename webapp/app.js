@@ -284,10 +284,15 @@ const UI = (() => {
     if (urlEl) urlEl.value = s.backendUrl || '';
     const displayEl = document.getElementById('backendUrlDisplay');
     if (displayEl) displayEl.textContent = s.backendUrl || 'No backend configured';
-    const fields = ['brandLogoUrl','brandPrimaryColor','brandSecondaryColor','brandFontStack'];
+    const fields = ['cmsToken','brandLogoUrl','brandPrimaryColor','brandSecondaryColor','brandFontStack'];
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el) el.value = s[f] || '';
+    });
+    // Sync colour text inputs
+    ['brandPrimaryColor','brandSecondaryColor'].forEach(f => {
+      const textEl = document.getElementById(f + 'Text');
+      if (textEl) textEl.value = s[f] || '';
     });
   }
 
@@ -651,7 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('settingsModal').style.display = 'none';
   });
   document.getElementById('saveSettings').addEventListener('click', () => {
-    const fields = ['backendUrl','brandLogoUrl','brandPrimaryColor','brandSecondaryColor','brandFontStack'];
+    const fields = ['backendUrl','cmsToken','brandLogoUrl','brandPrimaryColor','brandSecondaryColor','brandFontStack'];
     const updated = {};
     fields.forEach(f => { updated[f] = document.getElementById(f)?.value?.trim() || ''; });
     State.patch('settings', updated);
@@ -662,6 +667,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('settingsModal').addEventListener('click', e => {
     if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  });
+
+  // Colour swatch ↔ text input sync in settings modal
+  ['brandPrimaryColor','brandSecondaryColor'].forEach(id => {
+    const swatch = document.getElementById(id);
+    const text   = document.getElementById(id + 'Text');
+    if (!swatch || !text) return;
+    swatch.addEventListener('input', () => { text.value = swatch.value; });
+    text.addEventListener('input', () => {
+      if (/^#[0-9a-fA-F]{6}$/.test(text.value)) swatch.value = text.value;
+    });
   });
 
   // Auto-expand textareas

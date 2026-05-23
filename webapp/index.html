@@ -1070,9 +1070,78 @@
 
   <script type="module" src="/app.js"></script>
   <script type="module" src="/blog.js"></script>
-    <script type="module" src="/app.js"></script>
-  <script type="module" src="/blog.js"></script>
   <script type="module" src="/shop.js"></script>
   <script type="module" src="/analytics.js"></script>
+
+  <!-- ── Settings Modal ──────────────────────────────────────── -->
+  <div id="settingsModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title" id="settingsModalTitle">Settings</h2>
+        <button class="modal-close" id="closeSettings" aria-label="Close settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Backend Connection -->
+        <div class="settings-section">
+          <div class="settings-section-label">Backend Connection</div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="backendUrl">Backend URL</label>
+            <input type="url" id="backendUrl" class="settings-input" placeholder="https://your-backend.onrender.com" autocomplete="off" />
+            <p class="settings-hint">The Render deployment URL for your PathGuru server.</p>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="cmsToken">CMS Token</label>
+            <input type="password" id="cmsToken" class="settings-input" placeholder="Paste your CMS bearer token" autocomplete="off" />
+            <p class="settings-hint">Required for blog publishing and analytics API calls.</p>
+          </div>
+        </div>
+
+        <!-- Brand Identity -->
+        <div class="settings-section">
+          <div class="settings-section-label">Brand Identity</div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="brandLogoUrl">Logo URL</label>
+            <input type="url" id="brandLogoUrl" class="settings-input" placeholder="https://..." autocomplete="off" />
+            <p class="settings-hint">Public URL of your brand logo (PNG or SVG).</p>
+          </div>
+
+          <div class="settings-field settings-field--row">
+            <div>
+              <label class="settings-label" for="brandPrimaryColor">Primary Colour</label>
+              <div class="settings-color-row">
+                <input type="color" id="brandPrimaryColor" class="settings-color-swatch" value="#7c6af7" />
+                <input type="text" id="brandPrimaryColorText" class="settings-input settings-input--color-text" placeholder="#7c6af7" />
+              </div>
+            </div>
+            <div>
+              <label class="settings-label" for="brandSecondaryColor">Secondary Colour</label>
+              <div class="settings-color-row">
+                <input type="color" id="brandSecondaryColor" class="settings-color-swatch" value="#f7c76a" />
+                <input type="text" id="brandSecondaryColorText" class="settings-input settings-input--color-text" placeholder="#f7c76a" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <label class="settings-label" for="brandFontStack">Font Stack</label>
+            <input type="text" id="brandFontStack" class="settings-input" placeholder="Inter, system-ui, sans-serif" autocomplete="off" />
+            <p class="settings-hint">CSS font-family string used across generated content.</p>
+          </div>
+        </div>
+
+      </div><!-- /.modal-body -->
+      <div class="modal-footer">
+        <button class="btn-secondary" id="cancelSettings">Cancel</button>
+        <button class="btn-primary" id="saveSettings">Save Settings</button>
+      </div>
+    </div><!-- /.modal -->
+  </div><!-- /#settingsModal -->
+
 </body>
 </html>

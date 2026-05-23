@@ -870,9 +870,15 @@ select option { background: var(--surface-2); }
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
-  width: 480px;
+  width: 560px;
   max-width: calc(100vw - 2rem);
+  max-height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
   animation: slideUp 0.22s var(--ease-out);
+}
+.modal-body {
+  overflow-y: auto;
 }
 
 @keyframes slideUp {
@@ -917,6 +923,90 @@ select option { background: var(--surface-2); }
   gap: var(--spacing-sm);
   padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--border);
+}
+
+/* ─────────────────────────────────────────────
+   SETTINGS MODAL FIELDS
+───────────────────────────────────────────── */
+.settings-section {
+  margin-bottom: var(--spacing-lg);
+}
+.settings-section:last-child { margin-bottom: 0; }
+
+.settings-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-field {
+  margin-bottom: var(--spacing-md);
+}
+.settings-field:last-child { margin-bottom: 0; }
+.settings-field--row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+.settings-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.settings-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 8px 10px;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+.settings-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.settings-input--color-text {
+  width: calc(100% - 42px);
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  line-height: 1.5;
+}
+
+.settings-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.settings-color-swatch {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  background: var(--bg);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
 }
 
 /* ─────────────────────────────────────────────
