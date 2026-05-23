@@ -330,15 +330,15 @@ async function publishToDigiFusion (post, settings, html) {
     status:                settings.status            || 'published',
     meta_description:      post.metaDescription       || '',
     focus_keyword:         post.focusKeyword          || '',
-    featured_image_url:    post.featuredImageUrl      || null,
-    featured_image_credit: post.featuredImageCredit   || null,
+    featured_image_url:    post.featuredImageUrl      || null,  // nullable in schema ✓
+    featured_image_credit: post.featuredImageCredit   || '',   // string, not nullable
     social_caption:        post.socialCaption         || '',
     linkedin_caption:      post.linkedinCaption       || '',
     categories:            post.categories            || [],
     tags:                  post.tags                  || [],
     author_name:           post.authorName            || 'DigiFusion Team',
-    reading_time_minutes:  post.readingTimeMinutes    || null,
-    word_count:            post.wordCount             || null,
+    reading_time_minutes:  post.readingTimeMinutes    || 5,    // number, not nullable — default 5 min
+    word_count:            post.wordCount             || 0,    // number, not nullable — default 0
   };
 
   const result = await upsertPost(payload);
