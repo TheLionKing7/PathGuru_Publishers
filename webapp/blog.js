@@ -142,6 +142,10 @@
     if (socialCaptions?.twitter)  sc.innerHTML += `<span class="social-platform-label">Twitter / X</span><div class="social-caption-box">${socialCaptions.twitter}</div>`;
     if (socialCaptions?.linkedin) sc.innerHTML += `<span class="social-platform-label">LinkedIn</span><div class="social-caption-box">${socialCaptions.linkedin}</div>`;
 
+    // --- Reveal SEO & Social cards (they start with `hidden` attr) ---
+    document.getElementById('blogSeoCard')?.removeAttribute('hidden');
+    document.getElementById('blogSocialCard')?.removeAttribute('hidden');
+
     // --- Show preview (switches to Preview tab automatically) ---
     showBlogPreview(html);
     setResultButtons(true);
@@ -152,10 +156,10 @@
   }
 
   function renderPublishResults(results) {
-    const card = document.getElementById('blogPublishResultsCard');
-    const list = document.getElementById('blogPublishList');
+    const card = document.getElementById('blogPublishCard');
+    const list = document.getElementById('blogPublishResults');
     if (!card || !list) return;
-    card.style.display = '';
+    card.removeAttribute('hidden');
     list.innerHTML = '';
     results.forEach(r => {
       const div = document.createElement('div');
@@ -299,8 +303,11 @@
     // Hide approve button and publish results from any previous run
     const approveBtn = document.getElementById('blogApproveBtn');
     if (approveBtn) { approveBtn.style.display = 'none'; approveBtn.disabled = false; approveBtn.textContent = '🚀 Approve & Publish'; }
-    const pubCard = document.getElementById('blogPublishResultsCard');
-    if (pubCard) pubCard.style.display = 'none';
+    const pubCard = document.getElementById('blogPublishCard');
+    if (pubCard) pubCard.setAttribute('hidden', '');
+    // Hide SEO/Social cards so stale content from previous run isn't shown
+    document.getElementById('blogSeoCard')?.setAttribute('hidden', '');
+    document.getElementById('blogSocialCard')?.setAttribute('hidden', '');
     // Reset preview
     const content   = document.getElementById('blogPostContent');
     const emptyPane = document.getElementById('blogPreviewEmpty');

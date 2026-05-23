@@ -326,7 +326,7 @@ async function publishToDigiFusion (post, settings, html) {
     slug,
     excerpt:               post.excerpt               || '',
     content:               html,
-    post_type:             settings.postType          || 'blog_post',
+    post_type:             settings.postType || post.postType || 'article',
     status:                settings.status            || 'published',
     meta_description:      post.metaDescription       || '',
     focus_keyword:         post.focusKeyword          || '',
