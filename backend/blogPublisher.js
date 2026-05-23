@@ -344,10 +344,16 @@ async function publishToDigiFusion (post, settings, html) {
   const result = await upsertPost(payload);
   const saved  = result?.data;
 
+  // Build absolute post URL — use the siteUrl passed from the UI, falling back to
+  // DIGIFUSION_API_URL (same domain as the CMS API) or a known default.
+  const siteBase = (settings.siteUrl || process.env.DIGIFUSION_API_URL || 'https://www.digitafusion.com').replace(/\/$/, '');
+  const postUrl  = saved?.slug ? `${siteBase}/blog/${saved.slug}` : null;
+
   return {
     platform: 'digifusion',
-    postId:   saved?.id   || null,
-    url:      saved?.slug ? `/blog/${saved.slug}` : null,
+    postId:   saved?.id     || null,
+    slug:     saved?.slug   || null,
+    url:      postUrl,
     status:   saved?.status || settings.status || 'published',
   };
 }
@@ -504,16 +510,50 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
     dbResult:      dbResult?.data || null,
     publishResults,
     persona:       personaBylineMeta(persona),
+    seo: {
+      title:           post.title,
+      slug:            post.slug,
+      metaDescription: post.metaDescription,
+      focusKeyword:    post.focusKeyword,
+      readingTime:     post.readingTimeMinutes,
+    },
     socialCaptions: {
       twitter:  post.socialCaption   || '',
       linkedin: post.linkedinCaption || '',
     },
-    seo: {
-      title:           post.title,
-      metaDescription: post.metaDescription,
-      slug:            post.slug,
-      focusKeyword:    post.focusKeyword,
-      readingTime:     post.readingTimeMinutes,
-    },
   };
+}
+
+/* ══════════════════════════════════════════════
+   PUBLISH-ONLY — called after user approves draft
+   Accepts pre-generated post data + platforms list.
+   Does NOT re-run the AI.
+══════════════════════════════════════════════ */
+export async function publishBlogPost({ post, html, platforms, postId, featuredImageUrl }) {
+  const publishResults = [];
+
+  for (const platform of (platforms || [])) {
+    try {
+      let result;
+      if (platform.type === 'wordpress')  result = await publishToWordPress(post, platform, featuredImageUrl || post.featuredImageUrl);
+      else if (platform.type === 'ghost')      result = await publishToGhost(post, platform, featuredImageUrl || post.featuredImageUrl);
+      else if (platform.type === 'webflow')    result = await publishToWebflow(post, platform, featuredImageUrl || post.featuredImageUrl);
+      else if (platform.type === 'digifusion') result = await publishToDigiFusion(post, platform, html);
+      if (result) publishResults.push(result);
+    } catch (e) {
+      publishResults.push({ platform: platform.type, error: e.message });
+    }
+  }
+
+  // Update the PathGuru Supabase draft status to 'published' if we have a postId
+  if (postId) {
+    try {
+      const { updatePost } = await import('./supabaseClient.js');
+      await updatePost(postId, { status: 'published' });
+    } catch (e) {
+      console.warn('[publishBlogPost] Could not update draft status:', e.message);
+    }
+  }
+
+  return { publishResults };
 }

@@ -142,12 +142,13 @@
     if (socialCaptions?.twitter)  sc.innerHTML += `<span class="social-platform-label">Twitter / X</span><div class="social-caption-box">${socialCaptions.twitter}</div>`;
     if (socialCaptions?.linkedin) sc.innerHTML += `<span class="social-platform-label">LinkedIn</span><div class="social-caption-box">${socialCaptions.linkedin}</div>`;
 
-    // --- Publish results ---
-    if (publishResults?.length) renderPublishResults(publishResults);
-
     // --- Show preview (switches to Preview tab automatically) ---
     showBlogPreview(html);
     setResultButtons(true);
+
+    // --- Show Approve & Publish button ---
+    const approveBtn = document.getElementById('blogApproveBtn');
+    if (approveBtn) approveBtn.style.display = '';
   }
 
   function renderPublishResults(results) {
@@ -159,12 +160,32 @@
     results.forEach(r => {
       const div = document.createElement('div');
       div.className = `publish-result ${r.error ? 'err' : 'ok'}`;
-      if (r.error) div.innerHTML = `<strong>${r.platform}</strong>: ${r.error}`;
-      else div.innerHTML = `<strong>${r.platform}</strong> — ${r.status || 'sent'}` +
-        (r.url     ? ` <a href="${r.url}"     target="_blank">View ↗</a>` : '') +
-        (r.editUrl ? ` <a href="${r.editUrl}" target="_blank">Edit ↗</a>` : '');
+      if (r.error) {
+        div.innerHTML = `
+          <div class="pub-result-header">
+            <span class="pub-platform">${escapeHtml(r.platform)}</span>
+            <span class="pub-badge err">Failed</span>
+          </div>
+          <p class="pub-error-msg">${escapeHtml(r.error)}</p>`;
+      } else {
+        const label = r.platform === 'digifusion' ? 'DigiFusion CMS' : r.platform;
+        const statusBadge = r.status === 'published' ? 'Live' : (r.status || 'Sent');
+        div.innerHTML = `
+          <div class="pub-result-header">
+            <span class="pub-platform">${escapeHtml(label)}</span>
+            <span class="pub-badge ok">${escapeHtml(statusBadge)}</span>
+          </div>
+          ${r.url ? `
+          <a class="pub-live-link" href="${escapeHtml(r.url)}" target="_blank" rel="noopener">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            ${escapeHtml(r.url)}
+          </a>` : ''}
+          ${r.editUrl ? `<a class="pub-edit-link" href="${escapeHtml(r.editUrl)}" target="_blank" rel="noopener">Edit in CMS ↗</a>` : ''}`;
+      }
       list.appendChild(div);
     });
+    // Auto-switch to SEO & Social tab to show the result
+    switchPreviewTab('seo');
   }
 
   // ── Collect form input ─────────────────────────────────────────────
@@ -193,9 +214,73 @@
       input.platforms.push({ type: 'ghost', siteUrl: g('ghostUrl'), adminApiKey: g('ghostKey'), status: g('ghostStatus') });
     if (document.getElementById('wfEnabled')?.checked)
       input.platforms.push({ type: 'webflow', apiKey: g('wfKey'), collectionId: g('wfCollection'), siteId: g('wfSite') });
-    if (document.getElementById('dfEnabled')?.checked)
-      input.platforms.push({ type: 'digifusion', status: g('dfStatus') || 'published' });
+    if (document.getElementById('dfEnabled')?.checked) {
+      const rawSiteUrl = g('dfApiUrl');
+      // Normalise: ensure https:// prefix so bare "digitafusion.com" still works
+      const siteUrl = rawSiteUrl
+        ? (rawSiteUrl.startsWith('http') ? rawSiteUrl : `https://${rawSiteUrl}`)
+        : '';
+      input.platforms.push({ type: 'digifusion', status: 'published', siteUrl });
+    }
     return input;
+  }
+
+  // ── Collect platform destinations only (used by publish step) ─────
+  function collectPlatforms() {
+    const g = id => document.getElementById(id)?.value?.trim() || '';
+    const platforms = [];
+    if (document.getElementById('wpEnabled')?.checked)
+      platforms.push({ type: 'wordpress', siteUrl: g('wpUrl'), username: g('wpUser'), appPassword: g('wpPass'), status: 'published' });
+    if (document.getElementById('ghostEnabled')?.checked)
+      platforms.push({ type: 'ghost', siteUrl: g('ghostUrl'), adminApiKey: g('ghostKey'), status: 'published' });
+    if (document.getElementById('wfEnabled')?.checked)
+      platforms.push({ type: 'webflow', apiKey: g('wfToken'), collectionId: g('wfCollectionId'), status: 'published' });
+    if (document.getElementById('dfEnabled')?.checked) {
+      const rawSiteUrl = g('dfApiUrl');
+      const siteUrl = rawSiteUrl
+        ? (rawSiteUrl.startsWith('http') ? rawSiteUrl : `https://${rawSiteUrl}`)
+        : 'https://www.digitafusion.com';
+      platforms.push({ type: 'digifusion', status: 'published', siteUrl });
+    }
+    return platforms;
+  }
+
+  // ── Approve & Publish ──────────────────────────────────────────────
+  async function runPublish() {
+    if (!currentBlogResult) { blogToast('Generate a post first.', 'error'); return; }
+    const platforms = collectPlatforms();
+    if (!platforms.length) {
+      blogToast('Tick at least one Publish Destination in the form.', 'error');
+      return;
+    }
+    const backendUrl = getBackendUrl();
+    const approveBtn = document.getElementById('blogApproveBtn');
+    if (approveBtn) { approveBtn.disabled = true; approveBtn.textContent = 'Publishing…'; }
+
+    try {
+      const res = await fetch(`${backendUrl}/api/blog/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          post:             currentBlogResult.post,
+          html:             currentBlogResult.html,
+          platforms,
+          postId:           currentBlogResult.dbResult?.id || null,
+          featuredImageUrl: currentBlogResult.post?.featuredImageUrl || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `Server returned ${res.status}`);
+      }
+      const data = await res.json();
+      renderPublishResults(data.publishResults || []);
+      blogToast('Post published!', 'success');
+      if (approveBtn) approveBtn.style.display = 'none';
+    } catch (e) {
+      blogToast(e.message, 'error');
+      if (approveBtn) { approveBtn.disabled = false; approveBtn.textContent = '🚀 Approve & Publish'; }
+    }
   }
 
   // ── Generate ───────────────────────────────────────────────────────
@@ -211,6 +296,11 @@
     setBlogLoading(true);
     currentBlogResult = null;
     setResultButtons(false);
+    // Hide approve button and publish results from any previous run
+    const approveBtn = document.getElementById('blogApproveBtn');
+    if (approveBtn) { approveBtn.style.display = 'none'; approveBtn.disabled = false; approveBtn.textContent = '🚀 Approve & Publish'; }
+    const pubCard = document.getElementById('blogPublishResultsCard');
+    if (pubCard) pubCard.style.display = 'none';
     // Reset preview
     const content   = document.getElementById('blogPostContent');
     const emptyPane = document.getElementById('blogPreviewEmpty');
@@ -596,7 +686,7 @@
   }
 
   async function handleDeleteAction(id) {
-    if (!confirm('Delete this post permanently?')) return;
+    if (!confirm('Delete this post? This cannot be undone.')) return;
     try {
       const backendUrl = getBackendUrl();
       const res = await fetch(`${backendUrl}/api/posts/${id}`, { method: 'DELETE' });
@@ -606,27 +696,19 @@
     } catch (e) { blogToast(e.message, 'error'); }
   }
 
-  // ── Wire everything ─────────────────────────────────────────────────
-  function wireBlogTab() {
-    // Platform checkbox toggles
-    ['wp', 'ghost', 'wf', 'df'].forEach(p => {
-      const cb     = document.getElementById(`${p}Enabled`);
-      const fields = document.getElementById(`${p}Fields`);
-      if (cb && fields) cb.addEventListener('change', () => { fields.style.display = cb.checked ? '' : 'none'; });
-    });
-
-    // Load personas into both pickers
+  // ── Init ───────────────────────────────────────────────────────────
+  (function init() {
     loadPersonas();
-
-    // Wire media upload (reference files for writer agent)
     wireMediaUpload();
-
-    // Wire media library (R2 assets tab)
     wireMediaLibrary();
 
     // Generate button
     const genBtn = document.getElementById('blogGenerateBtn');
     if (genBtn) genBtn.addEventListener('click', runBlogGenerate);
+
+    // Approve & Publish button
+    const approveBtn = document.getElementById('blogApproveBtn');
+    if (approveBtn) approveBtn.addEventListener('click', runPublish);
 
     // Preview tab switcher — now lives in the blog-subtabs bar
     document.querySelectorAll('.blog-preview-tab').forEach(btn => {
@@ -665,26 +747,12 @@
     const refreshBtn = document.getElementById('blogDashRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadDashboard);
 
-    // Close dash menus on outside click
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest?.('.dash-menu')) {
-        document.querySelectorAll('.dash-menu-popover').forEach(p => { p.hidden = true; });
-        document.querySelectorAll('.dash-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
-      }
+    // Platform checkbox toggles
+    [['wpEnabled','wpFields'],['ghostEnabled','ghostFields'],['wfEnabled','wfFields'],['dfEnabled','dfFields']].forEach(([chk, fld]) => {
+      const cb = document.getElementById(chk);
+      const panel = document.getElementById(fld);
+      if (cb && panel) cb.addEventListener('change', () => { panel.style.display = cb.checked ? '' : 'none'; });
     });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        document.querySelectorAll('.dash-menu-popover').forEach(p => { p.hidden = true; });
-        document.querySelectorAll('.dash-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
-      }
-    });
-  }
+  })();
 
-  function debounce(fn, ms) {
-    let timer;
-    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireBlogTab);
-  else wireBlogTab();
-})();
+})(); // end IIFE

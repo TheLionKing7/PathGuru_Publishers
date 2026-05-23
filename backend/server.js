@@ -32,7 +32,7 @@ import { fileURLToPath }            from 'node:url';
 import { buildProject }                   from './designGuru.js';
 import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
-import { generateAndPublishBlogPost }     from './blogPublisher.js';
+import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                    from './cmsClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
@@ -181,14 +181,33 @@ const server = createServer(async (req, res) => {
   }
 
   // ── POST /api/blog ──────────────────────────────
+  // Generate only — saves draft to Supabase, does NOT publish to platforms.
   if (req.method === 'POST' && path === '/api/blog') {
     try {
       const input = await readBody(req);
       if (!input.topic) { err(res, 'topic is required', 400); return; }
       console.log(`[PathGuru] Generating blog post: "${input.topic}"`);
-      const result = await generateAndPublishBlogPost(input);
+      // Strip platforms so generation never auto-publishes
+      const result = await generateAndPublishBlogPost({ ...input, platforms: [] });
       json(res, result);
     } catch (e) { err(res, e.message || 'Blog generation failed'); }
+    return;
+  }
+
+  // ── POST /api/blog/publish ───────────────────────
+  // Publish-only — user has reviewed the draft and approved it.
+  // Accepts: { post, html, platforms, postId, featuredImageUrl }
+  if (req.method === 'POST' && path === '/api/blog/publish') {
+    try {
+      const body = await readBody(req);
+      if (!body.post || !body.html) { err(res, 'post and html are required', 400); return; }
+      if (!Array.isArray(body.platforms) || body.platforms.length === 0) {
+        err(res, 'Select at least one publish destination', 400); return;
+      }
+      console.log(`[PathGuru] Publishing approved post: "${body.post.title}"`);
+      const result = await publishBlogPost(body);
+      json(res, result);
+    } catch (e) { err(res, e.message || 'Publish failed'); }
     return;
   }
 

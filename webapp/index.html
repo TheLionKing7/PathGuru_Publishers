@@ -624,7 +624,11 @@
                   <span class="platform-name">DigiFusion CMS</span>
                 </label>
                 <div class="platform-fields" id="dfFields" style="display:none">
-                  <div class="field"><label for="dfApiUrl">DigiFusion API URL</label><input type="url" id="dfApiUrl" placeholder="https://api.digitafusion.com"></div>
+                  <div class="field">
+                    <label for="dfApiUrl">DigiFusion Site URL</label>
+                    <input type="url" id="dfApiUrl" placeholder="https://www.digitafusion.com" value="https://www.digitafusion.com">
+                    <p class="field-hint">Your live site domain. The post link returned after publishing will use this as its base.</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -659,6 +663,10 @@
 
             <div class="blog-edit-toggle-row">
               <button class="btn-secondary btn-sm" id="blogEditToggle" style="display:none">Edit draft</button>
+              <button class="btn-approve" id="blogApproveBtn" style="display:none">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Approve &amp; Publish
+              </button>
             </div>
 
             <!-- Preview pane -->
