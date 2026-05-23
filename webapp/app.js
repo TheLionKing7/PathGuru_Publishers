@@ -15,14 +15,17 @@ const MODULE_OF_TAB = {
   brief: 'publishing', assets: 'publishing', compile: 'publishing',
   // Blog module
   blog: 'blog', 'blog-assets': 'blog',
-  // Shop module
-  'shop-subs': 'shop', 'shop-bookings': 'shop', 'shop-payments': 'shop',
-  'shop-terms': 'shop', 'shop-shipping': 'shop', 'shop-analytics': 'shop',
+  // Shop module — Products / Services / Payments / Analytics / Settings
+  'shop-products': 'shop', 'shop-services': 'shop', 'shop-payments': 'shop',
+  'shop-analytics': 'shop', 'shop-settings': 'shop',
+  // Analytics module
+  analytics: 'analytics',
 };
 const DEFAULT_TAB_OF_MODULE = {
   publishing: 'brief',
   blog: 'blog',
-  shop: 'shop-subs',
+  shop: 'shop-products',
+  analytics: 'analytics',
 };
 
 const State = (() => {

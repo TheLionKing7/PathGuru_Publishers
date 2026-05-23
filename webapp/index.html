@@ -30,6 +30,11 @@
         <span class="nav-label">Shop</span>
       </button>
     </nav>
+      <button class="nav-btn" data-module="analytics" title="Site Analytics — pageviews, sessions, top pages" aria-label="Site Analytics module">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span class="nav-label">Stats</span>
+      </button>
+    </div>
     <div class="sidebar-footer">
       <button class="nav-btn" id="settingsBtn" title="Settings" aria-label="Settings">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -769,46 +774,40 @@
     </div><!-- /#module-blog -->
 
     <!-- ══════════════════════════════════════════════
-         MODULE: SHOP  (6 sub-tabs)
+         MODULE: SHOP  (5 sub-tabs: Products / Services / Payments / Analytics / Settings)
     ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-shop" data-module="shop">
 
       <!-- Per-tab headers -->
       <div class="module-headers">
-        <header class="panel-header active" data-for="shop-subs">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Subscriptions</h1></div>
-        </header>
-        <header class="panel-header" data-for="shop-bookings">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Bookings</h1></div>
-        </header>
-        <header class="panel-header" data-for="shop-payments">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments</h1></div>
-        </header>
-        <header class="panel-header" data-for="shop-analytics">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Analytics</h1></div>
-        </header>
-        <header class="panel-header" data-for="shop-products">
-          <div>
-            <p class="panel-eyebrow">Shop</p>
-            <h1 class="panel-title">Products &amp; Services</h1>
-          </div>
+        <header class="panel-header active" data-for="shop-products">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Products</h1></div>
           <div class="header-actions">
             <button class="btn-primary btn-sm" id="shopProductAddBtn">+ Add Product</button>
           </div>
         </header>
+        <header class="panel-header" data-for="shop-services">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Services &amp; Bookings</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-payments">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; Subscriptions</h1></div>
+        </header>
+        <header class="panel-header" data-for="shop-analytics">
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales Analytics</h1></div>
+        </header>
         <header class="panel-header" data-for="shop-settings">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Settings</h1></div>
+          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shop Settings</h1></div>
         </header>
       </div>
 
       <div class="module-topnav" role="tablist" aria-label="Shop sections">
-        <button class="shop-tab module-tab active" data-subtab="shop-subs" role="tab" aria-selected="true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Subs
+        <button class="shop-tab module-tab active" data-subtab="shop-products" role="tab" aria-selected="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Products
         </button>
-        <button class="shop-tab module-tab" data-subtab="shop-bookings" role="tab" aria-selected="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Bookings
+        <button class="shop-tab module-tab" data-subtab="shop-services" role="tab" aria-selected="false">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Services
         </button>
         <button class="shop-tab module-tab" data-subtab="shop-payments" role="tab" aria-selected="false">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
@@ -818,10 +817,6 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           Analytics
         </button>
-        <button class="shop-tab module-tab" data-subtab="shop-products" role="tab" aria-selected="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          Products
-        </button>
         <button class="shop-tab module-tab" data-subtab="shop-settings" role="tab" aria-selected="false">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
@@ -830,19 +825,75 @@
 
       <div class="module-body">
 
-        <!-- Subscriptions -->
-        <section class="tab-panel active" id="tab-shop-subs" aria-label="Subscriptions">
-          <div class="shop-panel-body">
-            <div class="shop-toolbar">
-              <h2 class="shop-section-title">Active subscriptions</h2>
-              <button class="btn-secondary btn-sm" id="shopSubsRefresh">Refresh</button>
+        <!-- Products -->
+        <section class="tab-panel active" id="tab-shop-products" aria-label="Products">
+          <div class="prod-panel-body">
+            <div class="prod-toolbar">
+              <input type="search" id="shopProductSearch" placeholder="Search products…" style="flex:1;max-width:260px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:13px">
+              <select id="shopProductType" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary)">
+                <option value="">All types</option>
+                <option value="ebook">eBook</option>
+                <option value="paperback">Paperback</option>
+                <option value="saas">SaaS</option>
+                <option value="course">Course</option>
+                <option value="extension">Extension</option>
+                <option value="bundle">Bundle</option>
+              </select>
+              <select id="shopProductStatus" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary)">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+              </select>
+              <button class="btn-secondary btn-sm" id="shopProductRefresh">Refresh</button>
             </div>
-            <div id="shopSubsTable"><div class="shop-empty"><p>Click Refresh to load subscriptions.</p></div></div>
+            <div class="prod-list" id="shopProductsTable">
+              <div class="shop-empty"><p>Loading products…</p></div>
+            </div>
+            <!-- Slide-in product form -->
+            <div class="prod-form-overlay" id="prodFormOverlay">
+              <div class="prod-form-panel" id="prodFormPanel">
+                <div class="prod-form-header">
+                  <h3 id="prodFormTitle">Add Product</h3>
+                  <button class="btn-secondary btn-sm" id="prodFormCancel">✕ Close</button>
+                </div>
+                <form class="prod-form-body" id="prodFormEl">
+                  <div class="prod-form-section">
+                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. Instagram Growth Blueprint" required></div>
+                    <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormType">Type</label>
+                        <select id="prodFormType">
+                          <option value="ebook">📗 eBook</option><option value="paperback">📘 Paperback</option>
+                          <option value="saas">☁️ SaaS</option><option value="course">🎓 Course</option>
+                          <option value="extension">🔌 Extension</option><option value="bundle">📦 Bundle</option>
+                        </select>
+                      </div>
+                      <div class="field"><label for="prodFormStatus">Status</label>
+                        <select id="prodFormStatus"><option value="active">Active</option><option value="draft">Draft</option></select>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
+                      <div class="field"><label for="prodFormCurrency">Currency</label>
+                        <select id="prodFormCurrency"><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="CAD">CAD</option><option value="AUD">AUD</option></select>
+                      </div>
+                    </div>
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description…"></textarea></div>
+                    <div class="field"><label for="prodFormVariants">Variants (JSON)</label><textarea id="prodFormVariants" rows="3" placeholder='[{"name":"Basic","price_usd":1900},{"name":"Pro","price_usd":4900}]'></textarea></div>
+                  </div>
+                  <div class="prod-form-error" id="prodFormError" hidden></div>
+                  <div class="prod-form-actions">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('prodFormCancel').click()">Cancel</button>
+                    <button type="submit" class="btn-primary" id="prodFormSave">Save product</button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
         </section>
 
-        <!-- Bookings -->
-        <section class="tab-panel" id="tab-shop-bookings" aria-label="Bookings">
+        <!-- Services & Bookings (renamed from Bookings) -->
+        <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Service bookings</h2>
@@ -852,14 +903,21 @@
           </div>
         </section>
 
-        <!-- Payments / Orders -->
-        <section class="tab-panel" id="tab-shop-payments" aria-label="Payments">
+        <!-- Payments — orders + subscriptions combined -->
+        <section class="tab-panel" id="tab-shop-payments" aria-label="Payments and Subscriptions">
           <div class="shop-panel-body">
+            <!-- Orders section -->
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Orders &amp; payments</h2>
               <button class="btn-secondary btn-sm" id="shopPaymentsRefresh">Refresh</button>
             </div>
-            <div id="shopPaymentsTable"><div class="shop-empty"><p>Click Refresh to load payments.</p></div></div>
+            <div id="shopPaymentsTable"><div class="shop-empty"><p>Click Refresh to load orders.</p></div></div>
+            <!-- Subscriptions (MRR) section -->
+            <div class="shop-toolbar" style="margin-top:16px">
+              <h2 class="shop-section-title">SaaS subscriptions (MRR)</h2>
+              <button class="btn-secondary btn-sm" id="shopSubsRefresh">Refresh</button>
+            </div>
+            <div id="shopSubsTable"><div class="shop-empty"><p>Click Refresh to load subscriptions.</p></div></div>
           </div>
         </section>
 
@@ -918,89 +976,7 @@
           </div>
         </section>
 
-        <!-- Products & Services -->
-        <section class="tab-panel" id="tab-shop-products" aria-label="Products &amp; Services">
-          <div class="prod-panel-body">
-            <div class="prod-toolbar">
-              <input type="search" id="shopProductSearch" placeholder="Search products…" style="flex:1;max-width:260px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);font-size:13px">
-              <select id="shopProductType" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
-                <option value="">All types</option>
-                <option value="ebook">eBook</option>
-                <option value="paperback">Paperback</option>
-                <option value="saas">SaaS</option>
-                <option value="course">Course</option>
-                <option value="extension">Extension</option>
-                <option value="bundle">Bundle</option>
-              </select>
-              <select id="shopProductStatus" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text)">
-                <option value="">All statuses</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-              <button class="btn-secondary btn-sm" id="shopProductRefresh">Refresh</button>
-            </div>
-            <div class="prod-list" id="shopProductsTable">
-              <div class="shop-empty"><p>Loading products…</p></div>
-            </div>
 
-            <!-- Slide-in product form -->
-            <div class="prod-form-overlay" id="prodFormOverlay">
-              <div class="prod-form-panel" id="prodFormPanel">
-                <div class="prod-form-header">
-                  <h3 id="prodFormTitle">Add Product</h3>
-                  <button class="btn-secondary btn-sm" id="prodFormCancel">✕ Close</button>
-                </div>
-                <form class="prod-form-body" id="prodFormEl">
-                  <div class="prod-form-section">
-                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. Instagram Growth Blueprint" required></div>
-                    <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
-                    <div class="field-row">
-                      <div class="field">
-                        <label for="prodFormType">Type</label>
-                        <select id="prodFormType">
-                          <option value="ebook">📗 eBook</option>
-                          <option value="paperback">📘 Paperback</option>
-                          <option value="saas">☁️ SaaS</option>
-                          <option value="course">🎓 Course</option>
-                          <option value="extension">🔌 Extension</option>
-                          <option value="bundle">📦 Bundle</option>
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label for="prodFormStatus">Status</label>
-                        <select id="prodFormStatus">
-                          <option value="active">Active</option>
-                          <option value="draft">Draft</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="field-row">
-                      <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
-                      <div class="field">
-                        <label for="prodFormCurrency">Currency</label>
-                        <select id="prodFormCurrency">
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="GBP">GBP</option>
-                          <option value="CAD">CAD</option>
-                          <option value="AUD">AUD</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description…"></textarea></div>
-                    <div class="field"><label for="prodFormVariants">Variants (JSON)</label><textarea id="prodFormVariants" rows="3" placeholder='[{"name":"Basic","price_usd":1900},{"name":"Pro","price_usd":4900}]'></textarea></div>
-                  </div>
-                  <div class="prod-form-error" id="prodFormError" hidden></div>
-                  <div class="prod-form-actions">
-                    <button type="button" class="btn-secondary" id="prodFormCancel2" onclick="document.getElementById('prodFormCancel').click()">Cancel</button>
-                    <button type="submit" class="btn-primary" id="prodFormSave">Save product</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-          </div>
-        </section>
 
         <!-- Settings -->
         <section class="tab-panel" id="tab-shop-settings" aria-label="Settings">
@@ -1034,10 +1010,69 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-shop -->
 
+    <!-- ══════════════════════════════════════════════
+         MODULE: ANALYTICS  (site-wide pageview stats)
+    ══════════════════════════════════════════════ -->
+    <div class="module-shell" id="module-analytics" data-module="analytics">
+      <div class="module-headers">
+        <header class="panel-header active" data-for="analytics">
+          <div>
+            <p class="panel-eyebrow">Site</p>
+            <h1 class="panel-title">Analytics</h1>
+          </div>
+          <div class="header-actions">
+            <select id="analyticsRange" class="analytics-range-select">
+              <option value="7d">Last 7 days</option>
+              <option value="30d" selected>Last 30 days</option>
+              <option value="90d">Last 90 days</option>
+            </select>
+            <button class="btn-secondary btn-sm" id="analyticsRefreshBtn">Refresh</button>
+          </div>
+        </header>
+      </div>
+      <div class="module-topnav" role="tablist" aria-label="Analytics sections">
+        <button class="module-tab active" data-subtab="analytics" role="tab" aria-selected="true">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Overview
+        </button>
+      </div>
+      <div class="module-body">
+        <section class="tab-panel active" id="tab-analytics" aria-label="Site Analytics Overview">
+          <div class="analytics-body">
+            <!-- KPI strip -->
+            <div class="analytics-kpi-row" id="analyticsKpiRow">
+              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiViews">—</div><div class="analytics-kpi-label">Total pageviews</div></div>
+              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiSessions">—</div><div class="analytics-kpi-label">Unique sessions</div></div>
+              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiAvgPerDay">—</div><div class="analytics-kpi-label">Avg / day</div></div>
+            </div>
+            <!-- Daily chart -->
+            <div class="analytics-section">
+              <div class="analytics-section-title">Daily views</div>
+              <div class="analytics-chart-bars" id="analyticsDailyChart"></div>
+            </div>
+            <!-- Top pages + referrers -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+              <div class="analytics-section">
+                <div class="analytics-section-title">Top pages</div>
+                <div id="analyticsTopPages"><div class="analytics-empty">Click Refresh to load.</div></div>
+              </div>
+              <div class="analytics-section">
+                <div class="analytics-section-title">Top referrers</div>
+                <div id="analyticsTopReferrers"><div class="analytics-empty">Click Refresh to load.</div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div><!-- /#module-analytics -->
+
   </div><!-- /.app-body -->
 
   <script type="module" src="/app.js"></script>
   <script type="module" src="/blog.js"></script>
+    <script type="module" src="/app.js"></script>
+  <script type="module" src="/blog.js"></script>
   <script type="module" src="/shop.js"></script>
+  <script type="module" src="/analytics.js"></script>
 </body>
 </html>

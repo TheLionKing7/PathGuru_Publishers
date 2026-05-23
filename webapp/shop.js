@@ -661,7 +661,7 @@
         shopShell.querySelectorAll('.shop-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        // data-subtab is now "shop-subs", "shop-bookings", etc.
+        // data-subtab is "shop-products", "shop-services", etc.
         // Strip the "shop-" prefix for panel ID construction and lazy-load checks.
         const fullTab = btn.dataset.subtab;
         const target  = fullTab.replace(/^shop-/, '');
@@ -669,9 +669,10 @@
         const panel = document.getElementById(`tab-shop-${target}`);
         if (panel) panel.classList.add('active');
         // Lazy-load on first activation
-        if (target === 'subs')       loadSubscriptions();
-        if (target === 'bookings')   loadBookings();
-        if (target === 'payments')   loadPayments();
+        // "services" maps to the bookings data source
+        // "payments" loads both orders and subscriptions
+        if (target === 'services')   loadBookings();
+        if (target === 'payments')   { loadPayments(); loadSubscriptions(); }
         if (target === 'analytics')  loadAnalytics();
         if (target === 'products')   { wireProducts(); }
       });
@@ -705,14 +706,15 @@
     // Shipping save
     document.getElementById('shopShippingSave')?.addEventListener('click', saveShipping);
 
-    // Wire products tab if it starts active
+    // Wire products tab on startup (it's now the default first tab)
     const activeTab = shopShell.querySelector('.shop-tab.active');
-    if (activeTab?.dataset?.subtab === 'products') wireProducts();
+    const initTarget = activeTab?.dataset?.subtab?.replace(/^shop-/, '');
+    if (initTarget === 'products') wireProducts();
   }
 
   /* ── esc helper ───────────────────────────────────────────────── */
   function esc (s) {
-        return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireShop);
