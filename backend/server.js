@@ -33,23 +33,13 @@ import { buildProject }                   from './designGuru.js';
 import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
-import * as cmsClient                    from './cmsClient.js';
+import * as cmsClient                     from './cmsClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
   uploadMediaAsset,
   listMediaAssets,
   deleteMediaAsset,
 } from './cloudflareR2.js';
-import {
-  listPosts,
-  getPostBySlug,
-  getPostById,
-  createPost,
-  updatePost,
-  publishPost,
-  unpublishPost,
-  deletePost,
-} from './supabaseClient.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
@@ -212,31 +202,43 @@ const server = createServer(async (req, res) => {
   }
 
   // ═══════════════════════════════════════════════════
-  // BLOG CMS API — Supabase-backed CRUD
+  // BLOG CMS API — proxied to DigiFusion CMS
+  // Posts are stored in DigiFusion. PathGuru reads/writes via cmsClient
+  // so a single Supabase (DigiFusion's) is the source of truth.
+  // NOTE: per-post operations use slug as the identifier.
   // ═══════════════════════════════════════════════════
 
   // ── GET /api/posts ───────────────────────────────
   if (req.method === 'GET' && path === '/api/posts') {
     try {
-      const status   = url.searchParams.get('status') || null;
-      const postType = url.searchParams.get('postType') || null;
-      const limit    = parseInt(url.searchParams.get('limit') || '50', 10);
-      const page     = parseInt(url.searchParams.get('page') || '1', 10);
-      const offset   = (page - 1) * limit;
+      const status   = url.searchParams.get('status')   || undefined;
+      const postType = url.searchParams.get('postType') || undefined;
+      const per_page = parseInt(url.searchParams.get('limit') || '50', 10);
+      const page     = parseInt(url.searchParams.get('page')  || '1',  10);
 
-      const result = await listPosts({ status, limit, offset, postType });
-      if (result.error) { err(res, result.error, 500); return; }
+      const params = { per_page, page };
+      if (status)   params.status    = status;
+      if (postType) params.post_type = postType;
+
+      const result = await cmsClient.listPosts(params);
+      // cmsClient returns { ok: true, data: { posts, pagination } }
+      const posts      = result?.data?.posts      || [];
+      const pagination = result?.data?.pagination || {};
+
+      // Expose slug as `id` so per-item actions (publish/delete/preview)
+      // can use it as a lookup key against DigiFusion's slug-based API.
+      const mapped = posts.map(p => ({ ...p, id: p.slug }));
 
       json(res, {
-        posts: result.data || [],
+        posts: mapped,
         pagination: {
-          page,
-          perPage: limit,
-          total: result.count || 0,
-          totalPages: Math.ceil((result.count || 0) / limit),
+          page:       pagination.page       || page,
+          perPage:    pagination.per_page   || per_page,
+          total:      pagination.total      || 0,
+          totalPages: pagination.total_pages || 1,
         },
       });
-    } catch (e) { err(res, e.message || 'Failed to list posts'); }
+    } catch (e) { err(res, e.message || 'Failed to load posts', 500); }
     return;
   }
 
@@ -244,88 +246,42 @@ const server = createServer(async (req, res) => {
   const postsMatch = path.match(/^\/api\/posts\/([^/]+)$/);
   if (req.method === 'GET' && postsMatch) {
     try {
-      const slugOrId = postsMatch[1];
-      // Try slug first, then ID
-      let result = await getPostBySlug(slugOrId);
-      if (result.error || !result.data) {
-        result = await getPostById(slugOrId);
-      }
-      if (result.error) { err(res, result.error, 500); return; }
-      if (!result.data) { err(res, 'Post not found', 404); return; }
-      json(res, result.data);
-    } catch (e) { err(res, e.message || 'Failed to get post'); }
+      const slug   = decodeURIComponent(postsMatch[1]);
+      const result = await cmsClient.getPost(slug);
+      json(res, result?.data || result);
+    } catch (e) { err(res, e.message || 'Post not found', 404); }
     return;
   }
 
-  // ── POST /api/posts ──────────────────────────────
-  if (req.method === 'POST' && path === '/api/posts') {
-    try {
-      const body = await readBody(req);
-      if (!body.title) { err(res, 'title is required', 400); return; }
-
-      // Auto-generate slug if not provided
-      if (!body.slug) {
-        body.slug = body.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '')
-          .slice(0, 100);
-      }
-
-      const result = await createPost(body);
-      if (result.error) { err(res, result.error, 500); return; }
-      json(res, result.data, 201);
-    } catch (e) { err(res, e.message || 'Failed to create post'); }
-    return;
-  }
-
-  // ── PUT /api/posts/:id ───────────────────────────
-  if (req.method === 'PUT' && postsMatch) {
-    try {
-      const id   = postsMatch[1];
-      const body = await readBody(req);
-      const result = await updatePost(id, body);
-      if (result.error) { err(res, result.error, 500); return; }
-      if (!result.data) { err(res, 'Post not found', 404); return; }
-      json(res, result.data);
-    } catch (e) { err(res, e.message || 'Failed to update post'); }
-    return;
-  }
-
-  // ── PATCH /api/posts/:id/publish ─────────────────
+  // ── PATCH /api/posts/:slug/publish ───────────────
   const publishMatch = path.match(/^\/api\/posts\/([^/]+)\/publish$/);
   if (req.method === 'PATCH' && publishMatch) {
     try {
-      const id = publishMatch[1];
-      const result = await publishPost(id);
-      if (result.error) { err(res, result.error, 500); return; }
-      if (!result.data) { err(res, 'Post not found', 404); return; }
-      json(res, result.data);
-    } catch (e) { err(res, e.message || 'Failed to publish post'); }
+      const slug   = decodeURIComponent(publishMatch[1]);
+      const result = await cmsClient.publishPost(slug);
+      json(res, result?.data || result);
+    } catch (e) { err(res, e.message || 'Failed to publish post', 500); }
     return;
   }
 
-  // ── PATCH /api/posts/:id/unpublish ───────────────
+  // ── PATCH /api/posts/:slug/unpublish ─────────────
   const unpublishMatch = path.match(/^\/api\/posts\/([^/]+)\/unpublish$/);
   if (req.method === 'PATCH' && unpublishMatch) {
     try {
-      const id = unpublishMatch[1];
-      const result = await unpublishPost(id);
-      if (result.error) { err(res, result.error, 500); return; }
-      if (!result.data) { err(res, 'Post not found', 404); return; }
-      json(res, result.data);
-    } catch (e) { err(res, e.message || 'Failed to unpublish post'); }
+      const slug   = decodeURIComponent(unpublishMatch[1]);
+      const result = await cmsClient.unpublishPost(slug);
+      json(res, result?.data || result);
+    } catch (e) { err(res, e.message || 'Failed to unpublish post', 500); }
     return;
   }
 
-  // ── DELETE /api/posts/:id ────────────────────────
+  // ── DELETE /api/posts/:slug ──────────────────────
   if (req.method === 'DELETE' && postsMatch) {
     try {
-      const id = postsMatch[1];
-      const result = await deletePost(id);
-      if (result.error) { err(res, result.error, 500); return; }
+      const slug = decodeURIComponent(postsMatch[1]);
+      await cmsClient.archivePost(slug);
       json(res, { success: true });
-    } catch (e) { err(res, e.message || 'Failed to delete post'); }
+    } catch (e) { err(res, e.message || 'Failed to delete post', 500); }
     return;
   }
 

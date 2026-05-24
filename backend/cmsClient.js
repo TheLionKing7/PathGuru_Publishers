@@ -94,6 +94,20 @@ export async function listPosts (params = {}) {
 }
 
 /**
+ * Publish a post (sets status = 'published').
+ */
+export async function publishPost (slug) {
+  return cmsRequest('PATCH', `/api/cms/posts/${encodeURIComponent(slug)}`, { status: 'published' });
+}
+
+/**
+ * Unpublish a post (sets status = 'draft').
+ */
+export async function unpublishPost (slug) {
+  return cmsRequest('PATCH', `/api/cms/posts/${encodeURIComponent(slug)}`, { status: 'draft' });
+}
+
+/**
  * Soft-delete (archive) a post by slug.
  */
 export async function archivePost (slug) {
