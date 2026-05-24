@@ -162,12 +162,6 @@ function buildBlogHtml(post, design = {}) {
     ${sectionsHtml}
   </div>
   ${post.tags?.length ? `<div class="post-tags">${post.tags.map(t=>`<span class="post-tag">#${t}</span>`).join('')}</div>` : ''}
-  ${(post.socialCaption || post.linkedinCaption) ? `
-  <div class="post-social">
-    <h4>Social captions</h4>
-    ${post.socialCaption    ? `<p class="social-caption" title="Twitter/X">𝕏 &nbsp;${post.socialCaption}</p>` : ''}
-    ${post.linkedinCaption  ? `<p class="social-caption" title="LinkedIn">in &nbsp;${post.linkedinCaption}</p>` : ''}
-  </div>` : ''}
 </article>
 </body>
 </html>`;
@@ -336,7 +330,7 @@ async function publishToDigiFusion (post, settings, html) {
     linkedin_caption:      post.linkedinCaption       || '',
     categories:            post.categories            || [],
     tags:                  post.tags                  || [],
-    author_name:           post.authorName            || 'Boroji',
+    author_name:           post.authorName            || 'Tolulope',
     reading_time_minutes:  post.readingTimeMinutes    || 5,    // number, not nullable — default 5 min
     word_count:            post.wordCount             || 0,    // number, not nullable — default 0
   };
@@ -438,6 +432,11 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
     ...s,
     body: stripHtmlTags(String(s.body || '')),
   }));
+
+  // Stamp input-level fields onto the post object so they survive the
+  // publish pipeline (post.postType / post.authorName are not AI-generated)
+  post.postType  = input.postType || post.postType || 'guide';
+  post.authorName = input.author || post.authorName || 'Tolulope';
 
   // 4. Fetch featured image from Pexels
   let featuredImageUrl = null;

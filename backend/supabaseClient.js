@@ -43,7 +43,7 @@ export async function listPosts(options = {}) {
   const { status, limit = 50, offset = 0, postType } = options;
 
   let query = db
-    .from('blog_posts')
+    .from('posts')
     .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -65,7 +65,7 @@ export async function getPostBySlug(slug) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .select('*')
     .eq('slug', slug)
     .single();
@@ -79,7 +79,7 @@ export async function getPostById(id) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .select('*')
     .eq('id', id)
     .single();
@@ -93,7 +93,7 @@ export async function createPost(post) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .insert({
       title: post.title,
       slug: post.slug,
@@ -155,7 +155,7 @@ export async function updatePost(id, updates) {
   }
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .update(updateData)
     .eq('id', id)
     .select()
@@ -170,7 +170,7 @@ export async function publishPost(id) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .update({
       status: 'published',
       published_at: new Date().toISOString(),
@@ -189,7 +189,7 @@ export async function unpublishPost(id) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { data, error } = await db
-    .from('blog_posts')
+    .from('posts')
     .update({
       status: 'draft',
       published_at: null,
@@ -208,7 +208,7 @@ export async function deletePost(id) {
   if (!db) return { error: 'Supabase not configured' };
 
   const { error } = await db
-    .from('blog_posts')
+    .from('posts')
     .delete()
     .eq('id', id);
 
