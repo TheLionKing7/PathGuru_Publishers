@@ -2328,3 +2328,331 @@ select option { background: var(--surface-2); }
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRODUCT FORM — slide-in panel + overlay
+═════════════════════════════════════════════════════════════════ */
+
+.prod-form-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 200;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+.prod-form-overlay.active { display: flex; }
+
+.prod-form-panel {
+  background: var(--bg);
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 32px rgba(0,0,0,0.35);
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.prod-form-panel.active { transform: translateX(0); }
+
+.prod-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.prod-form-header h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.prod-form-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 0;
+}
+
+.prod-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+/* ── Field + field-row ── */
+.prod-form-section .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prod-form-section .field label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.prod-form-section .field input,
+.prod-form-section .field select,
+.prod-form-section .field textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  padding: 9px 12px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.prod-form-section .field input:focus,
+.prod-form-section .field select:focus,
+.prod-form-section .field textarea:focus {
+  border-color: var(--gold);
+}
+.prod-form-section .field textarea { resize: vertical; min-height: 72px; }
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.required { color: var(--red, #ef4444); }
+
+/* ── Error message ── */
+.prod-form-error {
+  color: var(--red, #ef4444);
+  font-size: 12.5px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+/* ── Actions row ── */
+.prod-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 20px;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE — breakpoints for the whole app
+   (PathGuru is a sidebar tool; primary concern is narrow-window use)
+═════════════════════════════════════════════════════════════════ */
+
+/* ── Narrow sidebar / small screens (≤ 900px) ── */
+@media (max-width: 900px) {
+  /* Shop tables: allow horizontal scroll instead of overflow */
+  .shop-panel-body { overflow-x: auto; }
+  .shop-table { min-width: 500px; }
+
+  /* Product rows stack more gracefully */
+  .prod-row {
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+  .prod-row .prod-price,
+  .prod-row .prod-type-badge,
+  .prod-row .prod-status-pill { font-size: 11px; }
+
+  /* Stats grid: fewer columns */
+  .shop-stat-grid,
+  .shop-stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Toolbar: allow wrapping */
+  .shop-toolbar { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+}
+
+/* ── Mobile / very narrow (≤ 600px) ── */
+@media (max-width: 600px) {
+  /* Product form: full screen, no side panel */
+  .prod-form-panel {
+    max-width: 100%;
+    border-radius: 0;
+  }
+  .prod-form-overlay { align-items: flex-end; }
+  .prod-form-panel {
+    height: 92%;
+    transform: translateY(100%);
+    border-radius: 16px 16px 0 0;
+  }
+  .prod-form-panel.active { transform: translateY(0); }
+
+  /* field-row: stack on mobile */
+  .field-row { grid-template-columns: 1fr; }
+
+  /* Tables: minimum readable width */
+  .shop-table { min-width: 360px; }
+
+  /* Stats: single column */
+  .shop-stat-grid,
+  .shop-stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; }
+
+  /* Blog dash items: compress */
+  .blog-dash-item { flex-wrap: wrap; gap: 8px; }
+  .dash-item-meta { flex-wrap: wrap; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRODUCT FORM — slide-in panel + overlay
+═════════════════════════════════════════════════════════════════ */
+
+.prod-form-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 200;
+  align-items: flex-start;
+  justify-content: flex-end;
+}
+.prod-form-overlay.active { display: flex; }
+
+.prod-form-panel {
+  background: var(--bg);
+  width: 100%;
+  max-width: 480px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 32px rgba(0,0,0,0.35);
+  transform: translateX(100%);
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+.prod-form-panel.active { transform: translateX(0); }
+
+.prod-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.prod-form-header h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.prod-form-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+}
+
+.prod-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.prod-form-section .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prod-form-section .field label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.prod-form-section .field input,
+.prod-form-section .field select,
+.prod-form-section .field textarea {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  padding: 9px 12px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.prod-form-section .field input:focus,
+.prod-form-section .field select:focus,
+.prod-form-section .field textarea:focus { border-color: var(--gold); }
+.prod-form-section .field textarea { resize: vertical; min-height: 72px; }
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.required { color: #ef4444; }
+
+.prod-form-error {
+  color: #ef4444;
+  font-size: 12.5px;
+  padding: 8px 12px;
+  background: rgba(239,68,68,0.08);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.prod-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 20px;
+  margin-top: auto;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+═════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 900px) {
+  .shop-panel-body { overflow-x: auto; }
+  .shop-table { min-width: 500px; }
+  .prod-row { grid-template-columns: auto 1fr; grid-template-rows: auto auto; }
+  .shop-stat-grid, .shop-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .shop-toolbar { flex-wrap: wrap; gap: 8px; padding: 12px 16px; }
+}
+
+@media (max-width: 600px) {
+  .prod-form-overlay { align-items: flex-end; }
+  .prod-form-panel {
+    max-width: 100%;
+    height: 92%;
+    transform: translateY(100%);
+    border-radius: 16px 16px 0 0;
+  }
+  .prod-form-panel.active { transform: translateY(0); }
+  .field-row { grid-template-columns: 1fr; }
+  .shop-table { min-width: 360px; }
+  .shop-stat-grid, .shop-stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px 16px; }
+  .blog-dash-item { flex-wrap: wrap; gap: 8px; }
+  .dash-item-meta { flex-wrap: wrap; }
+}

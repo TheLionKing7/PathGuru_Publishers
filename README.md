@@ -1,14 +1,31 @@
 # PathGuru Publishers v3
 
-**The command centre for the DigiFusion storefront and a standalone AI publishing studio.**
+**The command centre for the DigiFusion Intelligence Library and a standalone AI publishing studio.**
 
 PathGuru is the kitchen. DigiFusion is the storefront. Books, blog posts, products, services, and payments pass through PathGuru first and land on DigiFusion for customers to read or buy.
 
 Three modules in one webapp:
 
 - **Publishing** — brief → KDP-ready PDF + EPUB with project branding, design templates, and a PDF learning library
-- **Blog** — persona-driven AI blog posts, published to WordPress, Ghost, Webflow, or directly to DigiFusion
-- **Shop** — operator console for the DigiFusion storefront: subscriptions, bookings, payments, T&C, shipping, analytics
+- **Blog** — persona-driven AI blog posts published to WordPress, Ghost, Webflow, or directly to DigiFusion's blog and Intelligence Library
+- **Shop** — operator console for the DigiFusion storefront: products (Field Guides, Playbooks, Tools), orders, subscriptions, bookings, payments, T&C, shipping, analytics
+
+### DigiFusion site architecture (for context)
+
+```
+Blog (attract)  →  Intelligence (convert)  →  Products (retain)  →  Agency (upsell)
+```
+
+| DigiFusion section | Routes | What PathGuru publishes here |
+|---|---|---|
+| Blog | `/blog`, `/blog/:slug` | AI-written blog posts (all types) |
+| Intelligence | `/intelligence/field-guides` | Premium books + ebooks |
+| Intelligence | `/intelligence/playbooks` | Automation workflow packs |
+| Intelligence | `/intelligence/research` | Research papers + case studies |
+| Intelligence | `/intelligence/tools` | Extensions + utilities |
+| Products | `/products/sabiwork` | SabiWork SaaS product page |
+| Products | `/products/receptra` | Receptra SaaS product page |
+| Products | `/products/adpilot` | AdPilot SaaS product page |
 
 ---
 
@@ -18,20 +35,23 @@ Three modules in one webapp:
 
 | Area | What was built |
 |---|---|
-| DigiFusion site | Strategy Session landing page (`/agency/booking`), Four Pillars + Digital Media card, social links (Facebook, Twitter/X, Quora, email) |
-| DigiFusion CMS API | 15 endpoints under `/api/cms/*` — posts, products, orders (mark-paid, refund), subscriptions, bookings, analytics, settings (terms, shipping) |
-| Database | Supabase migration `0002_posts_and_settings.sql` — `posts` table (with RLS) and `settings` table (seeded with `terms` and `shipping` keys) |
-| PathGuru → DigiFusion | `backend/cmsClient.js` — fetch wrapper with bearer auth, retry logic, all 15 methods |
-| Blog publish | DigiFusion added as a 4th publish target alongside WordPress, Ghost, Webflow |
-| Shop module | All 6 Shop tab buttons wired via `webapp/shop.js` → PathGuru backend proxy → DigiFusion CMS API |
-| Persona system | `GET /api/personas` endpoint live; persona injected into Gemini prompt at generation time; picker auto-populates from backend on load |
+| DigiFusion site | Full site including blog, Intelligence hub + 4 sub-pages, Products hub + 3 product landing pages, Agency, About, sitemap, schema |
+| DigiFusion blog post page | White-card layout, prose-blog-light CSS, ToC sidebar, PathGuru meta element suppression |
+| DigiFusion CMS API | 15+ endpoints under `/api/cms/*` including PATCH for publish/unpublish |
+| Database | Supabase — `posts`, `products`, `orders`, `subscriptions`, `service_bookings`, `settings` tables |
+| PathGuru → DigiFusion | `backend/cmsClient.js` — fetch wrapper with bearer auth, retry logic, all methods including `publishPost` / `unpublishPost` |
+| Blog publish — bug fixes | Post type now correctly preserved (not defaulting to "article"); author name uses `input.author` not hardcoded fallback; social captions removed from HTML |
+| Blog dashboard | Routes in `server.js` now proxy through `cmsClient.js` (not direct Supabase) — resolves 500 errors on Render |
+| Shop module | All 6 Shop tab buttons wired via `webapp/shop.js` → PathGuru backend proxy → DigiFusion CMS API; product form CSS + responsive breakpoints added |
+| Persona system | `GET /api/personas` endpoint live; persona injected into Gemini prompt at generation time |
+| Navigation | DigiFusion nav updated: Shop → Intelligence (with sub-menu) + Products (with sub-menu per product) |
 
 ### Pending / known gaps
 
-- **DigiFusion `/blog` page** — PathGuru can publish posts to the `posts` table; nothing renders them publicly yet. Needs a Next.js page that reads published posts from Supabase.
 - **Checkout flow** — orders exist in the DB; the buyer-facing checkout (payment gateway integration, order creation) is not built.
-- **Products UI** — products can be created/updated via the CMS API; no admin UI in PathGuru for it yet.
+- **Intelligence product sales** — Field Guides and Tools pages are built; payment flow for purchasing them is not yet wired.
 - **Persona injection for Publishing (books)** — `injectPersonaIntoPrompt()` is connected to blog generation but not to the book pipeline (`designGuru.js`).
+- **SabiWork / Receptra / AdPilot** — SaaS products in development; landing pages live with Early Access CTA only.
 
 ---
 
@@ -90,7 +110,7 @@ PathGuru_Publishers_v3/
 │   ├── blogPublisher.js        Blog generation (Gemini) + persona injection + publish to WP/Ghost/Webflow/DigiFusion
 │   ├── cmsClient.js            DigiFusion CMS API client (bearer auth, retry)
 │   ├── designGuru.js           Book pipeline — niche → design package
-│   ├── supabaseClient.js       PathGuru's own Supabase client (blog_posts table for internal drafts)
+│   ├── supabaseClient.js       PathGuru's own Supabase client (internal use only — not used for blog dashboard on Render)
 │   └── skills/
 │       ├── personas.js         4 persona profiles — The Copy Desk, Marketing Desk, Engineering Bench, Strategy Room
 │       ├── personaPrompt.js    injectPersonaIntoPrompt() — merges persona voice + samples into Gemini prompt

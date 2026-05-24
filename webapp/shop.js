@@ -376,25 +376,30 @@
   }
 
   function fmtPrice (product) {
-    const p = product.price_usd != null ? (product.price_usd / 100) : (product.price || 0);
-    const currency = product.currency || 'USD';
-    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(p); }
-    catch { return `${currency} ${Number(p).toFixed(2)}`; }
+    // DigiFusion stores prices as { USD: 4900, NGN: 6500000 } in minor units
+    const prices   = product.prices || {};
+    const currency = Object.keys(prices)[0] || product.currency || 'USD';
+    const minor    = prices[currency] ?? product.price_usd ?? (product.price ? product.price * 100 : 0);
+    const major    = minor / 100;
+    if (major === 0) return 'Free';
+    try { return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(major); }
+    catch { return `${currency} ${Number(major).toFixed(2)}`; }
   }
 
   async function loadProducts () {
-    const wrap   = document.getElementById('shopProductsTable');ById('shopProductSearch');
-    const typeFilter   = document.getElementById('shopProductType');
-    const statusFilter = document.getElementById('shopProductStatus');
+    const wrap           = document.getElementById('shopProductsTable');
+    const search         = document.getElementById('shopProductSearch');
+    const categoryFilter = document.getElementById('shopProductCategory');
+    const statusFilter   = document.getElementById('shopProductStatus');
 
-    const searchVal = search?.value?.trim().toLowerCase() || '';
-    const typeVal   = typeFilter?.value  || '';
-    const statusVal = statusFilter?.value || '';
+    const searchVal   = search?.value?.trim().toLowerCase() || '';
+    const categoryVal = categoryFilter?.value || '';
+    const statusVal   = statusFilter?.value   || '';
 
     try {
       const params = new URLSearchParams();
-      if (typeVal)   params.set('type',   typeVal);
-      if (statusVal) params.set('active', statusVal === 'active' ? 'true' : 'false');
+      if (categoryVal) params.set('category', categoryVal);
+      if (statusVal)   params.set('active', statusVal === 'active' ? 'true' : 'false');
       const res  = await fetch(`${getBackendUrl()}/api/shop/products?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -402,8 +407,8 @@
 
       const filtered = allProducts.filter(p => {
         if (searchVal && !(p.name || '').toLowerCase().includes(searchVal)) return false;
-        if (statusVal === 'active'   && p.status === 'archived') return false;
-        if (statusVal === 'archived' && p.status !== 'archived') return false;
+        if (statusVal === 'active'   && p.active === false) return false;
+        if (statusVal === 'archived' && p.active !== false) return false;
         return true;
       });
 
@@ -419,23 +424,42 @@
       wrap.innerHTML = '<div class="shop-empty"><p>No products found. Click <strong>+ Add Product</strong> to create one.</p></div>';
       return;
     }
-    const typeLabel = { ebook: '📗 eBook', paperback: '📘 Paperback', saas: '☁️ SaaS', course: '🎓 Course', extension: '🔌 Extension', bundle: '📦 Bundle' };
+    const categoryLabel = {
+      'field-guide': '📗 Field Guide',
+      'playbook':    '⚡ Playbook',
+      'research':    '🔍 Research',
+      'tool':        '🔧 Tool',
+      'saas':        '☁️ SaaS',
+      'service':     '🤝 Service',
+      'bundle':      '📦 Bundle',
+    };
+    const typeLabel = {
+      'download':     '⬇️ Download',
+      'subscription': '🔄 Subscription',
+      'service':      '📞 Service',
+      'saas':         '☁️ SaaS',
+    };
     wrap.innerHTML = products.map(p => {
-      const badge   = typeLabel[p.type] || p.type || '—';
-      const price   = fmtPrice(p);
-      const status  = p.status || 'active';
-      const isArch  = status === 'archived';
+      const catBadge  = categoryLabel[p.category] || p.category || '—';
+      const typeBadge = typeLabel[p.type] || p.type || '—';
+      const price     = fmtPrice(p);
+      const active    = p.active !== false;
+      const statusLbl = active ? 'Active' : 'Archived';
       return `<div class="prod-row" data-id="${esc(p.id)}">
-        <span class="prod-type-badge">${badge}</span>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <span class="prod-type-badge">${catBadge}</span>
+          <span class="prod-type-badge" style="opacity:.65;font-size:10px">${typeBadge}</span>
+        </div>
         <div class="prod-name">
           <span>${esc(p.name || 'Untitled')}</span>
           ${p.slug ? `<span class="prod-meta">/${esc(p.slug)}</span>` : ''}
+          ${p.description ? `<span class="prod-meta" style="font-style:italic;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.description.slice(0,80))}${p.description.length > 80 ? '…' : ''}</span>` : ''}
         </div>
         <span class="prod-price">${price}</span>
-        <span class="prod-status-pill ${status}">${status.charAt(0).toUpperCase() + status.slice(1)}</span>
+        <span class="prod-status-pill ${active ? 'active' : 'archived'}">${statusLbl}</span>
         <div style="display:flex;gap:6px;align-items:center">
-          ${!isArch ? `<button class="btn-sm btn-secondary prod-edit-btn" data-id="${esc(p.id)}">Edit</button>` : ''}
-          ${!isArch ? `<button class="btn-sm btn-danger prod-archive-btn" data-id="${esc(p.id)}">Archive</button>` : ''}
+          ${active ? `<button class="btn-sm btn-secondary prod-edit-btn" data-id="${esc(p.id)}">Edit</button>` : ''}
+          ${active ? `<button class="btn-sm btn-danger prod-archive-btn" data-id="${esc(p.id)}">Archive</button>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -460,24 +484,26 @@
     const title   = document.getElementById('prodFormTitle');
     if (!overlay || !panel) return;
 
-    document.getElementById('prodFormName')?.value !== undefined &&
-      (document.getElementById('prodFormName').value     = product?.name     || '');
-    document.getElementById('prodFormSlug') &&
-      (document.getElementById('prodFormSlug').value     = product?.slug     || '');
-    document.getElementById('prodFormType') &&
-      (document.getElementById('prodFormType').value     = product?.type     || 'ebook');
-    document.getElementById('prodFormStatus') &&
-      (document.getElementById('prodFormStatus').value   = product?.status   || 'active');
-    document.getElementById('prodFormPrice') &&
-      (document.getElementById('prodFormPrice').value    = product?.price_usd != null ? (product.price_usd / 100).toFixed(2) : (product?.price || ''));
-    document.getElementById('prodFormCurrency') &&
-      (document.getElementById('prodFormCurrency').value = product?.currency  || 'USD');
-    document.getElementById('prodFormDesc') &&
-      (document.getElementById('prodFormDesc').value     = product?.description || '');
-    document.getElementById('prodFormVariants') &&
-      (document.getElementById('prodFormVariants').value = product?.variants
-        ? JSON.stringify(product.variants, null, 2)
-        : '');
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+
+    set('prodFormName',        product?.name || '');
+    set('prodFormSlug',        product?.slug || '');
+    set('prodFormCategory',    product?.category || '');
+    set('prodFormType',        product?.type || 'download');
+    set('prodFormStatus',      product?.active !== false ? 'active' : 'draft');
+    set('prodFormFeatured',    product?.featured ? 'true' : 'false');
+    set('prodFormPrice',       product?.prices?.USD != null ? (product.prices.USD / 100).toFixed(2)
+                                : product?.prices?.NGN != null ? (product.prices.NGN / 100).toFixed(2)
+                                : product?.price_usd != null ? (product.price_usd / 100).toFixed(2)
+                                : (product?.price || ''));
+    // Infer primary currency from prices object
+    const firstCurrency = product?.prices ? Object.keys(product.prices)[0] : null;
+    set('prodFormCurrency',    firstCurrency || product?.currency || 'USD');
+    set('prodFormDesc',        product?.description || '');
+    set('prodFormCoverUrl',    product?.cover_image_url || '');
+    set('prodFormFulfillment', product?.fulfillment && Object.keys(product.fulfillment).length
+                                ? JSON.stringify(product.fulfillment, null, 2)
+                                : '');
     if (title) title.textContent = product ? 'Edit Product' : 'Add Product';
     const errEl = document.getElementById('prodFormError');
     if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
@@ -496,33 +522,46 @@
 
   async function saveProduct (e) {
     e.preventDefault();
-    const errEl = document.getElementById('prodFormError');
+    const errEl   = document.getElementById('prodFormError');
     const saveBtn = document.getElementById('prodFormSave');
-    const name    = document.getElementById('prodFormName')?.value.trim();
-    const slug    = document.getElementById('prodFormSlug')?.value.trim();
-    const type    = document.getElementById('prodFormType')?.value;
-    const status  = document.getElementById('prodFormStatus')?.value || 'active';
+    const name     = document.getElementById('prodFormName')?.value.trim();
+    const slug     = document.getElementById('prodFormSlug')?.value.trim();
+    const category = document.getElementById('prodFormCategory')?.value || null;
+    const type     = document.getElementById('prodFormType')?.value || 'download';
+    const statusVal= document.getElementById('prodFormStatus')?.value || 'active';
+    const featured = document.getElementById('prodFormFeatured')?.value === 'true';
     const priceRaw = parseFloat(document.getElementById('prodFormPrice')?.value || '0');
     const currency = document.getElementById('prodFormCurrency')?.value || 'USD';
     const desc     = document.getElementById('prodFormDesc')?.value.trim() || '';
-    const varStr   = document.getElementById('prodFormVariants')?.value.trim();
+    const coverUrl = document.getElementById('prodFormCoverUrl')?.value.trim() || null;
+    const fulStr   = document.getElementById('prodFormFulfillment')?.value.trim();
 
     if (!name) {
       if (errEl) { errEl.textContent = 'Product name is required.'; errEl.hidden = false; }
       return;
     }
 
-    let variants = null;
-    if (varStr) {
-      try { variants = JSON.parse(varStr); }
-      catch { if (errEl) { errEl.textContent = 'Variants must be valid JSON.'; errEl.hidden = false; } return; }
+    let fulfillment = {};
+    if (fulStr) {
+      try { fulfillment = JSON.parse(fulStr); }
+      catch { if (errEl) { errEl.textContent = 'Fulfillment metadata must be valid JSON.'; errEl.hidden = false; } return; }
     }
 
+    // Build prices object using the selected currency — DigiFusion stores minor units per currency
+    const priceMinor = Math.round(priceRaw * 100);
+    const prices = priceMinor > 0 ? { [currency]: priceMinor } : {};
+
     const payload = {
-      name, slug: slug || slugify(name), type, status,
-      price_usd: Math.round(priceRaw * 100), currency,
-      description: desc,
-      ...(variants ? { variants } : {}),
+      name,
+      slug:            slug || slugify(name),
+      type,
+      active:          statusVal === 'active',
+      featured,
+      description:     desc,
+      prices,
+      fulfillment,
+      ...(category  ? { category }  : {}),
+      ...(coverUrl  ? { cover_image_url: coverUrl } : {}),
     };
 
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -576,7 +615,7 @@
       });
     }
 
-    ['shopProductSearch', 'shopProductType', 'shopProductStatus'].forEach(id => {
+    ['shopProductSearch', 'shopProductCategory', 'shopProductStatus'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         const ev = id === 'shopProductSearch' ? 'input' : 'change';

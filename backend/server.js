@@ -325,7 +325,7 @@ const server = createServer(async (req, res) => {
   // ── DELETE /api/shop/products/:id ────────────────
   if (req.method === 'DELETE' && shopProductMatch) {
     try {
-      const result = await cmsClient.updateProduct(shopProductMatch[1], { status: 'archived' });
+      const result = await cmsClient.updateProduct(shopProductMatch[1], { active: false });
       json(res, result);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;

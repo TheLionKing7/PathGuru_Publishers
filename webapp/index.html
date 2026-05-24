@@ -25,9 +25,9 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         <span class="nav-label">Blog</span>
       </button>
-      <button class="nav-btn" data-module="shop" title="Shop Management — Subscriptions, Bookings, Payments, T&C, Shipping, Analytics" aria-label="Shop module">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        <span class="nav-label">Shop</span>
+      <button class="nav-btn" data-module="shop" title="Intelligence &amp; Products — Library, SaaS, Orders, Payments, Settings, Analytics" aria-label="Intelligence and Products module">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span class="nav-label">Intelligence</span>
       </button>
     </nav>
       <button class="nav-btn" data-module="analytics" title="Site Analytics — pageviews, sessions, top pages" aria-label="Site Analytics module">
@@ -808,22 +808,22 @@
       <!-- Per-tab headers -->
       <div class="module-headers">
         <header class="panel-header active" data-for="shop-products">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Products</h1></div>
+          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Products</h1></div>
           <div class="header-actions">
             <button class="btn-primary btn-sm" id="shopProductAddBtn">+ Add Product</button>
           </div>
         </header>
         <header class="panel-header" data-for="shop-services">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Services &amp; Bookings</h1></div>
+          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Services &amp; Bookings</h1></div>
         </header>
         <header class="panel-header" data-for="shop-payments">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Payments &amp; Subscriptions</h1></div>
+          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Payments &amp; Subscriptions</h1></div>
         </header>
         <header class="panel-header" data-for="shop-analytics">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Sales Analytics</h1></div>
+          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Sales Analytics</h1></div>
         </header>
         <header class="panel-header" data-for="shop-settings">
-          <div><p class="panel-eyebrow">Shop</p><h1 class="panel-title">Shop Settings</h1></div>
+          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Settings</h1></div>
         </header>
       </div>
 
@@ -857,14 +857,15 @@
           <div class="prod-panel-body">
             <div class="prod-toolbar">
               <input type="search" id="shopProductSearch" placeholder="Search products…" style="flex:1;max-width:260px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:13px">
-              <select id="shopProductType" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary)">
-                <option value="">All types</option>
-                <option value="ebook">eBook</option>
-                <option value="paperback">Paperback</option>
-                <option value="saas">SaaS</option>
-                <option value="course">Course</option>
-                <option value="extension">Extension</option>
-                <option value="bundle">Bundle</option>
+              <select id="shopProductCategory" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary)">
+                <option value="">All sections</option>
+                <option value="field-guide">📗 Field Guides</option>
+                <option value="playbook">⚡ Playbooks</option>
+                <option value="research">🔍 Research</option>
+                <option value="tool">🔧 Tools</option>
+                <option value="saas">☁️ SaaS Products</option>
+                <option value="service">🤝 Services</option>
+                <option value="bundle">📦 Bundles</option>
               </select>
               <select id="shopProductStatus" style="height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary)">
                 <option value="">All statuses</option>
@@ -885,28 +886,65 @@
                 </div>
                 <form class="prod-form-body" id="prodFormEl">
                   <div class="prod-form-section">
-                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. Instagram Growth Blueprint" required></div>
+                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. The Advertising Playbook Vol.1" required></div>
                     <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
+
+                    <!-- Intelligence Library section + fulfillment type -->
                     <div class="field-row">
-                      <div class="field"><label for="prodFormType">Type</label>
-                        <select id="prodFormType">
-                          <option value="ebook">📗 eBook</option><option value="paperback">📘 Paperback</option>
-                          <option value="saas">☁️ SaaS</option><option value="course">🎓 Course</option>
-                          <option value="extension">🔌 Extension</option><option value="bundle">📦 Bundle</option>
+                      <div class="field">
+                        <label for="prodFormCategory">Library Section <span class="required">*</span></label>
+                        <select id="prodFormCategory">
+                          <option value="">— Select section —</option>
+                          <option value="field-guide">📗 Field Guide</option>
+                          <option value="playbook">⚡ Automation Playbook</option>
+                          <option value="research">🔍 Research / Case Study</option>
+                          <option value="tool">🔧 Tool / Extension</option>
+                          <option value="saas">☁️ SaaS Product</option>
+                          <option value="service">🤝 Agency Service</option>
+                          <option value="bundle">📦 Bundle</option>
                         </select>
                       </div>
-                      <div class="field"><label for="prodFormStatus">Status</label>
-                        <select id="prodFormStatus"><option value="active">Active</option><option value="draft">Draft</option></select>
+                      <div class="field">
+                        <label for="prodFormType">Fulfillment Type <span class="required">*</span></label>
+                        <select id="prodFormType">
+                          <option value="download">⬇️ Download (ebook, PDF, template)</option>
+                          <option value="subscription">🔄 Subscription (recurring)</option>
+                          <option value="service">📞 Service (booking / consultation)</option>
+                          <option value="saas">☁️ SaaS (app access)</option>
+                        </select>
                       </div>
                     </div>
+
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormStatus">Status</label>
+                        <select id="prodFormStatus">
+                          <option value="active">Active</option>
+                          <option value="draft">Draft</option>
+                        </select>
+                      </div>
+                      <div class="field"><label for="prodFormFeatured">Featured</label>
+                        <select id="prodFormFeatured">
+                          <option value="false">No</option>
+                          <option value="true">Yes — show on hub page</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div class="field-row">
                       <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
                       <div class="field"><label for="prodFormCurrency">Currency</label>
-                        <select id="prodFormCurrency"><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="CAD">CAD</option><option value="AUD">AUD</option></select>
+                        <select id="prodFormCurrency">
+                          <option value="USD">USD — US Dollar</option>
+                          <option value="NGN">NGN — Nigerian Naira</option>
+                          <option value="GBP">GBP — British Pound</option>
+                          <option value="EUR">EUR — Euro</option>
+                        </select>
                       </div>
                     </div>
-                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description…"></textarea></div>
-                    <div class="field"><label for="prodFormVariants">Variants (JSON)</label><textarea id="prodFormVariants" rows="3" placeholder='[{"name":"Basic","price_usd":1900},{"name":"Pro","price_usd":4900}]'></textarea></div>
+
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pages…"></textarea></div>
+                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://…"></div>
+                    <div class="field"><label for="prodFormFulfillment">Fulfillment metadata (JSON)</label><textarea id="prodFormFulfillment" rows="3" placeholder='{"r2_key":"intelligence/playbooks/hospitality.zip","filename":"Hospitality Automation Suite.zip"}'></textarea></div>
                   </div>
                   <div class="prod-form-error" id="prodFormError" hidden></div>
                   <div class="prod-form-actions">
