@@ -515,18 +515,22 @@ export async function buildProject(input) {
   let renderReport = null;
   let nicheProfile = null;
 
+  // Cover export mode: "included" (default) | "separate" | "both"
+  const coverExport = (input.coverExport || 'included').toLowerCase();
+  let coverPdfBuffer = null;
+
   try {
     const { createAiPublishingPackage }  = await import('./aiPipeline.js');
     const { runDesignAgent }             = await import('./skills/design.js');
     const { runFormattingAgent }         = await import('./skills/formatting.js');
-    const { exportToPdf }                = await import('./exporter.js');
+    const { exportToPdf, exportCoverPdf, stripCoverPage } = await import('./exporter.js');
     const { detectNiche, validateEditorialPackage } = await import('./skills/editorial.js');
 
     // Phases 1–4 run inside createAiPublishingPackage:
     // Phase 1: Research agent (Tavily 4-query deep search)
     // Phase 2: Editorial quality gate (grades research, fills gaps, extracts cover stats)
     // Phase 3: Editorial writing (manuscript from approved research brief)
-    // Phase 4: Design agent (cover composed from research-driven stats)
+    // Phase 4: Design agent (cover composed from research-driven stats + interior images)
     console.log('[PathGuru] Phases 1–4: Research → Quality Gate → Editorial → Design...');
     const aiPackage = await createAiPublishingPackage(input, project);
     applyAiPackage(project, aiPackage);
@@ -538,33 +542,49 @@ export async function buildProject(input) {
     project.niche = niche;
     console.log(`[PathGuru] Niche detected: ${niche}`);
 
-    // Design already generated in Phase 4 — retrieve from aiPackage
-    console.log('[PathGuru] Phase 5: Finalising design tokens & cover...');
+    // Phase 5: Finalise design tokens, cover, interior images
+    console.log('[PathGuru] Phase 5: Finalising design tokens, cover & interior images...');
     design = await runDesignAgent(input, project, aiPackage.research || null, manuscript);
     project.coverHtml = design.coverHtml;
 
-    // 4. Format pass 1 → get renderReport
-    console.log('[PathGuru] Phase 3: Layout engine (pass 1)...');
-    const pass1 = await runFormattingAgent(project, manuscript, design);
+    // Determine whether to embed cover in interior HTML
+    const embedCoverInInterior = coverExport !== 'separate';
+
+    // Phase 6: Format pass 1 → get renderReport
+    console.log('[PathGuru] Phase 6: Layout engine (pass 1)...');
+    const pass1 = await runFormattingAgent(project, manuscript, design, { includeCover: embedCoverInInterior });
     html        = pass1.html;
     renderReport = pass1.renderReport;
 
-    // 5. Feedback loop (AI writing pass 2 — fixes weak sections)
+    // Phase 7: Feedback loop (AI writing pass 2 — fixes weak sections)
     const weakCount = (renderReport?.sections || []).filter(s => s.issues?.length > 0).length;
     if (weakCount > 0) {
-      console.log(`[PathGuru] Phase 4: Feedback loop (${weakCount} sections to improve)...`);
+      console.log(`[PathGuru] Phase 7: Feedback loop (${weakCount} sections to improve)...`);
       manuscript = await runFeedbackLoop(manuscript, renderReport, nicheProfile, project);
 
-      // 6. Format pass 2 — re-render with improved content
-      console.log('[PathGuru] Phase 5: Layout engine (pass 2 — post-feedback)...');
-      const pass2 = await runFormattingAgent(project, manuscript, design);
+      // Phase 8: Format pass 2 — re-render with improved content
+      console.log('[PathGuru] Phase 8: Layout engine (pass 2 — post-feedback)...');
+      const pass2 = await runFormattingAgent(project, manuscript, design, { includeCover: embedCoverInInterior });
       html        = pass2.html;
       renderReport = pass2.renderReport;
     }
 
-    // 7. PDF post-processing
-    console.log('[PathGuru] Phase 6: PDF post-processing (metadata, bookmarks, page labels)...');
+    // Phase 9: PDF export (interior)
+    console.log('[PathGuru] Phase 9: PDF post-processing (metadata, bookmarks, page labels)...');
     pdfBuffer = await exportToPdf(html, project, manuscript, renderReport);
+
+    // Phase 10: Cover PDF — export separately if requested
+    if (coverExport === 'separate' || coverExport === 'both') {
+      console.log('[PathGuru] Phase 10: Exporting cover as standalone PDF...');
+      coverPdfBuffer = await exportCoverPdf(design.coverHtml, project);
+    }
+
+    // If "separate", strip the cover page from the interior (it was rendered without the cover block,
+    // but exportToPdf may still include a blank first page from margin/frontmatter — strip it)
+    if (coverExport === 'separate' && pdfBuffer) {
+      // Interior was already formatted without cover (includeCover: false) — no stripping needed
+      console.log('[PathGuru] Cover exported separately — interior PDF starts at Chapter 1.');
+    }
 
   } catch (err) {
     console.error('[PathGuru] Pipeline error:', err.message);
@@ -576,13 +596,47 @@ export async function buildProject(input) {
     } catch {}
   }
 
-  // Compliance report
+  // Compliance report — merge in automated font & preflight check results
   project.complianceReport = createComplianceReport(project);
   const compliance = project.complianceReport;
+  if (project._autoChecks) {
+    compliance.fontEmbedding = project._autoChecks.fontCheck;
+    compliance.preflight     = project._autoChecks.preflightCheck;
+    // Upgrade status to 'fail' if font check definitively found unembedded fonts
+    if (project._autoChecks.fontCheck?.ok === false) {
+      compliance.status = 'fail';
+      compliance.checks.push({
+        name: 'Font embedding (automated)',
+        status: 'fail',
+        message: project._autoChecks.fontCheck.message,
+      });
+    } else if (project._autoChecks.fontCheck?.ok === true) {
+      compliance.checks.push({
+        name: 'Font embedding (automated)',
+        status: 'pass',
+        message: project._autoChecks.fontCheck.message,
+      });
+    }
+    if (project._autoChecks.preflightCheck?.ok === true) {
+      compliance.checks.push({
+        name: 'PDF preflight (automated)',
+        status: 'pass',
+        message: project._autoChecks.preflightCheck.message,
+      });
+    } else if (project._autoChecks.preflightCheck?.ok === false) {
+      compliance.checks.push({
+        name: 'PDF preflight (automated)',
+        status: 'fail',
+        message: project._autoChecks.preflightCheck.message,
+      });
+    }
+  }
 
   return {
     html,
-    pdfBase64:   pdfBuffer ? pdfBuffer.toString('base64') : null,
+    pdfBase64:      pdfBuffer      ? pdfBuffer.toString('base64')      : null,
+    coverPdfBase64: coverPdfBuffer ? coverPdfBuffer.toString('base64') : null,
+    coverExport,
     manuscript:  manuscript || { title: project.title, subtitle: project.subtitle, sections: project.sections || [] },
     design:      design     || { design: { palette:{}, fontStack:'Georgia, serif' }, coverHtml:'' },
     compliance,

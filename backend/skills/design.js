@@ -495,6 +495,9 @@ export async function runDesignAgent(input, project, research, manuscript) {
 
   const coverHtml = composeCoverHtml({ project, manuscript, tokens, coverImage, fontImport, inlineFontCss, style });
 
+  // Source interior chapter images from Pexels (skips chapter 1 — usually the book intro)
+  const interiorImages = await fetchInteriorImages(manuscript, project);
+
   return {
     design: {
       style,
@@ -506,10 +509,49 @@ export async function runDesignAgent(input, project, research, manuscript) {
       fontImport,
       inlineFontCss,
       coverImage,
+      interiorImages,
       tokens,
     },
     coverHtml,
   };
+}
+
+/* ── Interior chapter images ────────────────────────────────────────────── */
+// Fetches 1 Pexels image for chapters 2–4. Chapter 1 intentionally skipped
+// (it usually opens with an abstract or framing — an image would distract).
+// For digitalNation / pathfinda styles, images are suppressed on chapter openers
+// as those publishers use data-viz and text-only interior layouts.
+async function fetchInteriorImages(manuscript, project) {
+  if (!process.env.PEXELS_API_KEY) return {};
+  const style = project.publisherProfile?.resolvedStyle || '';
+  // Data-viz publisher styles use text-only interiors — no chapter images
+  if (style === 'digitalNation' || style === 'pathfinda') return {};
+
+  const sections = (manuscript?.sections || []).filter(s => {
+    const layout = (s.designIntent?.layout || s.type || '').toLowerCase();
+    return layout === 'chapter' || layout === 'section';
+  });
+
+  // Pick chapters 2, 3, 4 (index 1–3) for images
+  const targets = sections.slice(1, 4);
+  const topic   = project.title || project.topic || '';
+  const images  = {};
+
+  for (const ch of targets) {
+    try {
+      const query   = `${ch.title} ${topic}`.slice(0, 80);
+      const results = await searchPexels(query, { orientation: 'landscape', perPage: 3 });
+      // Pick the most relevant result (first one after Pexels ranking)
+      if (results?.[0]?.url) {
+        images[ch.title] = results[0].url;
+        console.log(`[PathGuru Design] Interior image sourced for "${ch.title}": ${results[0].url}`);
+      }
+    } catch (e) {
+      console.warn(`[PathGuru Design] Interior image search failed for "${ch.title}":`, e.message);
+    }
+  }
+
+  return images;
 }
 
 function esc(s = '') {

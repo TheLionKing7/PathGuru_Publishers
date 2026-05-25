@@ -39,7 +39,8 @@ const NICHE_TYPO = {
 };
 
 /* ── Main export ─────────────────────────────────────── */
-export async function runFormattingAgent(project, manuscript, design) {
+export async function runFormattingAgent(project, manuscript, design, options = {}) {
+  const includeCover = options.includeCover !== false; // default true
 
   /* ── Token resolution ── */
   const p           = design?.design?.palette   || {};
@@ -63,11 +64,16 @@ export async function runFormattingAgent(project, manuscript, design) {
   const chNumClr   = p.chapterNumFg   || accent;
 
   /* ── KDP page spec ── */
-  const kdp    = project.kdpProfile || {};
-  const pageW  = kdp.pageWidthIn    || 6;
-  const pageH  = kdp.pageHeightIn   || 9;
-  const gutter = kdp.safeMarginIn   || 0.75;
-  const margin = 0.5;
+  const kdp        = project.kdpProfile || {};
+  const pageW      = kdp.pageWidthIn    || 6;
+  const pageH      = kdp.pageHeightIn   || 9;
+  const bleed      = kdp.bleed          || false;
+  const bleedPad   = bleed ? 0.125 : 0;          // 0.125in bleed on each side
+  const gutter     = (kdp.safeMarginIn  || 0.75) + bleedPad;
+  const margin     = 0.5 + bleedPad;
+
+  /* ── Interior images from design agent ── */
+  const interiorImages = design?.design?.interiorImages || {};
 
   const title     = manuscript?.title    || project.title    || 'Untitled';
   const author    = project.author       || '';
@@ -248,6 +254,12 @@ export async function runFormattingAgent(project, manuscript, design) {
     const subh    = Array.isArray(intent.subheadings) ? intent.subheadings : [];
     const issues  = checkSection(s);
     renderReport.sections.push({ title: s.title, type: 'chapter', issues, wordCount: (s.body||'').split(/\s+/).length });
+    // Interior image — sourced from Pexels by design agent, keyed by chapter title
+    const imgUrl  = s.imageUrl || interiorImages[s.title] || null;
+    const imgHtml = imgUrl ? `
+  <div class="ch-image-band">
+    <img src="${imgUrl}" alt="${esc(s.title)}" class="ch-image" loading="eager">
+  </div>` : '';
     return `
 <section class="pg-section pg-chapter" aria-label="${esc(s.title)}">
   <div class="chapter-opener">
@@ -256,6 +268,7 @@ export async function runFormattingAgent(project, manuscript, design) {
     <h2 class="section-heading">${esc(s.title)}</h2>
     <div class="chapter-rule"></div>
   </div>
+  ${imgHtml}
   ${stat ? calloutStat(stat) : ''}
   <div class="chapter-body">${dropCap(s.body, subh)}</div>
   ${pull ? `
@@ -403,7 +416,7 @@ export async function runFormattingAgent(project, manuscript, design) {
   }).join('\n');
 
   const refsHtml    = renderReferences(citations);
-  const coverBlock  = coverHtml ? `<div class="cover-frame">${coverHtml}</div>` : '';
+  const coverBlock  = (includeCover && coverHtml) ? `<div class="cover-frame">${coverHtml}</div>` : '';
   const weakCount   = renderReport.sections.filter(s => s.issues?.length > 0).length;
   if (weakCount) renderReport.warnings.push(`${weakCount} section(s) flagged for feedback loop`);
 
@@ -418,11 +431,12 @@ export async function runFormattingAgent(project, manuscript, design) {
   <title>${esc(title)}</title>
   ${inlineFontCss || (fontImport ? `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="${fontImport}" rel="stylesheet">` : '')}
   <style>
-    /* KDP @page */
+    /* KDP @page — page size includes 0.125in bleed on all sides when bleed:true */
     @page {
       size: ${pageW}in ${pageH}in;
-      margin-top: ${margin}in; margin-bottom: ${margin+0.14}in;
+      margin-top: ${margin}in; margin-bottom: ${(margin+0.14).toFixed(3)}in;
       margin-outside: ${margin}in; margin-inside: ${gutter}in;
+      ${bleed ? '/* bleed: 0.125in on all sides — background fills to page edge */' : ''}
     }
     @page :left  { @top-left   { content:"${esc(title)}";  font-family:${bodyFont}; font-size:7pt; color:#aaa; letter-spacing:.04em; } @bottom-center { content:counter(page); font-family:${bodyFont}; font-size:7.5pt; color:#bbb; } }
     @page :right { @top-right  { content:"${esc(author)}"; font-family:${bodyFont}; font-size:7pt; color:#aaa; letter-spacing:.04em; } @bottom-center { content:counter(page); font-family:${bodyFont}; font-size:7.5pt; color:#bbb; } }
@@ -484,6 +498,8 @@ export async function runFormattingAgent(project, manuscript, design) {
     .chapter-opener { margin-bottom:18pt; }
     .chapter-number { display:block; font-family:${titleFont}; font-size:${t.chNum}; font-weight:900; line-height:1; color:${accent}; opacity:${t.chOp}; letter-spacing:-.05em; margin-bottom:-26pt; user-select:none; }
     .chapter-rule { width:100%; height:.5pt; background:${ruleColor}; margin:16pt 0 22pt; }
+    .ch-image-band { width:100%; margin:0 0 22pt; break-inside:avoid; overflow:hidden; border-radius:4pt; }
+    .ch-image { width:100%; max-height:2.4in; object-fit:cover; display:block; }
     .drop-cap { float:left; font-family:${titleFont}; font-size:${t.drop}; line-height:.80; font-weight:700; color:${accent}; margin:4pt 7pt 0 0; }
     .chapter-body { clear:both; }
     .chapter-body p { text-align:justify; }

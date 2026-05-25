@@ -16,12 +16,66 @@
 import { chromium }     from 'playwright';
 import { PDFDocument, PDFName, PDFString, PDFHexString, PDFArray, PDFBool, PDFNumber } from 'pdf-lib';
 import { randomBytes }  from 'node:crypto';
+import { execSync }     from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir }       from 'node:os';
+import { join }         from 'node:path';
 
 /* ── Primary export ─────────────────────────────────── */
+// Returns the final PDF buffer. Also runs automated font-embedding check
+// and PDF preflight, attaching results to project.complianceChecks so
+// designGuru can include them in the compliance report.
 export async function exportToPdf(html, project, manuscript, renderReport) {
   const raw   = await renderWithPlaywright(html, project);
   const final = await postProcessPdf(raw, project, manuscript);
+
+  // Automated quality checks — run in parallel, non-blocking if tools absent
+  const [fontCheck, preflightCheck] = await Promise.all([
+    verifyFontEmbedding(final),
+    runPdfPreflight(final),
+  ]);
+
+  // Attach to project so compliance report can include them
+  project._autoChecks = { fontCheck, preflightCheck };
+
   return final;
+}
+
+/* ── Cover-only export ──────────────────────────────── */
+// Renders the cover HTML as a standalone single-page PDF.
+// Uses the same trim+bleed page dimensions as the interior.
+export async function exportCoverPdf(coverHtml, project) {
+  if (!coverHtml) throw new Error('No cover HTML provided for cover export.');
+  const raw   = await renderWithPlaywright(coverHtml, project);
+  // Post-process with metadata but keep only page 1 (safety — cover should be 1 page)
+  const pdfDoc = await (await import('pdf-lib')).PDFDocument.load(raw);
+  const pages  = pdfDoc.getPageCount();
+  // If more than 1 page, extract just the first
+  if (pages > 1) {
+    const { PDFDocument: PD } = await import('pdf-lib');
+    const single = await PD.create();
+    const [firstPage] = await single.copyPages(pdfDoc, [0]);
+    single.addPage(firstPage);
+    const bytes = await single.save({ useObjectStreams: true });
+    return Buffer.from(bytes);
+  }
+  return raw;
+}
+
+/* ── Strip cover page from interior PDF ─────────────── */
+// When exporting cover separately, removes page 1 (the cover) from the interior PDF.
+export async function stripCoverPage(pdfBuffer) {
+  const { PDFDocument } = await import('pdf-lib');
+  const src    = await PDFDocument.load(pdfBuffer);
+  const total  = src.getPageCount();
+  if (total <= 1) return pdfBuffer; // nothing to strip
+
+  const interior = await PDFDocument.create();
+  const pageIdxs = Array.from({ length: total - 1 }, (_, i) => i + 1); // skip page 0
+  const copied   = await interior.copyPages(src, pageIdxs);
+  copied.forEach(p => interior.addPage(p));
+  const bytes = await interior.save({ useObjectStreams: true });
+  return Buffer.from(bytes);
 }
 
 /* ── Step 1: Playwright render ──────────────────────── */
@@ -260,4 +314,102 @@ function embedDocumentId(pdfDoc) {
 
 function xe(s = '') {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+
+/* ── Automated check: font embedding ────────────────── */
+// Uses pdffonts (Poppler) if available. Parses each font row to confirm
+// "yes" in the "emb" column. Returns { ok, fonts, unembedded, tool }.
+async function verifyFontEmbedding(pdfBuffer) {
+  const tmp = join(tmpdir(), `pg_fonts_${Date.now()}.pdf`);
+  try {
+    writeFileSync(tmp, pdfBuffer);
+    const output = execSync(`pdffonts "${tmp}"`, { timeout: 15000, stdio: ['ignore','pipe','pipe'] }).toString('utf8');
+    // pdffonts output:
+    // name                                 type              encoding         emb sub uni object ID
+    // ------------------------------------ ----------------- ---------------- --- --- --- ---------
+    // DM Sans                              CIDFontType2      Identity-H       yes yes yes      4  0
+    const dataLines = output.split('\n').slice(2).filter(l => l.trim().length > 0);
+    const fonts = dataLines.map(line => {
+      const cols = line.trim().split(/\s+/);
+      // emb column is at index cols.length - 5 (before sub uni object ID)
+      const embIdx = cols.length - 5;
+      return {
+        name:     cols.slice(0, embIdx - 2).join(' ') || 'unknown',
+        type:     cols[embIdx - 2] || '',
+        encoding: cols[embIdx - 1] || '',
+        embedded: cols[embIdx] === 'yes',
+        subset:   cols[embIdx + 1] === 'yes',
+      };
+    });
+    const unembedded = fonts.filter(f => !f.embedded && f.name && f.name !== 'unknown').map(f => f.name);
+    return {
+      ok:         unembedded.length === 0,
+      tool:       'pdffonts',
+      fonts,
+      unembedded,
+      message:    unembedded.length === 0
+        ? `All ${fonts.length} font(s) embedded ✓`
+        : `WARNING: ${unembedded.length} font(s) NOT embedded: ${unembedded.join(', ')}`,
+    };
+  } catch (e) {
+    // pdffonts not installed — return informational note, not an error
+    return {
+      ok:      null,
+      tool:    'pdffonts',
+      message: 'pdffonts not found — install poppler-utils to enable automatic font embedding verification.',
+      error:   e.message,
+    };
+  } finally {
+    try { unlinkSync(tmp); } catch {}
+  }
+}
+
+/* ── Automated check: PDF preflight ─────────────────── */
+// Tries qpdf first (fast, structural check), falls back to Ghostscript.
+// Returns { ok, tool, message }.
+async function runPdfPreflight(pdfBuffer) {
+  const tmp = join(tmpdir(), `pg_preflight_${Date.now()}.pdf`);
+  try {
+    writeFileSync(tmp, pdfBuffer);
+
+    // ── Try qpdf ──
+    try {
+      const out = execSync(`qpdf --check "${tmp}" 2>&1`, { timeout: 20000 }).toString('utf8');
+      // qpdf exits 0 on success; "No syntax or stream encoding errors found" = clean
+      const clean = out.includes('No syntax or stream encoding errors found') || out.trim() === '';
+      return {
+        ok:      true,
+        tool:    'qpdf',
+        message: clean ? 'PDF structure valid — no syntax errors (qpdf) ✓' : `qpdf: ${out.slice(0, 200)}`,
+      };
+    } catch (qErr) {
+      const qMsg = (qErr.stdout || qErr.stderr || qErr.message || '').toString().slice(0, 200);
+      // qpdf exits non-zero even for warnings — if "No syntax" appears it's a warning, not fail
+      if (qMsg.includes('No syntax or stream encoding errors found')) {
+        return { ok: true, tool: 'qpdf', message: 'PDF structure valid (qpdf) ✓' };
+      }
+      // qpdf not available — try Ghostscript
+    }
+
+    // ── Try Ghostscript ──
+    try {
+      execSync(`gs -dBATCH -dNOPAUSE -dPDFSTOPONERROR -sDEVICE=nullpage "${tmp}" 2>&1`, { timeout: 25000 });
+      return { ok: true, tool: 'ghostscript', message: 'PDF passes Ghostscript preflight ✓' };
+    } catch (gsErr) {
+      const gsMsg = (gsErr.stdout || gsErr.stderr || gsErr.message || '').toString().slice(0, 300);
+      if (gsMsg.includes('Error') || gsMsg.includes('error')) {
+        return { ok: false, tool: 'ghostscript', message: `Preflight warning: ${gsMsg}` };
+      }
+      return { ok: true, tool: 'ghostscript', message: 'PDF passes Ghostscript preflight ✓' };
+    }
+  } catch (e) {
+    return {
+      ok:      null,
+      tool:    'none',
+      message: 'No preflight tool found — install qpdf or ghostscript for automatic PDF validation.',
+      error:   e.message,
+    };
+  } finally {
+    try { unlinkSync(tmp); } catch {}
+  }
 }

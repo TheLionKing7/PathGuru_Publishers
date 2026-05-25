@@ -19,7 +19,7 @@ export function createKdpProfile(input = {}) {
     minFontSizePt: envNumber("KDP_MIN_FONT_SIZE_PT", KDP_LIMITS.minFontSizePt),
     minImageDpi: envNumber("KDP_MIN_IMAGE_DPI", KDP_LIMITS.minImageDpi),
     minLineWeightPt: KDP_LIMITS.minLineWeightPt,
-    pageWidthIn: bleed ? round(trimWidthIn + 0.125) : trimWidthIn,
+    pageWidthIn: bleed ? round(trimWidthIn + 0.25) : trimWidthIn,
     pageHeightIn: bleed ? round(trimHeightIn + 0.25) : trimHeightIn,
     safeMarginIn: inferSafeMargin(trimWidthIn, trimHeightIn),
     orientation: trimWidthIn > trimHeightIn ? "landscape" : "portrait"
@@ -34,9 +34,9 @@ export function createComplianceReport(project) {
     pass("Page size", `Print CSS uses ${profile.pageWidthIn} x ${profile.pageHeightIn} in page size.`),
     pass("Minimum font size", `Document CSS keeps body text above ${profile.minFontSizePt} pt.`),
     pass("Safe margins", `Content padding is set above the ${profile.safeMarginIn} in MVP safe-margin target.`),
-    warning("Embedded fonts", "MVP uses system fonts. Production PDF export must embed licensed fonts and verify them after rendering."),
-    warning("Image DPI", `No raster images are placed yet. Production exports must verify every image is at least ${profile.minImageDpi} DPI.`),
-    warning("PDF preflight", "A final pass/fail preflight requires inspecting the exported PDF file, not only the HTML design model.")
+    warning("Embedded fonts", "Font embedding is verified automatically via pdffonts after each render. Check fontEmbedding in the compliance report."),
+    warning("Image DPI", `SVG cover art is resolution-independent (✓). Raster images in interior must be ≥${profile.minImageDpi} DPI — verify before upload.`),
+    warning("PDF preflight", "Automated preflight runs via qpdf/Ghostscript after each render. Check preflight in the compliance report.")
   ];
 
   return {
@@ -47,7 +47,15 @@ export function createComplianceReport(project) {
 }
 
 export function getPageCss(profile) {
-  return `size: ${profile.pageWidthIn}in ${profile.pageHeightIn}in; margin: ${profile.safeMarginIn}in;`;
+  // When bleed is active, page size includes 0.125in bleed on all sides.
+  // Margin is safeMarginIn + 0.125 so content sits inside the trim + safe zone.
+  const bleedOffset = profile.bleed ? 0.125 : 0;
+  const contentMargin = round(profile.safeMarginIn + bleedOffset);
+  return `size: ${profile.pageWidthIn}in ${profile.pageHeightIn}in; margin: ${contentMargin}in;`;
+}
+
+export function getBleedOffset(profile) {
+  return profile.bleed ? 0.125 : 0;
 }
 
 function pass(name, message) {
