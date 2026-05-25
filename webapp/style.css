@@ -463,6 +463,372 @@ select option { background: var(--surface-2); }
   gap: var(--spacing-lg);
 }
 
+/* ── Assets sub-nav tab strip ──────────────── */
+/* Matches module-topnav / blog-subtabs pattern */
+.assets-subnav {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 2px solid var(--border);
+  padding: 0 var(--spacing-xl);
+  flex-shrink: 0;
+  background: var(--bg);
+  gap: 0;
+}
+
+.assets-subtab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 12px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s var(--ease-out), border-color 0.18s var(--ease-out);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.assets-subtab:hover { color: var(--text-primary); }
+.assets-subtab.active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+  font-weight: 600;
+}
+
+/* ── Assets sub-panels shell ─────────────── */
+.assets-subpanels {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Individual sub-panel ────────────────── */
+/* THIS was the root cause: no padding, so everything
+   sat flush against the left panel border wall.      */
+.assets-subpanel {
+  display: none;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  gap: 0;
+}
+.assets-subpanel.active { display: flex; }
+
+/* Override: form-section inside assets gets tighter top spacing */
+.assets-subpanel .form-section:first-child { margin-top: 0; }
+
+/* ── Upload zone — replaces native <input type=file> ── */
+.upload-zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 20px;
+  border: 1.5px dashed var(--border-light);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease;
+  min-height: 110px;
+}
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: var(--gold);
+  background: var(--surface-3);
+}
+.upload-zone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.upload-zone-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.18s ease;
+}
+.upload-zone:hover .upload-zone-icon { color: var(--gold); }
+.upload-zone-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.upload-zone-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.upload-zone-preview {
+  max-width: 72px;
+  max-height: 72px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  border: 1px solid var(--border-light);
+  display: none;
+}
+.upload-zone.has-file .upload-zone-preview { display: block; }
+.upload-zone.has-file .upload-zone-icon    { display: none; }
+.upload-zone-filename {
+  font-size: 11.5px;
+  color: var(--gold);
+  font-weight: 600;
+  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.upload-zone.has-file .upload-zone-filename { display: block; }
+.upload-zone-clear {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+  z-index: 2;
+}
+.upload-zone.has-file .upload-zone-clear { display: flex; }
+.upload-zone-clear:hover { background: var(--red); color: #fff; }
+
+/* Multi-file upload zone variant */
+.upload-zone.multi .upload-zone-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: none;
+}
+.upload-zone.multi.has-file .upload-zone-count { display: block; }
+
+/* ── Colour palette field ─────────────────── */
+/* Three swatch pickers + hex display; far more
+   intuitive than comma-separated hex strings.  */
+.palette-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+.palette-swatches {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.swatch-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.swatch-picker {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-light);
+  cursor: pointer;
+  padding: 2px;
+  background: var(--surface-2);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.swatch-picker:hover { border-color: var(--gold); transform: scale(1.08); }
+.swatch-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.palette-hex-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.palette-hex-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--text-secondary);
+}
+.palette-hex-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,.12);
+}
+/* Hidden legacy text input — still present for API but not shown */
+.palette-text-input { display: none; }
+
+/* ── Brand identity card grid (logo + palette) ── */
+.brand-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+@media (max-width: 720px) { .brand-grid { grid-template-columns: 1fr; } }
+
+/* ── Section divider within a subpanel ────── */
+.assets-section-divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--spacing-xl) 0 var(--spacing-lg);
+}
+
+/* ── Section eyebrow label ──────────────── */
+.assets-section-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.10em;
+  color: var(--gold);
+  margin-bottom: 2px;
+}
+.assets-section-heading {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  letter-spacing: -0.01em;
+}
+.assets-section-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-md);
+}
+
+/* ── Template grid ─────────────────────── */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--spacing-md);
+}
+.template-card {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease;
+  background: var(--surface);
+}
+.template-card:hover { border-color: var(--border-light); transform: translateY(-2px); }
+.template-card.selected { border-color: var(--gold); }
+.template-thumb {
+  height: 100px;
+  width: 100%;
+}
+.template-meta { padding: 10px 12px; }
+.template-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.template-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Learning library upload zone ─────── */
+.library-upload { margin-bottom: var(--spacing-md); }
+.library-upload input[type="file"] { display: none; }
+.library-upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border: 1.5px dashed var(--border-light);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.library-upload-label:hover,
+.library-upload-label.drag-over {
+  border-color: var(--gold);
+  background: var(--surface-3);
+}
+.library-upload-label.drag-over {
+  border-style: solid;
+  background: color-mix(in srgb, var(--gold) 6%, var(--surface-3));
+}
+.library-upload-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.library-upload-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.library-list { display: flex; flex-direction: column; gap: 6px; }
+.library-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: var(--spacing-md) 0;
+}
+.library-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+  animation: fadeInUp 0.2s var(--ease-out);
+}
+.library-item-icon { color: var(--red); flex-shrink: 0; }
+.library-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-item-size { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+.library-item-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.library-item-remove:hover { color: var(--red); }
+
 .assets-search-bar {
   display: flex;
   gap: var(--spacing-sm);

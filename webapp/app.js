@@ -500,6 +500,9 @@ function collectFormData () {
     brandPrimaryColor:  State.get('settings').brandPrimaryColor || '',
     brandSecondaryColor:State.get('settings').brandSecondaryColor || '',
     brandFontStack:     State.get('settings').brandFontStack || '',
+    // Assets-tab palette: swatch-driven hidden input takes priority over settings
+    brandPalette:       get('projBrandPalette') || '',
+    selectedTemplate:   get('projTemplate') || '',
   };
 }
 
@@ -696,6 +699,210 @@ document.addEventListener('DOMContentLoaded', () => {
     topicEl.dispatchEvent(new Event('input'));
     toast('Topic pre-filled from browser clipper', 'info');
   }
+
+  // ── Assets tab: colour swatches ──────────────────────────────────────────
+  (function wireSwatches () {
+    const swatches   = [
+      document.getElementById('swatch1'),
+      document.getElementById('swatch2'),
+      document.getElementById('swatch3'),
+    ];
+    const hexRow     = document.getElementById('paletteHexRow');
+    const hiddenText = document.getElementById('projBrandPalette');
+    if (!swatches[0] || !hexRow || !hiddenText) return;
+
+    function updatePaletteUi () {
+      const vals = swatches.map(s => s.value);
+      // Rebuild hex chip spans
+      hexRow.innerHTML = vals.map(v =>
+        `<span class="palette-hex-chip"><span class="palette-hex-dot" style="background:${v}"></span>${v}</span>`
+      ).join('');
+      // Keep hidden input in sync for collectFormData
+      hiddenText.value = vals.join(', ');
+    }
+
+    swatches.forEach(s => s.addEventListener('input', updatePaletteUi));
+  })();
+
+  // ── Assets tab: upload zones ──────────────────────────────────────────────
+  (function wireUploadZones () {
+
+    // Generic single-file zone helper
+    function setupSingleZone ({ zoneId, inputId, previewId, filenameId, clearId }) {
+      const zone     = document.getElementById(zoneId);
+      const input    = document.getElementById(inputId);
+      const preview  = document.getElementById(previewId);
+      const filename = document.getElementById(filenameId);
+      const clear    = document.getElementById(clearId);
+      if (!zone || !input) return;
+
+      function applyFile (file) {
+        if (!file) return;
+        zone.classList.add('has-file');
+        if (filename) filename.textContent = file.name;
+        if (preview && file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = e => { preview.src = e.target.result; };
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function clearFile () {
+        input.value = '';
+        zone.classList.remove('has-file');
+        if (preview)  { preview.src = ''; }
+        if (filename) { filename.textContent = ''; }
+      }
+
+      // Click anywhere on the zone (except the clear btn) triggers file pick
+      zone.addEventListener('click', e => {
+        if (clear && e.target === clear) return;
+        input.click();
+      });
+      input.addEventListener('change', () => applyFile(input.files[0]));
+      if (clear) clear.addEventListener('click', e => { e.stopPropagation(); clearFile(); });
+
+      // Drag-and-drop
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (!file) return;
+        // Assign to the hidden file input via DataTransfer
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        applyFile(file);
+      });
+    }
+
+    // Multi-file zone helper (refs)
+    function setupMultiZone ({ zoneId, inputId, countId, clearId }) {
+      const zone  = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      const count = document.getElementById(countId);
+      const clear = document.getElementById(clearId);
+      if (!zone || !input) return;
+
+      function applyFiles (files) {
+        if (!files || files.length === 0) return;
+        zone.classList.add('has-file');
+        if (count) count.textContent = files.length === 1
+          ? '1 file selected'
+          : `${files.length} files selected`;
+      }
+
+      function clearFiles () {
+        input.value = '';
+        zone.classList.remove('has-file');
+        if (count) count.textContent = '';
+      }
+
+      zone.addEventListener('click', e => {
+        if (clear && e.target === clear) return;
+        input.click();
+      });
+      input.addEventListener('change', () => applyFiles(input.files));
+      if (clear) clear.addEventListener('click', e => { e.stopPropagation(); clearFiles(); });
+
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('drag-over');
+        const dt2 = new DataTransfer();
+        Array.from(e.dataTransfer.files).forEach(f => dt2.items.add(f));
+        input.files = dt2.files;
+        applyFiles(input.files);
+      });
+    }
+
+    setupSingleZone({ zoneId: 'logoZone',  inputId: 'projBrandLogo',    previewId: 'logoPreview',  filenameId: 'logoFilename', clearId: 'logoClear'  });
+    setupSingleZone({ zoneId: 'coverZone', inputId: 'projCoverImage',   previewId: 'coverPreview', filenameId: 'coverFilename', clearId: 'coverClear' });
+    setupMultiZone ({ zoneId: 'refsZone',  inputId: 'projCharacterRefs', countId: 'refsCount',      clearId: 'refsClear' });
+  })();
+
+  // ── Assets tab: PDF template selection ───────────────────────────────────
+  (function wireTemplateCards () {
+    const grid = document.getElementById('templateGrid');
+    if (!grid) return;
+    grid.addEventListener('click', e => {
+      const card = e.target.closest('.template-card');
+      if (!card) return;
+      grid.querySelectorAll('.template-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      // Reflect choice in a hidden input if present (for form collection)
+      let hidden = document.getElementById('projTemplate');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.id   = 'projTemplate';
+        document.getElementById('briefForm')?.appendChild(hidden);
+      }
+      if (hidden) hidden.value = card.dataset.template || '';
+    });
+  })();
+
+  // ── Assets tab: learning library file list ────────────────────────────────
+  (function wireLibrary () {
+    const fileInput  = document.getElementById('libraryFiles');
+    const listEl     = document.getElementById('libraryList');
+    if (!fileInput || !listEl) return;
+
+    let queuedFiles = [];
+
+    function renderLibraryList () {
+      if (queuedFiles.length === 0) {
+        listEl.innerHTML = '<div class="library-empty">No PDFs in the library yet. Upload reference books to teach the agent your house style.</div>';
+        return;
+      }
+      listEl.innerHTML = queuedFiles.map((f, i) => `
+        <div class="library-item" data-idx="${i}">
+          <svg class="library-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="library-item-name">${f.name}</span>
+          <span class="library-item-size">${(f.size / 1024).toFixed(0)} KB</span>
+          <button type="button" class="library-item-remove" data-idx="${i}" title="Remove">×</button>
+        </div>
+      `).join('');
+
+      listEl.querySelectorAll('.library-item-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const idx = parseInt(btn.dataset.idx, 10);
+          queuedFiles.splice(idx, 1);
+          renderLibraryList();
+        });
+      });
+    }
+
+    fileInput.addEventListener('change', () => {
+      const incoming = Array.from(fileInput.files).filter(f => f.type === 'application/pdf');
+      // Dedupe by name
+      incoming.forEach(f => {
+        if (!queuedFiles.find(q => q.name === f.name)) queuedFiles.push(f);
+      });
+      fileInput.value = '';
+      renderLibraryList();
+    });
+
+    // Also accept drops on the label area
+    const dropLabel = listEl.closest('.assets-subpanel')?.querySelector('.library-upload-label');
+    if (dropLabel) {
+      dropLabel.addEventListener('dragover', e => { e.preventDefault(); dropLabel.classList.add('drag-over'); });
+      dropLabel.addEventListener('dragleave', () => dropLabel.classList.remove('drag-over'));
+      dropLabel.addEventListener('drop', e => {
+        e.preventDefault();
+        dropLabel.classList.remove('drag-over');
+        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+        pdfs.forEach(f => {
+          if (!queuedFiles.find(q => q.name === f.name)) queuedFiles.push(f);
+        });
+        renderLibraryList();
+      });
+    }
+  })();
 
   // Initial render
   UI.render('settings');
