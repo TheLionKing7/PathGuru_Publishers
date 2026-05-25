@@ -5,18 +5,20 @@ const publisherProfiles = {
   pathfinda: {
     brandName: "PathFinda Publishers",
     theme: "Modern editorial authority",
+    style: "pathfinda",
     colors: ["#0B172A", "#3EA1FF", "#F6F8FB", "#FFFFFF"],
-    fonts: ["Inter", "Georgia", "Arial"],
-    layoutNotes: "Modern publishing brand with crisp blue accents, clean editorial forms, and premium white space.",
+    fonts: ["DM Sans", "Arial", "Helvetica"],
+    layoutNotes: "Modern publishing brand with crisp blue accents, clean editorial forms, and premium white space. Chapter openers: full-page dark navy. Callout boxes: navy background with gold left border. Tables: navy header row, alternating light blue rows.",
     logoHint: "PathFinda brand logo",
     logoUrl: ""
   },
   digitalNation: {
     brandName: "Digital Nation Inc.",
-    theme: "Digital authority and innovation",
-    colors: ["#102744", "#00B3CF", "#F4F7FB", "#FFFFFF"],
-    fonts: ["Inter", "Arial", "Helvetica"],
-    layoutNotes: "Tech-forward polished layouts with striking contrast, sharp grids, and confident callouts.",
+    theme: "Deep navy authority with gold accents",
+    style: "digitalNation",
+    colors: ["#1B2A4A", "#C9A446", "#FFFFFF", "#F5F0DC"],
+    fonts: ["DM Sans", "Arial", "Helvetica"],
+    layoutNotes: "Premium authority brand: deep navy (#1B2A4A) + gold (#C9A446). Chapter openers: full dark navy page, gold 'CHAPTER X' label, white bold title. Insider boxes: navy background, gold left border, gold label. Formula boxes: cream (#F5F0DC) background. Data-viz cover with exponential growth chart, no stock photos.",
     logoHint: "Digital Nation brand mark",
     logoUrl: ""
   }
@@ -68,7 +70,9 @@ function resolvePublisherProfile(input, publisher) {
       ...profile,
       colors: customColors.length ? customColors : profile.colors,
       fonts: customFonts.length ? customFonts : profile.fonts,
-      logoUrl: logoUrl || profile.logoUrl
+      logoUrl: logoUrl || profile.logoUrl,
+      // Pass the style key through so runDesignAgent uses the right token set
+      resolvedStyle: profile.style || null,
     };
   }
 
@@ -518,20 +522,24 @@ export async function buildProject(input) {
     const { exportToPdf }                = await import('./exporter.js');
     const { detectNiche, validateEditorialPackage } = await import('./skills/editorial.js');
 
-    // 1. Research + editorial (AI writing pass 1)
-    console.log('[PathGuru] Phase 1: Research + editorial...');
+    // Phases 1–4 run inside createAiPublishingPackage:
+    // Phase 1: Research agent (Tavily 4-query deep search)
+    // Phase 2: Editorial quality gate (grades research, fills gaps, extracts cover stats)
+    // Phase 3: Editorial writing (manuscript from approved research brief)
+    // Phase 4: Design agent (cover composed from research-driven stats)
+    console.log('[PathGuru] Phases 1–4: Research → Quality Gate → Editorial → Design...');
     const aiPackage = await createAiPublishingPackage(input, project);
     applyAiPackage(project, aiPackage);
     manuscript = validateEditorialPackage(aiPackage.manuscript, project);
 
-    // 2. Detect niche
+    // 5. Detect niche
     const { niche, profile } = detectNiche(project.topic || manuscript.title, project.writingMode || '');
     nicheProfile = profile;
     project.niche = niche;
     console.log(`[PathGuru] Niche detected: ${niche}`);
 
-    // 3. Design agent (cover + tokens)
-    console.log('[PathGuru] Phase 2: Design + cover composition...');
+    // Design already generated in Phase 4 — retrieve from aiPackage
+    console.log('[PathGuru] Phase 5: Finalising design tokens & cover...');
     design = await runDesignAgent(input, project, aiPackage.research || null, manuscript);
     project.coverHtml = design.coverHtml;
 

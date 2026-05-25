@@ -13,6 +13,14 @@
 
 import { detectNiche } from './editorial.js';
 
+/* ── Publisher style overrides (take precedence over niche typo) ─────── */
+const PUBLISHER_TYPO = {
+  // Digital Nation Inc. — Navy + Gold authority style
+  digitalNation: { chNum:'82pt', chOp:'.08', hSize:'22pt', hWeight:'700', bSize:'10.5pt', lh:'1.65', pqSize:'14pt', pqStyle:'normal', track:'.14em', drop:'58pt', shSize:'12pt', shWeight:'700', gap:'0.56in' },
+  // PathFinda Publishers — Navy + Blue editorial style
+  pathfinda:     { chNum:'80pt', chOp:'.09', hSize:'22pt', hWeight:'700', bSize:'10.5pt', lh:'1.62', pqSize:'13.5pt', pqStyle:'normal', track:'.13em', drop:'56pt', shSize:'11.5pt', shWeight:'700', gap:'0.54in' },
+};
+
 /* ── Niche typography overrides ─────────────────────── */
 const NICHE_TYPO = {
   business:   { chNum:'80pt', chOp:'.10', hSize:'22pt', hWeight:'700', bSize:'10.5pt', lh:'1.62', pqSize:'14pt', pqStyle:'normal', track:'.14em', drop:'58pt', shSize:'11.5pt', shWeight:'700', gap:'0.55in' },
@@ -68,9 +76,10 @@ export async function runFormattingAgent(project, manuscript, design) {
   const sections  = manuscript?.sections || project.sections || [];
   const citations = manuscript?.citations || project.citations || [];
 
-  /* ── Detect niche for typography ── */
+  /* ── Detect niche for typography (publisher style overrides niche) ── */
   const { niche } = detectNiche(project.topic || title, project.writingMode || '');
-  const t = NICHE_TYPO[niche] || NICHE_TYPO.default;
+  const pubStyle = (design?.design?.style || '').toLowerCase();
+  const t = PUBLISHER_TYPO[pubStyle] || NICHE_TYPO[niche] || NICHE_TYPO.default;
 
   /* ── Render report ── */
   const renderReport = { niche, sections: [], totalSections: sections.length, warnings: [] };
@@ -183,7 +192,7 @@ export async function runFormattingAgent(project, manuscript, design) {
     const wc = (s.body||'').split(/\s+/).filter(Boolean).length;
     const type = (s.designIntent?.layout || s.type || 'chapter').toLowerCase();
     if (['chapter','section','introduction','intro','conclusion'].includes(type)) {
-      if (wc < 300)                        issues.push(`body too short (${wc} words, need 500+)`);
+      if (wc < 1200)                       issues.push(`body too short (${wc} words, need 1800+)`);
       if (!s.body?.includes('>>') && !s.designIntent?.pullQuote) issues.push('no pull quote — add >> sentence');
       if (/<[a-z]/i.test(s.body||''))      issues.push('HTML tags detected in body');
     }

@@ -165,10 +165,11 @@ const DESIGN_INTENT_SCHEMA = `"designIntent": {
 /* ══════════════════════════════════════════════════════
    EDITORIAL PROMPT — BOOK MANUSCRIPT
 ══════════════════════════════════════════════════════ */
-export function buildEditorialPrompt(input, project, research, nicheProfile) {
+export function buildEditorialPrompt(input, project, research, nicheProfile, libraryContext = '') {
   const profile = nicheProfile || NICHE_PROFILES.business;
 
   return `You are PathGuru Publishers — a world-class publishing team. Your output must be indistinguishable from a book produced by a top professional publisher.
+${libraryContext ? `\n${libraryContext}\n` : ''}
 
 NICHE VOICE PROFILE:
 - Voice: ${profile.voice}
@@ -208,7 +209,7 @@ REQUIRED JSON SHAPE:
     {
       "type": "frontmatter|chapter|checklist|worksheet|cta|pullquote|statblock",
       "title": "section title — NO 'Chapter N:' prefix. Just the title itself.",
-      "body": "PLAIN TEXT ONLY. Zero HTML tags of any kind. Use double newlines between paragraphs. Use >> at the START of a line for a pull-quote. Use - at the start for bullets. Use 1. for numbered lists. Use ALL CAPS LINE for sub-headings. Write 500-900 words for chapter sections.",
+      "body": "PLAIN TEXT ONLY. Zero HTML tags of any kind. Use double newlines between paragraphs. Use >> at the START of a line for a pull-quote sentence. Use - at the start for bullets. Use 1. for numbered lists. Use ALL CAPS LINE for sub-headings. MANDATORY: every chapter section body must be 1,800–2,500 words minimum. Count your words before submitting — do not stop writing until you reach 1,800 words for every chapter. Expand every concept with concrete examples, real-world scenarios, data points, practitioner insights, and practical application steps. Never summarise — always expand.",
       ${DESIGN_INTENT_SCHEMA}
     }
   ],
@@ -220,11 +221,14 @@ ABSOLUTE RULES — VIOLATIONS WILL CAUSE REJECTION:
 1. body: PLAIN TEXT ONLY. No HTML. No <p> <strong> <li> <ol> <ul> <br> or ANY tag. Ever.
 2. Section titles: Never include "Chapter 1:" etc. Just the title.
 3. designIntent.layout must be one of the exact enum values listed.
-4. designIntent.pullQuote must be an exact verbatim sentence from body, or null.
+4. designIntent.pullQuote must be an exact, complete, standalone sentence taken verbatim from the body — a genuine insight, not a heading, not a summary label, not a section title. If no such sentence exists, return null.
 5. Include frontmatter as section 0, CTA as the final section.
-6. Write FULL content — minimum 500 words per chapter. No stubs.
-7. Include 7 to 10 sections total.
-8. Every chapter must have a genuine opening hook matching the chapterOpenStyle above.`;
+6. Write FULL content — MINIMUM 1,800 words per chapter. Anything below 1,200 words is a publication failure and will be rejected.
+7. Include 8 to 12 sections total (frontmatter + 6–9 chapters + CTA).
+8. Every chapter must have a genuine opening hook matching the chapterOpenStyle above.
+9. Every chapter must contain at least 3 distinct sub-sections with ALL CAPS headings.
+10. Every chapter must contain at least one >> pull-quote that is a genuine insight sentence from the body.
+11. After writing each chapter body, mentally count the words. If under 1,800, continue writing more paragraphs before moving on.`;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -270,10 +274,10 @@ For each section listed above, return an improved version. Output STRICT JSON ON
 }
 
 FIX THESE SPECIFIC ISSUES:
-- "body too short": expand to 500+ words
-- "no pull quote found": add a >> prefixed sentence worth quoting
-- "HTML tags detected": rewrite body as clean plain text
-- "designIntent mismatch": correct the layout type
+- "body too short": expand to 1,800+ words minimum. Add more paragraphs, examples, data points, step-by-step instructions, and real-world application. Do not stop until the word count exceeds 1,800.
+- "no pull quote found": add a >> prefixed sentence — a genuine standalone insight from the body, not a heading.
+- "HTML tags detected": rewrite body as clean plain text, no tags.
+- "designIntent mismatch": correct the layout type.
 - "weak opening hook": rewrite opening paragraph per chapterOpenStyle: ${profile.chapterOpenStyle}`;
 }
 

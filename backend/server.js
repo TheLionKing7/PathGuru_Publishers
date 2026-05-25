@@ -35,6 +35,8 @@ import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
+import { getLibrarySummary, ensureLibraryDir }  from './referenceLibrary.js';
+import { extractPdfProfile }                     from './pdfDesignExtractor.js';
 import {
   uploadMediaAsset,
   listMediaAssets,
@@ -90,6 +92,45 @@ const server = createServer(async (req, res) => {
 
   const url  = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
+
+  // ── Reference Library ───────────────────────────
+  if (path === '/api/library' && req.method === 'GET') {
+    try {
+      const summary = await getLibrarySummary();
+      json(res, summary);
+    } catch (e) { err(res, e.message); }
+    return;
+  }
+
+  // POST /api/library/extract — extract design profile from a PDF in the library
+  // Body: { pdfPath: string, profileName: string }
+  if (path === '/api/library/extract' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const { pdfPath, profileName } = body;
+      if (!pdfPath || !profileName) {
+        return err(res, 'pdfPath and profileName are required', 400);
+      }
+      const safeProfile = profileName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+      console.log(`[Library] Extracting profile "${safeProfile}" from: ${pdfPath}`);
+      const profile = await extractPdfProfile(pdfPath, safeProfile);
+      json(res, {
+        ok: true,
+        message: `Profile "${safeProfile}" extracted and saved.`,
+        profile: {
+          name:      profile.name,
+          style:     profile.style,
+          books:     profile.books,
+          extractedAt: profile.extractedAt,
+          calloutTypes: profile.calloutTypes,
+          colorPalette: profile.colorPalette,
+          typography:   profile.typography,
+        },
+        usage: `Use in generation: { "publisher": "${safeProfile}" }`,
+      });
+    } catch (e) { err(res, e.message); }
+    return;
+  }
 
   // ── Health ──────────────────────────────────────
   if (path === '/health') {
