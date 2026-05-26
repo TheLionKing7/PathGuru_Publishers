@@ -823,6 +823,124 @@
         <div class="blog-dash-list" id="blogDashList"></div>
       </div><!-- /#blogViewDashboard -->
 
+      <!-- ── EDITOR VIEW ── -->
+      <div class="blog-view" id="blogViewEditor">
+
+        <!-- Header bar -->
+        <div class="blog-editor-header">
+          <button class="btn-secondary btn-sm" id="blogEditorBack">← Back to dashboard</button>
+          <div class="blog-editor-header-right">
+            <span class="blog-editor-status-badge" id="blogEditorStatusBadge"></span>
+            <button class="btn-secondary btn-sm" id="blogEditorCancel">Discard</button>
+            <button class="btn-primary btn-sm"   id="blogEditorSave">Save changes</button>
+          </div>
+        </div>
+
+        <!-- Meta fields -->
+        <div class="blog-editor-meta-row">
+          <div class="blog-editor-meta-field blog-editor-meta-title">
+            <label for="blogEditorTitle">Title</label>
+            <input type="text" id="blogEditorTitle" placeholder="Post title…">
+          </div>
+          <div class="blog-editor-meta-field">
+            <label for="blogEditorSlug">Slug</label>
+            <input type="text" id="blogEditorSlug" placeholder="url-slug">
+          </div>
+          <div class="blog-editor-meta-field">
+            <label for="blogEditorAuthor">Author</label>
+            <input type="text" id="blogEditorAuthor" placeholder="Author name">
+          </div>
+        </div>
+        <div class="blog-editor-meta-row">
+          <div class="blog-editor-meta-field" style="flex:1">
+            <label for="blogEditorMeta">Meta description</label>
+            <input type="text" id="blogEditorMeta" placeholder="SEO meta description…">
+          </div>
+          <div class="blog-editor-meta-field">
+            <label for="blogEditorKeyword">Focus keyword</label>
+            <input type="text" id="blogEditorKeyword" placeholder="SEO keyword">
+          </div>
+        </div>
+
+        <!-- Rich-text toolbar -->
+        <div class="blog-editor-toolbar" id="blogEditorToolbar" role="toolbar" aria-label="Formatting">
+          <!-- Font family -->
+          <select class="editor-select" id="editorFontFamily" title="Font family">
+            <option value="">Default font</option>
+            <option value="Georgia, serif">Georgia</option>
+            <option value="'Playfair Display', serif">Playfair Display</option>
+            <option value="'DM Sans', sans-serif">DM Sans</option>
+            <option value="Arial, sans-serif">Arial</option>
+            <option value="'Times New Roman', serif">Times New Roman</option>
+            <option value="'Courier New', monospace">Courier New</option>
+          </select>
+          <!-- Font size -->
+          <select class="editor-select editor-select-sm" id="editorFontSize" title="Font size">
+            <option value="">Size</option>
+            <option value="1">Small (10px)</option>
+            <option value="2">12px</option>
+            <option value="3">Normal (14px)</option>
+            <option value="4">16px</option>
+            <option value="5">Large (18px)</option>
+            <option value="6">24px</option>
+            <option value="7">36px</option>
+          </select>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Block format -->
+          <select class="editor-select" id="editorBlockFormat" title="Paragraph style">
+            <option value="p">Paragraph</option>
+            <option value="h1">Heading 1</option>
+            <option value="h2">Heading 2</option>
+            <option value="h3">Heading 3</option>
+            <option value="h4">Heading 4</option>
+            <option value="blockquote">Blockquote</option>
+            <option value="pre">Code</option>
+          </select>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Inline styles -->
+          <button class="editor-tool-btn" data-cmd="bold"        title="Bold (Ctrl+B)"><b>B</b></button>
+          <button class="editor-tool-btn" data-cmd="italic"      title="Italic (Ctrl+I)"><i>I</i></button>
+          <button class="editor-tool-btn" data-cmd="underline"   title="Underline (Ctrl+U)"><u>U</u></button>
+          <button class="editor-tool-btn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Colour -->
+          <label class="editor-color-label" title="Text colour">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 22h20L12 2z"/></svg>
+            <input type="color" id="editorTextColor" value="#1a2236" title="Text colour">
+          </label>
+          <label class="editor-color-label" title="Highlight colour">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <input type="color" id="editorBgColor" value="#ffffff" title="Highlight">
+          </label>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Lists & alignment -->
+          <button class="editor-tool-btn" data-cmd="insertUnorderedList" title="Bullet list">☰</button>
+          <button class="editor-tool-btn" data-cmd="insertOrderedList"   title="Numbered list">№</button>
+          <div class="editor-toolbar-sep"></div>
+          <button class="editor-tool-btn" data-cmd="justifyLeft"   title="Align left">⫷</button>
+          <button class="editor-tool-btn" data-cmd="justifyCenter" title="Align centre">≡</button>
+          <button class="editor-tool-btn" data-cmd="justifyRight"  title="Align right">⫸</button>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Link & undo/redo -->
+          <button class="editor-tool-btn" id="editorInsertLink" title="Insert link">🔗</button>
+          <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">↩</button>
+          <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">↪</button>
+          <div class="editor-toolbar-sep"></div>
+          <!-- Source toggle -->
+          <button class="editor-tool-btn editor-tool-source" id="editorSourceToggle" title="Toggle HTML source">&lt;/&gt;</button>
+        </div>
+
+        <!-- Editable content area -->
+        <div class="blog-editor-body">
+          <div class="blog-editor-area" id="blogEditorArea" contenteditable="true" spellcheck="true"></div>
+          <textarea class="blog-editor-source" id="blogEditorSource" hidden spellcheck="false"></textarea>
+        </div>
+
+        <input type="hidden" id="blogEditorPostId">
+        <input type="hidden" id="blogEditorPostSlug">
+
+      </div><!-- /#blogViewEditor -->
+
     </section><!-- /#tab-blog -->
 
     <!-- ── BLOG ASSETS ── -->

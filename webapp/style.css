@@ -2033,6 +2033,143 @@ select option { background: var(--surface-2); }
 .dash-menu-item.dash-menu-danger { color: var(--red); }
 .dash-menu-item.dash-menu-danger:hover { background: rgba(239,68,68,.10); }
 
+/* ── Dashboard inline action buttons ─────────────────────────── */
+.dash-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text-secondary); transition: background .15s, color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.dash-btn:hover { background: var(--surface-3); color: var(--text-primary); border-color: var(--border-mid); }
+.dash-btn.dash-btn-preview  { }
+.dash-btn.dash-btn-edit     { color: var(--gold); border-color: rgba(201,168,76,.35); }
+.dash-btn.dash-btn-edit:hover { background: rgba(201,168,76,.10); border-color: var(--gold); color: var(--gold); }
+.dash-btn.dash-btn-publish  { color: var(--green); border-color: rgba(62,207,142,.3); }
+.dash-btn.dash-btn-publish:hover  { background: rgba(62,207,142,.10); }
+.dash-btn.dash-btn-unpublish { color: var(--text-muted); }
+.dash-btn.dash-btn-delete   { color: var(--red); border-color: rgba(239,68,68,.25); }
+.dash-btn.dash-btn-delete:hover { background: rgba(239,68,68,.10); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BLOG POST EDITOR
+═══════════════════════════════════════════════════════════════════ */
+.blog-editor-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2); flex-shrink: 0; gap: 12px; flex-wrap: wrap;
+}
+.blog-editor-header-right { display: flex; align-items: center; gap: 8px; }
+.blog-editor-status-badge {
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 20px;
+}
+.blog-editor-status-badge.published { color: var(--green); background: rgba(62,207,142,.12); border: 1px solid rgba(62,207,142,.22); }
+.blog-editor-status-badge.draft     { color: var(--gold);  background: rgba(201,168,76,.12);  border: 1px solid rgba(201,168,76,.22); }
+
+.blog-editor-meta-row {
+  display: flex; gap: 12px; padding: 12px 20px 0; flex-wrap: wrap;
+}
+.blog-editor-meta-field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+.blog-editor-meta-title { flex: 2; }
+.blog-editor-meta-field label {
+  font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.blog-editor-meta-field input {
+  padding: 6px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface-2);
+  color: var(--text-primary); font-size: 13px; font-family: inherit;
+  transition: border-color .15s;
+}
+.blog-editor-meta-field input:focus { outline: none; border-color: var(--gold); }
+
+/* Toolbar */
+.blog-editor-toolbar {
+  display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  background: var(--surface-2); flex-shrink: 0; margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.editor-tool-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: transparent;
+  color: var(--text-secondary); font-size: 13px; cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  flex-shrink: 0;
+}
+.editor-tool-btn:hover  { background: var(--surface-3); color: var(--text-primary); border-color: var(--border); }
+.editor-tool-btn.active { background: rgba(201,168,76,.15); color: var(--gold); border-color: rgba(201,168,76,.35); }
+.editor-tool-source     { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 11px; width: auto; padding: 0 8px; }
+.editor-select {
+  height: 28px; padding: 0 6px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface-3);
+  color: var(--text-secondary); font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.editor-select:focus { outline: none; border-color: var(--gold); }
+.editor-select-sm { width: 72px; }
+.editor-toolbar-sep {
+  width: 1px; height: 18px; background: var(--border);
+  margin: 0 4px; flex-shrink: 0;
+}
+.editor-color-label {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; cursor: pointer; position: relative;
+  transition: background .12s, border-color .12s;
+}
+.editor-color-label:hover { background: var(--surface-3); border-color: var(--border); }
+.editor-color-label input[type="color"] {
+  position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none;
+}
+.editor-color-label svg { color: var(--text-secondary); pointer-events: none; }
+
+/* Editor body */
+.blog-editor-body {
+  flex: 1; overflow-y: auto; padding: 20px;
+  display: flex; flex-direction: column;
+}
+.blog-editor-area {
+  flex: 1; min-height: 480px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 28px 36px; background: var(--surface-2);
+  color: var(--text-primary); font-size: 15px; line-height: 1.7;
+  outline: none; overflow-y: auto;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+.blog-editor-area:focus { border-color: var(--gold); }
+.blog-editor-area h1,
+.blog-editor-area h2 { font-size: 26px; font-weight: 700; margin: 1.4em 0 .5em; color: var(--text-primary); }
+.blog-editor-area h3 { font-size: 21px; font-weight: 700; margin: 1.2em 0 .4em; color: var(--text-primary); }
+.blog-editor-area h4 { font-size: 17px; font-weight: 700; margin: 1em 0 .3em; color: var(--text-primary); }
+.blog-editor-area p  { margin-bottom: .9em; }
+.blog-editor-area blockquote {
+  border-left: 3px solid var(--gold); padding: 10px 18px;
+  margin: 1em 0; background: var(--surface-3); border-radius: 0 6px 6px 0;
+  font-style: italic; color: var(--text-secondary);
+}
+.blog-editor-area a  { color: var(--gold); text-decoration: underline; }
+.blog-editor-area ul,
+.blog-editor-area ol { padding-left: 1.6em; margin-bottom: .9em; }
+.blog-editor-area li { margin-bottom: .3em; }
+.blog-editor-area pre, .blog-editor-area code {
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+  background: var(--surface-3); border-radius: 4px; padding: 2px 6px;
+}
+.blog-editor-area pre { padding: 14px 18px; }
+.blog-editor-source {
+  flex: 1; min-height: 480px; padding: 20px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--text-primary);
+  font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+  line-height: 1.6; resize: none; outline: none;
+  display: none;
+}
+.blog-editor-source:focus { border-color: var(--gold); }
+.blog-editor-source.visible { display: block; }
+
 /* ═════════════════════════════════════════════════════════════════
    MODULE SHELL  —  3 top-level modules (Publishing / Blog / Shop)
    Each shell holds a top-tab strip and a body that contains the

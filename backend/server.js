@@ -390,6 +390,47 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── PUT /api/posts/:id — update post (Supabase + DigiFusion) ────
+  if (req.method === 'PUT' && postsMatch) {
+    try {
+      const id   = decodeURIComponent(postsMatch[1]);
+      const body = await readBody(req);
+      const results = {};
+
+      // 1. Update Supabase
+      const sbResult = await dbUpdatePost(id, body);
+      if (sbResult?.error) console.warn('[PUT /api/posts] Supabase update warning:', sbResult.error);
+      else results.supabase = sbResult;
+
+      // 2. Upsert DigiFusion CMS (uses slug from body or id fallback)
+      if (!body._skipCms) {
+        const cmsPayload = {
+          slug:             body.slug || id,
+          title:            body.title,
+          content:          body.content,
+          excerpt:          body.excerpt          || '',
+          meta_description: body.metaDescription  || body.meta_description || '',
+          focus_keyword:    body.focusKeyword      || body.focus_keyword    || '',
+          post_type:        body.postType          || body.post_type        || 'article',
+          status:           body.status            || 'published',
+          author_name:      body.authorName        || body.author_name      || '',
+          word_count:       body.wordCount         || body.word_count,
+          reading_time_minutes: body.readingTime   || body.reading_time_minutes,
+        };
+        try {
+          const cmsRes = await cmsClient.upsertPost(cmsPayload);
+          results.cms = cmsRes?.data || cmsRes;
+        } catch (cmsErr) {
+          console.warn('[PUT /api/posts] CMS update warning:', cmsErr.message);
+          results.cmsError = cmsErr.message;
+        }
+      }
+
+      json(res, { ok: true, ...results });
+    } catch (e) { err(res, e.message || 'Failed to update post', 500); }
+    return;
+  }
+
   // ── DELETE /api/posts/:slug ──────────────────────
   if (req.method === 'DELETE' && postsMatch) {
     try {

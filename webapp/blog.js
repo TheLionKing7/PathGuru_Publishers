@@ -634,19 +634,29 @@
             </div>
           </div>
           <div class="dash-item-actions">
-            ${publishedUrl ? `<a class="dash-link" href="${escapeHtml(publishedUrl)}" target="_blank" rel="noopener"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>View</a>` : ''}
-            ${!isPublished ? `<button class="btn-sm btn-primary dash-publish" data-id="${post.id}">Publish</button>` : ''}
-            <div class="dash-menu" data-id="${post.id}">
-              <button class="dash-menu-trigger" aria-label="More actions" aria-haspopup="true" aria-expanded="false">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
-              </button>
-              <div class="dash-menu-popover" role="menu" hidden>
-                <button class="dash-menu-item dash-preview"  role="menuitem" data-id="${post.id}">👁 Preview</button>
-                ${isPublished ? `<button class="dash-menu-item dash-unpublish" role="menuitem" data-id="${post.id}">↩ Unpublish</button>` : ''}
-
-                <button class="dash-menu-item dash-menu-danger dash-delete" role="menuitem" data-id="${post.id}">🗑 Delete</button>
-              </div>
-            </div>
+            ${publishedUrl ? `<a class="dash-btn dash-btn-preview" href="${escapeHtml(publishedUrl)}" target="_blank" rel="noopener" title="View live post">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Preview
+            </a>` : `<button class="dash-btn dash-btn-preview dash-preview" data-id="${post.id}" title="Preview post">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              Preview
+            </button>`}
+            ${isPublished
+              ? `<button class="dash-btn dash-btn-unpublish dash-unpublish" data-id="${post.id}" title="Set to draft">
+                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                   Unpublish
+                 </button>`
+              : `<button class="dash-btn dash-btn-publish dash-publish" data-id="${post.id}" title="Publish post">
+                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                   Publish
+                 </button>`}
+            <button class="dash-btn dash-btn-edit dash-edit" data-id="${post.id}" data-slug="${escapeHtml(post.slug || '')}" title="Edit post">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+            <button class="dash-btn dash-btn-delete dash-delete" data-id="${post.id}" title="Delete post">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
           </div>
         </div>`;
       }).join('');
@@ -654,17 +664,7 @@
       listEl.querySelectorAll('.dash-unpublish').forEach(btn => btn.addEventListener('click', () => handlePublishAction(btn.dataset.id, 'unpublish')));
       listEl.querySelectorAll('.dash-preview').forEach(btn   => btn.addEventListener('click', () => handlePreviewAction(btn.dataset.id)));
       listEl.querySelectorAll('.dash-delete').forEach(btn    => btn.addEventListener('click', () => handleDeleteAction(btn.dataset.id)));
-      listEl.querySelectorAll('.dash-menu-trigger').forEach(trigger => {
-        trigger.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const wrapper = trigger.closest('.dash-menu');
-          const pop     = wrapper.querySelector('.dash-menu-popover');
-          const wasOpen = !pop.hidden;
-          listEl.querySelectorAll('.dash-menu-popover').forEach(p => { p.hidden = true; });
-          listEl.querySelectorAll('.dash-menu-trigger').forEach(t => t.setAttribute('aria-expanded', 'false'));
-          if (!wasOpen) { pop.hidden = false; trigger.setAttribute('aria-expanded', 'true'); }
-        });
-      });
+      listEl.querySelectorAll('.dash-edit').forEach(btn      => btn.addEventListener('click', () => handleEditAction(btn.dataset.id, btn.dataset.slug)));
     } catch (e) {
       loadingEl.classList.add('hidden');
       listEl.innerHTML = `<div class="blog-dash-empty"><p style="color:var(--red)">Error: ${escapeHtml(e.message)}</p></div>`;
@@ -703,11 +703,211 @@
     } catch (e) { blogToast(e.message, 'error'); }
   }
 
+  // ── Editor ─────────────────────────────────────────────────────────
+  let _editorSourceMode = false;
+
+  function switchBlogView(viewId) {
+    document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) target.classList.add('active');
+    if (viewId === 'blogViewDashboard') {
+      // Sync the subtab highlight back to Dashboard
+      document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
+      document.querySelector('.blog-subtab[data-blogtab="dashboard"]')?.classList.add('active');
+      loadDashboard();
+    }
+  }
+
+  async function handleEditAction(id, slug) {
+    try {
+      const backendUrl = getBackendUrl();
+      const res  = await fetch(`${backendUrl}/api/posts/${encodeURIComponent(slug || id)}`);
+      if (!res.ok) throw new Error('Could not load post');
+      const post = await res.json();
+
+      // Populate meta fields
+      document.getElementById('blogEditorPostId').value    = post.id    || id;
+      document.getElementById('blogEditorPostSlug').value  = post.slug  || slug || '';
+      document.getElementById('blogEditorTitle').value     = post.title || '';
+      document.getElementById('blogEditorSlug').value      = post.slug  || '';
+      document.getElementById('blogEditorAuthor').value    = post.author_name || '';
+      document.getElementById('blogEditorMeta').value      = post.meta_description || '';
+      document.getElementById('blogEditorKeyword').value   = post.focus_keyword    || '';
+
+      // Status badge
+      const badge = document.getElementById('blogEditorStatusBadge');
+      const isPublished = post.status === 'published';
+      badge.textContent  = isPublished ? 'Published' : 'Draft';
+      badge.className    = `blog-editor-status-badge ${isPublished ? 'published' : 'draft'}`;
+
+      // Populate editor
+      const area   = document.getElementById('blogEditorArea');
+      const source = document.getElementById('blogEditorSource');
+      area.innerHTML = post.content || '';
+      source.value   = post.content || '';
+
+      // Reset source mode
+      _editorSourceMode = false;
+      area.removeAttribute('hidden');
+      source.classList.remove('visible');
+      source.hidden = true;
+      document.getElementById('editorSourceToggle')?.classList.remove('active');
+
+      switchBlogView('blogViewEditor');
+    } catch (e) { blogToast(e.message, 'error'); }
+  }
+
+  async function handleSaveEdit() {
+    const id      = document.getElementById('blogEditorPostId').value;
+    const oldSlug = document.getElementById('blogEditorPostSlug').value;
+    if (!id) return;
+
+    // Sync source textarea → editor area if in source mode
+    if (_editorSourceMode) {
+      document.getElementById('blogEditorArea').innerHTML =
+        document.getElementById('blogEditorSource').value;
+    }
+
+    const content = document.getElementById('blogEditorArea').innerHTML;
+    const title   = document.getElementById('blogEditorTitle').value.trim();
+    const slug    = document.getElementById('blogEditorSlug').value.trim() || oldSlug;
+
+    const payload = {
+      title,
+      slug,
+      content,
+      authorName:      document.getElementById('blogEditorAuthor').value.trim(),
+      metaDescription: document.getElementById('blogEditorMeta').value.trim(),
+      focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
+    };
+
+    const saveBtn = document.getElementById('blogEditorSave');
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+
+    try {
+      const backendUrl = getBackendUrl();
+      const res = await fetch(`${backendUrl}/api/posts/${encodeURIComponent(id)}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || 'Save failed');
+      }
+      blogToast('Post saved!', 'success');
+      document.getElementById('blogEditorPostSlug').value = slug;
+    } catch (e) {
+      blogToast(e.message, 'error');
+    } finally {
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save changes';
+    }
+  }
+
+  function execEditorCmd(cmd, value) {
+    document.getElementById('blogEditorArea').focus();
+    document.execCommand(cmd, false, value !== undefined ? value : null);
+  }
+
+  function updateToolbarState() {
+    document.querySelectorAll('.editor-tool-btn[data-cmd]').forEach(btn => {
+      try { btn.classList.toggle('active', document.queryCommandState(btn.dataset.cmd)); }
+      catch (_) {}
+    });
+  }
+
+  function wireEditorToolbar() {
+    // Inline command buttons (Bold, Italic, etc.)
+    document.querySelectorAll('.editor-tool-btn[data-cmd]').forEach(btn => {
+      btn.addEventListener('mousedown', e => {
+        e.preventDefault();
+        execEditorCmd(btn.dataset.cmd);
+      });
+    });
+
+    // Font family
+    const fontFamilyEl = document.getElementById('editorFontFamily');
+    if (fontFamilyEl) fontFamilyEl.addEventListener('change', () => {
+      if (fontFamilyEl.value) execEditorCmd('fontName', fontFamilyEl.value);
+    });
+
+    // Font size
+    const fontSizeEl = document.getElementById('editorFontSize');
+    if (fontSizeEl) fontSizeEl.addEventListener('change', () => {
+      if (fontSizeEl.value) execEditorCmd('fontSize', fontSizeEl.value);
+    });
+
+    // Block format (H1-H4, p, blockquote, pre)
+    const blockFmtEl = document.getElementById('editorBlockFormat');
+    if (blockFmtEl) blockFmtEl.addEventListener('change', () => {
+      if (blockFmtEl.value) execEditorCmd('formatBlock', blockFmtEl.value);
+    });
+
+    // Text colour
+    const textColorEl = document.getElementById('editorTextColor');
+    if (textColorEl) textColorEl.addEventListener('input', () => execEditorCmd('foreColor', textColorEl.value));
+
+    // Highlight colour
+    const bgColorEl = document.getElementById('editorBgColor');
+    if (bgColorEl) bgColorEl.addEventListener('input', () => execEditorCmd('hiliteColor', bgColorEl.value));
+
+    // Insert link
+    const linkBtn = document.getElementById('editorInsertLink');
+    if (linkBtn) linkBtn.addEventListener('click', () => {
+      const url = prompt('Enter URL:');
+      if (url) execEditorCmd('createLink', url);
+    });
+
+    // Source toggle
+    const sourceToggle = document.getElementById('editorSourceToggle');
+    if (sourceToggle) sourceToggle.addEventListener('click', () => {
+      const area   = document.getElementById('blogEditorArea');
+      const source = document.getElementById('blogEditorSource');
+      _editorSourceMode = !_editorSourceMode;
+      if (_editorSourceMode) {
+        source.value = area.innerHTML;
+        area.setAttribute('hidden', '');
+        source.hidden = false;
+        source.classList.add('visible');
+        sourceToggle.classList.add('active');
+      } else {
+        area.innerHTML = source.value;
+        area.removeAttribute('hidden');
+        source.hidden = true;
+        source.classList.remove('visible');
+        sourceToggle.classList.remove('active');
+      }
+    });
+
+    // Update toolbar highlight on selection change
+    const editorArea = document.getElementById('blogEditorArea');
+    if (editorArea) {
+      editorArea.addEventListener('keyup',   updateToolbarState);
+      editorArea.addEventListener('mouseup', updateToolbarState);
+    }
+
+    // Save button
+    const saveBtn = document.getElementById('blogEditorSave');
+    if (saveBtn) saveBtn.addEventListener('click', handleSaveEdit);
+
+    // Back / Discard buttons
+    const goBack = () => switchBlogView('blogViewDashboard');
+    const backBtn    = document.getElementById('blogEditorBack');
+    const cancelBtn  = document.getElementById('blogEditorCancel');
+    if (backBtn)   backBtn.addEventListener('click', goBack);
+    if (cancelBtn) cancelBtn.addEventListener('click', () => {
+      if (confirm('Discard unsaved changes?')) goBack();
+    });
+  }
+
   // ── Init ───────────────────────────────────────────────────────────
   (function init() {
     loadPersonas();
     wireMediaUpload();
     wireMediaLibrary();
+    wireEditorToolbar();
 
     // Generate button
     const genBtn = document.getElementById('blogGenerateBtn');
@@ -717,7 +917,7 @@
     const approveBtn = document.getElementById('blogApproveBtn');
     if (approveBtn) approveBtn.addEventListener('click', runPublish);
 
-    // Preview tab switcher — now lives in the blog-subtabs bar
+    // Preview tab switcher
     document.querySelectorAll('.blog-preview-tab').forEach(btn => {
       btn.addEventListener('click', () => switchPreviewTab(btn.dataset.previewtab));
     });
@@ -739,7 +939,7 @@
         btn.classList.add('active');
         const tab  = btn.dataset.blogtab;
         document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
-        const view = document.getElementById(`blogView${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
+        const view = document.getElementById('blogView' + tab.charAt(0).toUpperCase() + tab.slice(1));
         if (view) view.classList.add('active');
         if (tab === 'dashboard') loadDashboard();
       });
