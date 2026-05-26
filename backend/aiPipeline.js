@@ -165,36 +165,46 @@ async function runEditorialAgents(input, project, research, provider) {
 }
 
 export async function callAiProvider(provider, prompt, systemHint) {
-  if (provider.name === "gemini")  return callGemini(prompt, provider.model);
+  if (provider.name === "gemini")  return callGemini(prompt, provider.model, systemHint);
   if (provider.name === "claude")  return callClaude(provider, prompt, systemHint);
   return callOpenAiCompatible(provider, prompt, systemHint);
 }
 
-async function callGemini(prompt, model) {
+async function callGemini(prompt, model, systemHint) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+  // Gemini uses a dedicated "system_instruction" field (equivalent to Claude's system prompt).
+  // Without this the blogSystemHint was silently dropped, causing JSON format failures.
+  const systemInstruction = systemHint
+    ? { parts: [{ text: systemHint }] }
+    : undefined;
+
+  const body = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: prompt }]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.72,
+      responseMimeType: "application/json",
+      // Gemini 2.5 Flash supports up to 65K output tokens.
+      // A full 10-chapter book at 1,800–2,500 words/chapter in JSON needs
+      // ~40,000–60,000 tokens. Without this, Gemini defaults to ~8K and
+      // silently truncates the response mid-JSON, causing parse failures.
+      maxOutputTokens: Number(process.env.AI_MAX_TOKENS || 65536),
+    }
+  };
+  if (systemInstruction) body.system_instruction = systemInstruction;
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-goog-api-key": process.env.GEMINI_API_KEY
     },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.72,
-        responseMimeType: "application/json",
-        // Gemini 2.5 Flash supports up to 65K output tokens.
-        // A full 10-chapter book at 1,800–2,500 words/chapter in JSON needs
-        // ~40,000–60,000 tokens. Without this, Gemini defaults to ~8K and
-        // silently truncates the response mid-JSON, causing parse failures.
-        maxOutputTokens: Number(process.env.AI_MAX_TOKENS || 65536),
-      }
-    })
+    body: JSON.stringify(body)
   });
 
   if (!response.ok) {

@@ -9,7 +9,11 @@
     "dev": "node --env-file=.env backend/server.js",
     "check": "node --check backend/server.js",
     "install-playwright": "npx playwright install --with-deps chromium",
-    "test": "node ./tests/skills.test.js"
+    "test":         "node ./tests/skills.test.js",
+    "test:blog":    "node --env-file=.env scripts/test-blog.mjs",
+    "test:review":  "node --env-file=.env scripts/test-blog.mjs --review",
+    "publish:post": "node --env-file=.env scripts/publish-html-post.mjs",
+    "delete:post":  "node --env-file=.env scripts/delete-post.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",

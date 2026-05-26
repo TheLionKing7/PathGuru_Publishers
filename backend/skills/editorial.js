@@ -284,7 +284,26 @@ FIX THESE SPECIFIC ISSUES:
 /* ══════════════════════════════════════════════════════
    BLOG POST PROMPT
 ══════════════════════════════════════════════════════ */
+/**
+ * Estimate the expected output size from the topic/outline so we can tell
+ * the AI an appropriate word-count target.  A standard blog is 1200-1800 w;
+ * a multi-book review or long outline needs 3500-5000 w.
+ */
+function inferWordCountTarget(input) {
+  if (input.wordCount) return input.wordCount;
+  const t = (input.topic || '').toLowerCase();
+  // Signals that the content is a list/review of multiple items
+  const isLargeOutline =
+    /\b(10|ten|8|eight|9|nine|7|seven)\b.*\b(book|article|tip|lesson|tool|resource)\b/i.test(t) ||
+    /review.*book|book.*review/i.test(t) ||
+    (t.split('\n').length > 8) ||               // multi-line outline pasted in
+    (t.length > 600);                            // very long topic string
+  return isLargeOutline ? '3500-5000 words' : '1200-1800 words';
+}
+
 export function buildBlogPrompt(input, research) {
+  const wordCountTarget = inferWordCountTarget(input);
+
   return `You are an award-winning professional copywriter and SEO content strategist.
 Your blog posts rank on Google page 1, convert readers to buyers, and get shared widely.
 
@@ -293,7 +312,7 @@ BRIEF:
 - Target audience: ${input.audience || 'general readers'}
 - Goal: ${input.goal || 'inform and engage'}
 - Tone: ${input.tone || 'conversational, expert'}
-- Word count: ${input.wordCount || '1200-1800 words'}
+- Word count: ${wordCountTarget}
 - SEO focus keyword: ${input.seoKeyword || input.topic}
 - CTA goal: ${input.ctaGoal || 'subscribe / share / buy'}
 - Site: ${input.siteName || ''}
@@ -354,16 +373,102 @@ export function parseFeedbackResponse(text) {
 
 function parseJson(text, label) {
   const clean = stripCodeFences(text);
-  try {
-    return JSON.parse(clean);
-  } catch {
-    // Try to extract JSON object
-    const match = clean.match(/\{[\s\S]*\}/);
-    if (match) {
-      try { return JSON.parse(match[0]); } catch {}
-    }
-    throw new Error(`${label} response did not return valid JSON. First 200 chars: ${clean.slice(0, 200)}`);
+
+  // Strategy 1 — direct parse (clean response)
+  try { return JSON.parse(clean); } catch {}
+
+  // Strategy 2 — extract outermost JSON object, then parse
+  const objMatch = clean.match(/\{[\s\S]*\}/);
+  if (objMatch) {
+    try { return JSON.parse(objMatch[0]); } catch {}
   }
+
+  // Strategy 3 — sanitise unescaped control characters inside string values
+  // LLMs (especially Gemini) often embed literal \n \t \r inside JSON strings
+  // instead of the required \\n \\t \\r escape sequences, breaking JSON.parse.
+  const sanitised = sanitizeJsonControlChars(objMatch ? objMatch[0] : clean);
+  try { return JSON.parse(sanitised); } catch {}
+
+  // Strategy 4 — attempt to close a truncated JSON response, then parse.
+  // A 10-book review can approach 65K tokens; if the stream is cut mid-object
+  // the closing brackets/braces will be missing.
+  const repaired = repairTruncatedJson(sanitised);
+  try { return JSON.parse(repaired); } catch {}
+
+  throw new Error(
+    `${label} response did not return valid JSON.\n` +
+    `First 300 chars: ${clean.slice(0, 300)}\n` +
+    `Last  100 chars: ${clean.slice(-100)}`
+  );
+}
+
+/**
+ * Walks the JSON string character-by-character and replaces raw control
+ * characters (newline, carriage-return, tab) that appear inside JSON string
+ * literals with their escaped equivalents.  Characters outside strings are
+ * left untouched so structural whitespace is preserved.
+ */
+function sanitizeJsonControlChars(text) {
+  let out = '';
+  let inString = false;
+  let escaped  = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      out     += ch;
+      escaped  = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      out    += ch;
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      out += ch;
+      continue;
+    }
+    if (inString) {
+      if (ch === '\n') { out += '\\n';  continue; }
+      if (ch === '\r') { out += '\\r';  continue; }
+      if (ch === '\t') { out += '\\t';  continue; }
+      // Null bytes and other C0 control characters
+      const code = ch.charCodeAt(0);
+      if (code < 0x20) { out += `\\u${code.toString(16).padStart(4, '0')}`; continue; }
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * Closes unclosed brackets and braces at the end of a truncated JSON string.
+ * Builds a stack of open delimiters and appends the closing sequence.
+ * Handles the common case where truncation leaves an open string literal.
+ */
+function repairTruncatedJson(text) {
+  let inString = false;
+  let escaped  = false;
+  const stack  = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (!inString) {
+      if      (ch === '{') stack.push('}');
+      else if (ch === '[') stack.push(']');
+      else if (ch === '}' || ch === ']') stack.pop();
+    }
+  }
+
+  // Suffix: close any open string, then close open containers LIFO
+  let suffix = inString ? '"' : '';
+  while (stack.length > 0) suffix += stack.pop();
+  return text + suffix;
 }
 
 function stripCodeFences(text) {

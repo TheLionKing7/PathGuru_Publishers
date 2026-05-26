@@ -34,6 +34,7 @@ import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
+import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supabaseClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import { getLibrarySummary, ensureLibraryDir }  from './referenceLibrary.js';
 import { extractPdfProfile }                     from './pdfDesignExtractor.js';
@@ -248,6 +249,79 @@ const server = createServer(async (req, res) => {
   // so a single Supabase (DigiFusion's) is the source of truth.
   // NOTE: per-post operations use slug as the identifier.
   // ═══════════════════════════════════════════════════
+
+  // ── POST /api/posts — create post in Supabase + DigiFusion ──────────
+  // Used by the publish-html-post script (and any other non-AI publish path)
+  // to save a pre-built post to BOTH stores, the same way the AI pipeline does.
+  if (req.method === 'POST' && path === '/api/posts') {
+    try {
+      const body = await readBody(req);
+      if (!body.title || !body.slug) { err(res, 'title and slug are required', 400); return; }
+
+      const wordCount   = body.word_count || 0;
+      const readingTime = body.reading_time_minutes || Math.max(1, Math.round(wordCount / 200));
+      const skipCms     = body._skipCms === true;
+      const skipDb      = body._skipDb  === true;
+
+      // 1 — Save to Supabase (internal record, powers dashboard/analytics)
+      let supabaseResult = null;
+      if (!skipDb) try {
+        supabaseResult = await dbCreatePost({
+          title:               body.title,
+          slug:                body.slug,
+          excerpt:             body.excerpt             || '',
+          content:             body.content             || '',
+          postType:            body.post_type           || 'article',
+          metaDescription:     body.meta_description    || '',
+          focusKeyword:        body.focus_keyword       || '',
+          featuredImageUrl:    body.featured_image_url  || null,
+          featuredImageCredit: body.featured_image_credit || '',
+          socialCaption:       body.social_caption      || '',
+          linkedinCaption:     body.linkedin_caption    || '',
+          categories:          body.categories          || [],
+          tags:                body.tags                || [],
+          authorName:          body.author_name         || 'PathGuru Team',
+          readingTimeMinutes:  readingTime,
+          wordCount,
+          status:              body.status              || 'draft',
+        });
+      } catch (sbErr) {
+        console.warn('[POST /api/posts] Supabase save failed:', sbErr.message);
+      }
+
+      // 2 — Upsert to DigiFusion CMS (public-facing store)
+      let cmsResult = null;
+      if (!skipCms) cmsResult = await cmsClient.upsertPost({
+        title:                 body.title,
+        slug:                  body.slug,
+        excerpt:               body.excerpt             || '',
+        content:               body.content             || '',
+        post_type:             body.post_type           || 'article',
+        status:                body.status              || 'draft',
+        meta_description:      body.meta_description    || '',
+        focus_keyword:         body.focus_keyword       || '',
+        featured_image_url:    body.featured_image_url  || null,
+        featured_image_credit: body.featured_image_credit || '',
+        social_caption:        body.social_caption      || '',
+        linkedin_caption:      body.linkedin_caption    || '',
+        categories:            body.categories          || [],
+        tags:                  body.tags                || [],
+        author_name:           body.author_name         || 'PathGuru Team',
+        reading_time_minutes:  readingTime,
+        word_count:            wordCount,
+      });
+
+      json(res, {
+        ok:        true,
+        skippedCms: skipCms,
+        skippedDb:  skipDb,
+        supabase:  supabaseResult?.data  || null,
+        cms:       cmsResult?.data       || cmsResult || null,
+        slug:      body.slug,
+      });
+    } catch (e) { err(res, e.message || 'Failed to create post'); }
+    return;
+  }
 
   // ── GET /api/posts ───────────────────────────────
   if (req.method === 'GET' && path === '/api/posts') {
