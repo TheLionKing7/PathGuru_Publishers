@@ -419,6 +419,131 @@
     }
   }
 
+  /* ── Product detail panel ─────────────────────────────────── */
+  let detailProduct = null;
+
+  function openProductDetail (product) {
+    detailProduct = product;
+    const overlay   = document.getElementById('prodDetailOverlay');
+    const panel     = document.getElementById('prodDetailPanel');
+    const nameEl    = document.getElementById('prodDetailName');
+    const slugEl    = document.getElementById('prodDetailSlug');
+    const badgeEl   = document.getElementById('prodDetailBadge');
+    const editBtn   = document.getElementById('prodDetailEditBtn');
+    const bodyEl    = document.getElementById('prodDetailBody');
+    if (!overlay || !panel || !bodyEl) return;
+
+    const categoryLabel = {
+      'field-guide': '📗 Field Guide',
+      'playbook':    '⚡ Playbook',
+      'research':    '🔍 Research',
+      'tool':        '🔧 Tool',
+      'saas':        '☁️ SaaS',
+      'service':     '🤝 Service',
+      'bundle':      '📦 Bundle',
+    };
+    const typeLabel = {
+      'download':     '⬇️ Download',
+      'subscription': '🔄 Subscription',
+      'service':      '📞 Service',
+      'saas':         '☁️ SaaS',
+    };
+
+    if (nameEl) nameEl.textContent = product.name || 'Untitled';
+    if (slugEl) slugEl.textContent = product.slug ? `/${product.slug}` : '';
+    if (badgeEl) badgeEl.textContent = categoryLabel[product.category] || product.category || '';
+
+    const price   = fmtPrice(product);
+    const active  = product.active !== false;
+    const isVektor = (product.slug || '').toLowerCase().includes('vektor') || (product.name || '').toLowerCase().includes('vektor');
+
+    const coverHtml = product.cover_image_url
+      ? `<img src="${esc(product.cover_image_url)}" class="prod-detail-cover" alt="Cover">`
+      : '';
+
+    const fulfillmentStr = product.fulfillment && Object.keys(product.fulfillment).length
+      ? JSON.stringify(product.fulfillment, null, 2)
+      : null;
+
+    bodyEl.innerHTML = `
+      ${coverHtml}
+      <div class="prod-detail-meta">
+        <div class="prod-detail-field"><label>Price</label><div class="val">${price}</div></div>
+        <div class="prod-detail-field"><label>Status</label><div class="val"><span class="prod-status-pill ${active ? 'active' : 'archived'}">${active ? 'Active' : 'Archived'}</span></div></div>
+        <div class="prod-detail-field"><label>Type</label><div class="val">${typeLabel[product.type] || product.type || '—'}</div></div>
+        <div class="prod-detail-field"><label>Featured</label><div class="val">${product.featured ? 'Yes' : 'No'}</div></div>
+      </div>
+      ${product.description ? `
+        <div>
+          <div class="prod-detail-section-title">Description</div>
+          <div class="prod-detail-desc">${esc(product.description)}</div>
+        </div>` : ''}
+      ${fulfillmentStr ? `
+        <div>
+          <div class="prod-detail-section-title">Fulfillment metadata</div>
+          <pre class="prod-detail-json">${esc(fulfillmentStr)}</pre>
+        </div>` : ''}
+      ${isVektor ? `
+        <div>
+          <div class="prod-detail-section-title">Vektor — User management</div>
+          <div class="vk-admin-stats" style="padding:0;margin-bottom:14px">
+            <div class="vk-admin-stat"><div class="vk-admin-stat-val" id="vkDetailTotal">—</div><div class="vk-admin-stat-lbl">Total users</div></div>
+            <div class="vk-admin-stat"><div class="vk-admin-stat-val gold" id="vkDetailPaid">—</div><div class="vk-admin-stat-lbl">Paid</div></div>
+            <div class="vk-admin-stat"><div class="vk-admin-stat-val green" id="vkDetailMrr">—</div><div class="vk-admin-stat-lbl">MRR</div></div>
+          </div>
+          <div id="vkDetailUsersWrap" style="font-size:12px;color:var(--text-muted)">
+            <button class="btn-secondary btn-sm" id="vkDetailLoadBtn">Load Vektor users</button>
+          </div>
+        </div>` : ''}
+    `;
+
+    if (editBtn) {
+      editBtn.onclick = () => { closeProductDetail(); openProductForm(product); };
+    }
+
+    // Wire Vektor load button if present
+    const vkBtn = document.getElementById('vkDetailLoadBtn');
+    if (vkBtn) {
+      vkBtn.addEventListener('click', async () => {
+        vkBtn.disabled = true;
+        vkBtn.textContent = 'Loading…';
+        try {
+          const res = await fetch(`${VEKTOR_API}/admin/users`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const users = data.users || data || [];
+          const paid  = users.filter(u => u.plan && u.plan !== 'free').length;
+          const mrr   = users.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
+          const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+          set('vkDetailTotal', String(users.length));
+          set('vkDetailPaid',  String(paid));
+          set('vkDetailMrr',   `$${mrr}`);
+          const wrap = document.getElementById('vkDetailUsersWrap');
+          if (wrap) wrap.innerHTML = users.slice(0,8).map(u => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+              <span style="color:var(--text-secondary)">${esc(u.email)}</span>
+              <span class="vk-plan-pill ${esc(u.plan || 'free')}">${(u.plan || 'free').toUpperCase()}</span>
+            </div>`).join('') + (users.length > 8 ? `<div style="padding:8px 0;color:var(--text-muted);font-size:11px">+ ${users.length - 8} more — open Vektor tab for full list</div>` : '');
+        } catch (e) {
+          shopToast(e.message, 'error');
+          vkBtn.disabled = false;
+          vkBtn.textContent = 'Retry';
+        }
+      });
+    }
+
+    overlay.classList.add('active');
+    panel.classList.add('active');
+  }
+
+  function closeProductDetail () {
+    const overlay = document.getElementById('prodDetailOverlay');
+    const panel   = document.getElementById('prodDetailPanel');
+    if (overlay) overlay.classList.remove('active');
+    if (panel)   panel.classList.remove('active');
+    detailProduct = null;
+  }
+
   function renderProductsTable (products, wrap) {
     if (!products.length) {
       wrap.innerHTML = '<div class="shop-empty"><p>No products found. Click <strong>+ Add Product</strong> to create one.</p></div>';
@@ -465,13 +590,26 @@
     }).join('');
 
     wrap.querySelectorAll('.prod-edit-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const prod = allProducts.find(p => p.id === btn.dataset.id);
         if (prod) openProductForm(prod);
       });
     });
     wrap.querySelectorAll('.prod-archive-btn').forEach(btn => {
-      btn.addEventListener('click', () => archiveProduct(btn.dataset.id));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        archiveProduct(btn.dataset.id);
+      });
+    });
+
+    // Click row → detail panel
+    wrap.querySelectorAll('.prod-row').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const prod = allProducts.find(p => p.id === row.dataset.id);
+        if (prod) openProductDetail(prod);
+      });
     });
   }
 
@@ -603,6 +741,12 @@
     const cancel  = document.getElementById('prodFormCancel');
     if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeProductForm(); });
     if (cancel)  cancel.addEventListener('click', closeProductForm);
+
+    // Detail panel close
+    const detailOverlay = document.getElementById('prodDetailOverlay');
+    const detailClose   = document.getElementById('prodDetailClose');
+    if (detailOverlay) detailOverlay.addEventListener('click', (e) => { if (e.target === detailOverlay) closeProductDetail(); });
+    if (detailClose)   detailClose.addEventListener('click', closeProductDetail);
 
     const form = document.getElementById('prodFormEl');
     if (form) form.addEventListener('submit', saveProduct);
