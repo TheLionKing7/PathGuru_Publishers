@@ -677,7 +677,7 @@
     }
   }
 
-  /* ── VEKTOR USERS ────────────────────────────────────────────── */
+  /* ── VEKTOR USERS (accessed via product "Users" panel) ───────── */
   const VEKTOR_API = 'https://vektor-xr-1.onrender.com';
   let allVektorUsers = [];
 

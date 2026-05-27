@@ -1027,13 +1027,6 @@
         <header class="panel-header" data-for="shop-settings">
           <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Settings</h1></div>
         </header>
-        <header class="panel-header" data-for="shop-vektor">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Vektor Users</h1></div>
-          <div class="header-actions">
-            <a href="https://vektor-xr-1.onrender.com" target="_blank" rel="noopener" class="btn-secondary btn-sm">API ↗</a>
-            <button class="btn-primary btn-sm" id="vektorUsersRefresh">Refresh</button>
-          </div>
-        </header>
       </div>
 
       <div class="module-topnav" role="tablist" aria-label="Shop sections">
@@ -1056,10 +1049,6 @@
         <button class="shop-tab module-tab" data-subtab="shop-settings" role="tab" aria-selected="false">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
-        </button>
-        <button class="shop-tab module-tab vektor-tab" data-subtab="shop-vektor" role="tab" aria-selected="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Vektor
         </button>
       </div>
 
@@ -1283,53 +1272,6 @@
               </div>
               <div class="field"><label for="shipZones">Shipping zones (one per line)</label><textarea id="shipZones" rows="3" placeholder="US, CA, UK&#10;AU, NZ"></textarea></div>
               <button class="btn-primary" id="shopShippingSave">Save shipping</button>
-            </div>
-
-          </div>
-        </section>
-
-        <!-- ── Vektor Users ── -->
-        <section class="tab-panel" id="tab-shop-vektor" aria-label="Vektor Users">
-          <div class="shop-panel-body">
-
-            <!-- Stats row -->
-            <div class="vk-admin-stats" id="vektorStatsRow">
-              <div class="vk-admin-stat">
-                <div class="vk-admin-stat-val" id="vkStatTotal">—</div>
-                <div class="vk-admin-stat-lbl">Total users</div>
-              </div>
-              <div class="vk-admin-stat">
-                <div class="vk-admin-stat-val gold" id="vkStatPaid">—</div>
-                <div class="vk-admin-stat-lbl">Paid subscribers</div>
-              </div>
-              <div class="vk-admin-stat">
-                <div class="vk-admin-stat-val" id="vkStatFree">—</div>
-                <div class="vk-admin-stat-lbl">Free tier</div>
-              </div>
-              <div class="vk-admin-stat">
-                <div class="vk-admin-stat-val green" id="vkStatMrr">—</div>
-                <div class="vk-admin-stat-lbl">Est. MRR</div>
-              </div>
-              <div class="vk-admin-stat">
-                <div class="vk-admin-stat-val" id="vkStatSweeps">—</div>
-                <div class="vk-admin-stat-lbl">Sweeps this month</div>
-              </div>
-            </div>
-
-            <!-- Filter toolbar -->
-            <div class="shop-toolbar" style="padding: 0 24px 12px;">
-              <input type="search" id="vektorSearch" placeholder="Search by email…" style="flex:1;max-width:260px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:13px">
-              <select id="vektorPlanFilter" style="height:34px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:13px">
-                <option value="">All plans</option>
-                <option value="free">Free</option>
-                <option value="solo">Solo</option>
-                <option value="pro">Pro</option>
-              </select>
-            </div>
-
-            <!-- Users table -->
-            <div id="vektorUsersTable">
-              <div class="shop-empty"><p>Click <strong>Refresh</strong> to load Vektor users.</p></div>
             </div>
 
           </div>
