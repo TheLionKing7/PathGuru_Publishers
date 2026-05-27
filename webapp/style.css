@@ -3175,14 +3175,16 @@ select option { background: var(--surface-2); }
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 10px;
-  padding: 12px 24px;
+  gap: 8px;
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  overflow: hidden;
 }
 .prod-toolbar input[type="search"] {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 180px;
+  min-width: 120px;
+  max-width: 280px;
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--border);
@@ -3190,9 +3192,14 @@ select option { background: var(--surface-2); }
   background: var(--surface-2);
   color: var(--text-primary);
   font-size: 13px;
+  outline: none;
+}
+.prod-toolbar input[type="search"]:focus {
+  border-color: var(--gold);
 }
 .prod-toolbar select {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  width: 140px;
   height: 34px;
   padding: 0 8px;
   border: 1px solid var(--border);
@@ -3200,6 +3207,10 @@ select option { background: var(--surface-2); }
   background: var(--surface-2);
   color: var(--text-primary);
   font-size: 12px;
+  cursor: pointer;
+}
+.prod-toolbar .btn-secondary {
+  flex-shrink: 0;
   white-space: nowrap;
 }
 

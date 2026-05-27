@@ -733,7 +733,12 @@
     } catch (e) { shopToast(e.message, 'error'); }
   }
 
+  let _productsWired = false;
   function wireProducts () {
+    // Guard: only bind event listeners once; subsequent calls just refresh data
+    if (_productsWired) { loadProducts(); return; }
+    _productsWired = true;
+
     const addBtn = document.getElementById('shopProductAddBtn');
     if (addBtn) addBtn.addEventListener('click', () => openProductForm());
 
@@ -769,6 +774,9 @@
 
     const refreshBtn = document.getElementById('shopProductRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadProducts);
+
+    // Auto-load on first activation
+    loadProducts();
   }
 
   /* ── SITE TRAFFIC ANALYTICS ──────────────────────────────────── */
