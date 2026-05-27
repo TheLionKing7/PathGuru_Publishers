@@ -625,8 +625,6 @@
 
     const refreshBtn = document.getElementById('shopProductRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadProducts);
-
-    loadProducts();
   }
 
   /* ── SITE TRAFFIC ANALYTICS ──────────────────────────────────── */
@@ -679,6 +677,136 @@
     }
   }
 
+  /* ── VEKTOR USERS ────────────────────────────────────────────── */
+  const VEKTOR_API = 'https://vektor-xr-1.onrender.com';
+  let allVektorUsers = [];
+
+  async function loadVektorUsers () {
+    const wrap      = document.getElementById('vektorUsersTable');
+    const btn       = document.getElementById('vektorUsersRefresh');
+    const searchEl  = document.getElementById('vektorSearch');
+    const planEl    = document.getElementById('vektorPlanFilter');
+    if (!wrap) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+    wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Fetching Vektor users…</p></div>';
+
+    try {
+      const res = await fetch(`${VEKTOR_API}/admin/users`);
+      if (!res.ok) throw new Error(`Vektor API returned ${res.status} — check admin endpoint exists`);
+      const data = await res.json();
+      allVektorUsers = data.users || data || [];
+      renderVektorUsers();
+    } catch (e) {
+      shopToast(e.message, 'error');
+      wrap.innerHTML = `<div class="shop-empty"><p style="color:var(--red)">Error: ${esc(e.message)}</p></div>`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+    }
+  }
+
+  function renderVektorUsers () {
+    const wrap     = document.getElementById('vektorUsersTable');
+    const searchEl = document.getElementById('vektorSearch');
+    const planEl   = document.getElementById('vektorPlanFilter');
+    if (!wrap) return;
+
+    const searchVal = searchEl?.value?.trim().toLowerCase() || '';
+    const planVal   = planEl?.value || '';
+
+    const filtered = allVektorUsers.filter(u => {
+      if (searchVal && !(u.email || '').toLowerCase().includes(searchVal)) return false;
+      if (planVal && u.plan !== planVal) return false;
+      return true;
+    });
+
+    // Update stat cards
+    const total   = allVektorUsers.length;
+    const paid    = allVektorUsers.filter(u => u.plan && u.plan !== 'free').length;
+    const free    = allVektorUsers.filter(u => !u.plan || u.plan === 'free').length;
+    const mrr     = allVektorUsers.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
+    const sweeps  = allVektorUsers.reduce((s, u) => s + (Number(u.sweeps_this_month) || 0), 0);
+
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('vkStatTotal',  String(total));
+    set('vkStatPaid',   String(paid));
+    set('vkStatFree',   String(free));
+    set('vkStatMrr',    `$${mrr}`);
+    set('vkStatSweeps', String(sweeps));
+
+    if (!filtered.length) {
+      wrap.innerHTML = '<div class="shop-empty"><p>No users match the current filter.</p></div>';
+      return;
+    }
+
+    const planLimit = { free: 3, solo: 40, pro: '∞' };
+
+    wrap.innerHTML = `
+      <table class="shop-table vk-users-table">
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Plan</th>
+            <th>Sweeps used</th>
+            <th>Monthly limit</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtered.map(u => {
+            const plan  = u.plan || 'free';
+            const used  = u.sweeps_this_month ?? 0;
+            const limit = planLimit[plan] ?? '—';
+            const pct   = typeof limit === 'number' ? Math.min(100, Math.round((used / limit) * 100)) : null;
+            return `<tr>
+              <td class="mono" style="font-size:12px">${esc(u.email || '—')}</td>
+              <td><span class="vk-plan-pill ${esc(plan)}">${esc(plan.toUpperCase())}</span></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span>${used}</span>
+                  ${pct !== null ? `<div class="vk-sweep-bar"><div class="vk-sweep-fill" style="width:${pct}%;background:${pct >= 90 ? 'var(--red)' : 'var(--gold)'}"></div></div>` : ''}
+                </div>
+              </td>
+              <td>${limit}</td>
+              <td style="font-size:12px;color:var(--text-muted)">${fmtDate(u.created_at)}</td>
+              <td class="action-cell">
+                ${plan === 'free'  ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="solo" title="Upgrade to Solo">→ Solo</button>` : ''}
+                ${plan === 'solo'  ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="pro"  title="Upgrade to Pro">→ Pro</button>` : ''}
+                ${plan !== 'free'  ? `<button class="btn-sm btn-secondary vk-plan-btn" data-email="${esc(u.email)}" data-plan="free" title="Downgrade to Free">↓ Free</button>` : ''}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    wrap.querySelectorAll('.vk-plan-btn').forEach(b => {
+      b.addEventListener('click', async () => {
+        const { email, plan } = b.dataset;
+        if (!confirm(`Change ${email} → ${plan.toUpperCase()} plan?`)) return;
+        b.disabled = true; b.textContent = '…';
+        try {
+          const r = await fetch(`${VEKTOR_API}/admin/users/plan`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, plan }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `HTTP ${r.status}`); }
+          shopToast(`${email} moved to ${plan.toUpperCase()} plan.`, 'success');
+          // Update local state and re-render
+          const u = allVektorUsers.find(x => x.email === email);
+          if (u) u.plan = plan;
+          renderVektorUsers();
+        } catch (e) {
+          shopToast(e.message, 'error');
+          b.disabled = false;
+          b.textContent = b.dataset.plan === 'free' ? '↓ Free' : `→ ${b.dataset.plan.charAt(0).toUpperCase() + b.dataset.plan.slice(1)}`;
+        }
+      });
+    });
+  }
+
   /* ── DEBOUNCE ─────────────────────────────────────────────────── */
   function debounceShop (fn, ms) {
     let t;
@@ -714,6 +842,7 @@
         if (target === 'payments')   { loadPayments(); loadSubscriptions(); }
         if (target === 'analytics')  loadAnalytics();
         if (target === 'products')   { wireProducts(); }
+        if (target === 'vektor')     loadVektorUsers();
       });
     });
 
@@ -738,6 +867,11 @@
     document.getElementById('shopBookingsRefresh')?.addEventListener('click', loadBookings);
     document.getElementById('shopPaymentsRefresh')?.addEventListener('click', loadPayments);
     document.getElementById('shopAnalyticsRefresh')?.addEventListener('click', loadAnalytics);
+    document.getElementById('vektorUsersRefresh')?.addEventListener('click', loadVektorUsers);
+
+    // Vektor filter inputs — re-render without refetching
+    document.getElementById('vektorSearch')?.addEventListener('input',  debounceShop(renderVektorUsers, 250));
+    document.getElementById('vektorPlanFilter')?.addEventListener('change', renderVektorUsers);
 
     // T&C save
     document.getElementById('shopTcSave')?.addEventListener('click', saveTerms);
