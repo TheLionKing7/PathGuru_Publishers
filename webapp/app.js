@@ -845,13 +845,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // ── Assets tab: learning library — 3 persisted R2 folders ───────────────
+  // ── Assets tab: learning library — 3 persistent local-disk folders ──────
   (function wireLibrary () {
     const FOLDERS = ['playbooks', 'research', 'case-studies'];
-
-    function pdfIcon () {
-      return `<svg class="library-item-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-    }
 
     function fmtSize (bytes) {
       if (!bytes) return '';
@@ -860,16 +856,38 @@ document.addEventListener('DOMContentLoaded', () => {
         : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     }
 
+    function fmtDate (iso) {
+      if (!iso) return '';
+      try { return new Date(iso).toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' }); }
+      catch { return ''; }
+    }
+
+    function setFolderStatus (folder, html, type = '') {
+      let el = document.getElementById(`libStatus-${folder}`);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = `libStatus-${folder}`;
+        el.className = 'lib-folder-status';
+        const listEl = document.getElementById(`libList-${folder}`);
+        listEl?.parentNode.insertBefore(el, listEl);
+      }
+      el.innerHTML = html;
+      el.className = `lib-folder-status${type ? ' lib-status-' + type : ''}`;
+    }
+
     async function loadFolder (folder) {
       const listEl = document.getElementById(`libList-${folder}`);
       if (!listEl) return;
-      listEl.innerHTML = '<div class="library-empty" style="opacity:.5">Loading…</div>';
+      setFolderStatus(folder, '');
+      listEl.innerHTML = '<div class="library-empty lib-loading">Loading…</div>';
       try {
         const res  = await fetch(`/api/library/${folder}`);
+        if (!res.ok) throw new Error(`Server error ${res.status}`);
         const data = await res.json();
         renderFolder(folder, data.files || []);
       } catch (e) {
-        listEl.innerHTML = `<div class="library-empty" style="color:var(--red)">Failed to load: ${e.message}</div>`;
+        listEl.innerHTML = '';
+        setFolderStatus(folder, `⚠ Could not load files: ${e.message}`, 'error');
       }
     }
 
@@ -877,51 +895,78 @@ document.addEventListener('DOMContentLoaded', () => {
       const listEl = document.getElementById(`libList-${folder}`);
       if (!listEl) return;
       if (!files.length) {
-        listEl.innerHTML = '<div class="library-empty">No examples yet. Upload PDFs to train the agent.</div>';
+        listEl.innerHTML = '<div class="library-empty">No examples yet — upload PDFs to train the agent.</div>';
         return;
       }
       listEl.innerHTML = files.map(f => `
         <div class="library-item" data-key="${encodeURIComponent(f.key)}">
-          ${pdfIcon()}
-          <span class="library-item-name">${f.name}</span>
+          <svg class="library-item-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="library-item-name" title="${f.name}">${f.name}</span>
           <span class="library-item-size">${fmtSize(f.size)}</span>
-          <button type="button" class="library-item-remove" data-key="${encodeURIComponent(f.key)}" data-folder="${folder}" title="Remove">×</button>
+          <span class="library-item-date">${fmtDate(f.uploaded)}</span>
+          <button type="button" class="library-item-remove" data-key="${encodeURIComponent(f.key)}" data-folder="${folder}" title="Delete file">×</button>
         </div>
       `).join('');
+
       listEl.querySelectorAll('.library-item-remove').forEach(btn => {
         btn.addEventListener('click', async e => {
           e.stopPropagation();
+          if (!confirm(`Delete "${decodeURIComponent(btn.dataset.key).split('/').pop()}"?`)) return;
           const key    = decodeURIComponent(btn.dataset.key);
-          const folder = btn.dataset.folder;
+          const fldr   = btn.dataset.folder;
           btn.disabled = true; btn.textContent = '…';
           try {
-            await fetch(`/api/library-file/${encodeURIComponent(key)}`, { method: 'DELETE' });
-            await loadFolder(folder);
+            const res = await fetch(`/api/library-file/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(`Server error ${res.status}`);
+            setFolderStatus(fldr, '✓ File deleted.', 'success');
+            setTimeout(() => setFolderStatus(fldr, ''), 3000);
+            await loadFolder(fldr);
           } catch (err) {
             btn.disabled = false; btn.textContent = '×';
-            alert(`Delete failed: ${err.message}`);
+            setFolderStatus(fldr, `⚠ Delete failed: ${err.message}`, 'error');
           }
         });
       });
     }
 
     async function uploadFiles (folder, files) {
-      const listEl = document.getElementById(`libList-${folder}`);
-      const label  = document.querySelector(`label[for="libUpload-${folder}"]`);
-      if (label) label.style.opacity = '0.5';
-      for (const file of files) {
-        if (file.type !== 'application/pdf') continue;
+      const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (!pdfs.length) {
+        setFolderStatus(folder, '⚠ Only PDF files are accepted.', 'error');
+        return;
+      }
+
+      const label = document.querySelector(`label[for="libUpload-${folder}"]`);
+      if (label) { label.style.opacity = '0.5'; label.style.pointerEvents = 'none'; }
+
+      const errors = [];
+      for (let i = 0; i < pdfs.length; i++) {
+        const file = pdfs[i];
+        setFolderStatus(folder,
+          `<span class="lib-progress-bar" style="width:${Math.round((i / pdfs.length) * 100)}%"></span>` +
+          `Uploading ${i + 1} of ${pdfs.length}: <strong>${file.name}</strong>…`, 'uploading');
         try {
           const res = await fetch(
             `/api/library/${folder}/upload?filename=${encodeURIComponent(file.name)}`,
             { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }
           );
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
         } catch (err) {
-          if (listEl) listEl.innerHTML += `<div class="library-empty" style="color:var(--red)">Failed: ${file.name} — ${err.message}</div>`;
+          errors.push(`${file.name}: ${err.message}`);
         }
       }
-      if (label) label.style.opacity = '';
+
+      if (label) { label.style.opacity = ''; label.style.pointerEvents = ''; }
+
+      if (errors.length) {
+        setFolderStatus(folder, `⚠ ${errors.join(' · ')}`, 'error');
+      } else {
+        setFolderStatus(folder,
+          `✓ ${pdfs.length === 1 ? `"${pdfs[0].name}" uploaded` : `${pdfs.length} files uploaded`} successfully.`,
+          'success');
+        setTimeout(() => setFolderStatus(folder, ''), 5000);
+      }
       await loadFolder(folder);
     }
 
@@ -933,7 +978,6 @@ document.addEventListener('DOMContentLoaded', () => {
         input.value = '';
         await uploadFiles(folder, files);
       });
-      // Load existing files from R2
       loadFolder(folder);
     });
   })();

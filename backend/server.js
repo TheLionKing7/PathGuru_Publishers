@@ -36,7 +36,10 @@ import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js'
 import * as cmsClient                     from './cmsClient.js';
 import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supabaseClient.js';
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
-import { getLibrarySummary, ensureLibraryDir }  from './referenceLibrary.js';
+import {
+  getLibrarySummary, ensureLibraryDir,
+  listIntentFolder, saveIntentFile, deleteIntentFile, isValidIntentFolder,
+} from './referenceLibrary.js';
 import { extractPdfProfile }                     from './pdfDesignExtractor.js';
 import {
   uploadMediaAsset,
@@ -645,16 +648,16 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ═══════════════════════════════════════════════════
-  // LEARNING LIBRARY — /api/library/:folder
+  // LEARNING LIBRARY — /api/library/:folder  (local disk)
   // ═══════════════════════════════════════════════════
 
   // ── GET /api/library/:folder ─────────────────────
   const libListMatch = path.match(/^\/api\/library\/([\w-]+)$/);
   if (req.method === 'GET' && libListMatch) {
     const folder = libListMatch[1];
-    if (!isValidLibraryFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
+    if (!isValidIntentFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
     try {
-      const files = await listLibraryFiles(folder);
+      const files = await listIntentFolder(folder);
       json(res, { folder, files });
     } catch (e) { err(res, e.message || 'List failed'); }
     return;
@@ -664,23 +667,23 @@ ent.refundOrder(shopRefundMatch[1], body);
   const libUploadMatch = path.match(/^\/api\/library\/([\w-]+)\/upload$/);
   if (req.method === 'POST' && libUploadMatch) {
     const folder = libUploadMatch[1];
-    if (!isValidLibraryFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
+    if (!isValidIntentFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
     try {
-      const filename    = url.searchParams.get('filename') || 'upload.pdf';
-      const contentType = req.headers['content-type'] || 'application/pdf';
-      const body        = await readRawBody(req);
-      const file        = await uploadLibraryFile(folder, filename, body);
+      const filename = url.searchParams.get('filename') || 'upload.pdf';
+      const body     = await readRawBody(req);
+      if (!body.length) { err(res, 'Empty file body', 400); return; }
+      const file = await saveIntentFile(folder, filename, body);
       json(res, file, 201);
     } catch (e) { err(res, e.message || 'Upload failed'); }
     return;
   }
 
-  // ── DELETE /api/library/:key* ─────────────────────
+  // ── DELETE /api/library-file/:key* ───────────────
   const libDeleteMatch = path.match(/^\/api\/library-file\/(.+)$/);
   if (req.method === 'DELETE' && libDeleteMatch) {
     try {
       const key    = decodeURIComponent(libDeleteMatch[1]);
-      const result = await deleteLibraryFile(key);
+      const result = await deleteIntentFile(key);
       json(res, result);
     } catch (e) { err(res, e.message || 'Delete failed'); }
     return;

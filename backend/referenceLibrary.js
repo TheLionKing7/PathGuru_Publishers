@@ -20,7 +20,7 @@
  *   - Any PDF placed in the reference-library folder
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile, unlink } from 'node:fs/promises';
 import { existsSync, mkdirSync }    from 'node:fs';
 import path                          from 'node:path';
 import { loadSavedProfiles }         from './pdfDesignExtractor.js';
@@ -204,4 +204,97 @@ export async function getLibrarySummary(dir = DEFAULT_LIBRARY_DIR) {
       'To add a new publisher profile, add an entry to BAKED_PROFILES in referenceLibrary.js.',
     ],
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PUBLISHING INTENT FOLDERS
+// Subfolders: reference-library/playbooks/ | /research/ | /case-studies/
+// These are used for continuous learning and design guidelines per output type.
+// ═══════════════════════════════════════════════════════════════════════
+
+export const INTENT_FOLDERS = ['playbooks', 'research', 'case-studies'];
+
+export function isValidIntentFolder(folder) {
+  return INTENT_FOLDERS.includes(folder);
+}
+
+function intentFolderPath(folder) {
+  const base = process.env.REFERENCE_LIBRARY_DIR
+    || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'reference-library');
+  const dir = path.join(base, folder);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** List all PDFs in an intent folder */
+export async function listIntentFolder(folder) {
+  if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
+  const dir     = intentFolderPath(folder);
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files   = await Promise.all(
+    entries
+      .filter(e => e.isFile() && /\.pdf$/i.test(e.name))
+      .map(async e => {
+        const filePath = path.join(dir, e.name);
+        const info     = await stat(filePath).catch(() => null);
+        return {
+          key:      `${folder}/${e.name}`,
+          name:     e.name,
+          size:     info?.size ?? 0,
+          uploaded: info?.mtime?.toISOString() ?? null,
+        };
+      })
+  );
+  return files.sort((a, b) => (b.uploaded || '').localeCompare(a.uploaded || ''));
+}
+
+/** Save an uploaded PDF buffer to an intent folder */
+export async function saveIntentFile(folder, filename, buffer) {
+  if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
+  // Sanitise filename — strip path separators, keep extension
+  const safe = path.basename(filename).replace(/[^\w\s.\-()]/g, '_');
+  const dest  = path.join(intentFolderPath(folder), safe);
+  await writeFile(dest, buffer);
+  const info = await stat(dest);
+  return {
+    key:      `${folder}/${safe}`,
+    name:     safe,
+    size:     info.size,
+    uploaded: info.mtime.toISOString(),
+  };
+}
+
+/** Delete a file from an intent folder by key (folder/filename) */
+export async function deleteIntentFile(key) {
+  const parts  = key.split('/');
+  if (parts.length < 2) throw new Error('Invalid key');
+  const folder   = parts[0];
+  const filename = parts.slice(1).join('/');
+  if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
+  const filePath = path.join(intentFolderPath(folder), path.basename(filename));
+  if (!existsSync(filePath)) throw new Error('File not found');
+  await unlink(filePath);
+  return { deleted: key };
+}
+
+/** Get all intent folder files as context for the publishing agent */
+export async function getIntentFolderContext(publishingIntent) {
+  const folderMap = {
+    playbook:   'playbooks',
+    research:   'research',
+    'case-study': 'case-studies',
+  };
+  const folder = folderMap[publishingIntent];
+  if (!folder) return '';
+  try {
+    const files = await listIntentFolder(folder);
+    if (!files.length) return '';
+    return `
+DESIGN LEARNING LIBRARY — ${folder.toUpperCase()}:
+The following reference PDFs have been uploaded to guide your output structure, design language, and editorial standards for this ${publishingIntent}:
+${files.map(f => `  • ${f.name}`).join('\n')}
+
+Study these examples and apply their structural and visual patterns to the output.
+`.trim();
+  } catch { return ''; }
 }
