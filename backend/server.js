@@ -584,6 +584,22 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/shop/vektor/users ───────────────────
+  // Proxy to Vektor admin API — key stays server-side
+  if (req.method === 'GET' && path === '/api/shop/vektor/users') {
+    try {
+      const vektorKey = process.env.VEKTOR_ADMIN_KEY;
+      if (!vektorKey) { err(res, 'VEKTOR_ADMIN_KEY not set in environment', 500); return; }
+      const vRes  = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
+        headers: { 'x-api-key': vektorKey },
+      });
+      if (!vRes.ok) throw Object.assign(new Error(`Vektor API ${vRes.status}`), { status: vRes.status });
+      const data = await vRes.json();
+      json(res, data);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
   // ═══════════════════════════════════════════════════
   // MEDIA LIBRARY — Cloudflare R2 blog-media/ prefix
   // ═══════════════════════════════════════════════════

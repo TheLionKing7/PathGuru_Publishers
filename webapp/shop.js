@@ -526,7 +526,7 @@
         if (wrap) wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Loading users…</p></div>';
         if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
         try {
-          const res = await fetch(`${VEKTOR_API}/admin/users`);
+          const res = await fetch('/api/shop/vektor/users');
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           vkAllUsers = data.users || data || [];
@@ -838,7 +838,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
     wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Fetching Vektor users…</p></div>';
     try {
-      const res = await fetch(`${VEKTOR_API}/admin/users`);
+      const res = await fetch('/api/shop/vektor/users');
       if (!res.ok) throw new Error(`Vektor API returned ${res.status}`);
       const data = await res.json();
       allVektorUsers = data.users || data || [];
