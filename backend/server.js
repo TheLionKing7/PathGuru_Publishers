@@ -588,10 +588,11 @@ ent.refundOrder(shopRefundMatch[1], body);
   // Proxy to Vektor admin API — key stays server-side
   if (req.method === 'GET' && path === '/api/shop/vektor/users') {
     try {
-      const vektorKey = process.env.VEKTOR_ADMIN_KEY;
-      if (!vektorKey) { err(res, 'VEKTOR_ADMIN_KEY not set in environment', 500); return; }
+      const adminKey   = process.env.VEKTOR_ADMIN_KEY;
+      const serviceKey = process.env.VEKTOR_SERVICE_KEY;
+      if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
       const vRes  = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
-        headers: { 'x-api-key': vektorKey },
+        headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
       });
       if (!vRes.ok) throw Object.assign(new Error(`Vektor API ${vRes.status}`), { status: vRes.status });
       const data = await vRes.json();
