@@ -206,6 +206,17 @@
 
           <div class="form-section">
             <h2 class="form-section-title">Format &amp; KDP Spec</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="publishingIntent">Publishing intent</label>
+                <select id="publishingIntent" name="publishingIntent">
+                  <option value="playbook">Playbook — high-fidelity PDF, bold graphics (60–70 pages)</option>
+                  <option value="research">Research report — charts &amp; data-dense (60–70 pages)</option>
+                  <option value="case-study">Case study — narrative-led with supporting data</option>
+                  <option value="ebook">Standard eBook — KDP prose format</option>
+                </select>
+              </div>
+            </div>
             <div class="field-row three-col">
               <div class="field">
                 <label for="format">Output format</label>
@@ -438,18 +449,71 @@
         <div class="assets-subpanel" id="pa-library">
           <p class="assets-section-eyebrow">Agent training</p>
           <h2 class="assets-section-heading">Learning library</h2>
-          <p class="assets-section-desc">Upload reference PDFs for the agent to study. It extracts design patterns, editorial voice, and layout decisions and applies them to new books.</p>
-          <div class="library-upload">
-            <input type="file" id="libraryFiles" accept="application/pdf" multiple>
-            <label for="libraryFiles" class="library-upload-label">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              <span class="library-upload-title">Drop PDFs here or click to browse</span>
-              <span class="library-upload-hint">The agent reads each PDF and extracts its design language — multiple files supported.</span>
-            </label>
+          <p class="assets-section-desc">Upload PDF examples into each folder. The publishing agent studies these to match your design language, structure, and editorial standards when generating each output type.</p>
+
+          <!-- ── PLAYBOOKS folder ── -->
+          <div class="lib-folder" data-folder="playbooks">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">Playbooks</h3>
+                  <p class="lib-folder-desc">High-fidelity PDFs · bold graphics · 60–70 pages · high contrast layouts</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-playbooks">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-playbooks" data-folder="playbooks" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div class="lib-folder-list" id="libList-playbooks">
+              <div class="library-empty">No playbook examples yet. Upload PDFs to train the agent.</div>
+            </div>
           </div>
-          <div class="library-list" id="libraryList">
-            <div class="library-empty">No PDFs in the library yet. Upload reference books to teach the agent your house style.</div>
+
+          <!-- ── RESEARCH folder ── -->
+          <div class="lib-folder" data-folder="research">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">Research Reports</h3>
+                  <p class="lib-folder-desc">Data-dense PDFs · charts &amp; tables · 60–70 pages · analytical structure</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-research">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-research" data-folder="research" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div class="lib-folder-list" id="libList-research">
+              <div class="library-empty">No research examples yet. Upload PDFs to train the agent.</div>
+            </div>
           </div>
+
+          <!-- ── CASE STUDIES folder ── -->
+          <div class="lib-folder" data-folder="case-studies">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">Case Studies</h3>
+                  <p class="lib-folder-desc">Narrative-led PDFs · supporting data · real-world evidence structure</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-case-studies">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-case-studies" data-folder="case-studies" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div class="lib-folder-list" id="libList-case-studies">
+              <div class="library-empty">No case study examples yet. Upload PDFs to train the agent.</div>
+            </div>
+          </div>
+
         </div><!-- /pa-library -->
 
       </div><!-- /assets-subpanels -->

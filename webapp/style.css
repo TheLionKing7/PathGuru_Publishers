@@ -829,6 +829,62 @@ select option { background: var(--surface-2); }
 }
 .library-item-remove:hover { color: var(--red); }
 
+/* ── Learning Library — folder cards ────────────────────────── */
+.lib-folder {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.lib-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface-2, var(--surface));
+  border-bottom: 1px solid var(--border);
+}
+.lib-folder-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+}
+.lib-folder-info svg { flex-shrink: 0; color: var(--amber, #f59e0b); }
+.lib-folder-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 2px;
+}
+.lib-folder-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.lib-upload-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s;
+  flex-shrink: 0;
+}
+.lib-upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+.lib-folder-list {
+  padding: 8px 14px;
+  min-height: 42px;
+}
+
 .assets-search-bar {
   display: flex;
   gap: var(--spacing-sm);

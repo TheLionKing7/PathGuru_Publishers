@@ -845,63 +845,97 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // ── Assets tab: learning library file list ────────────────────────────────
+  // ── Assets tab: learning library — 3 persisted R2 folders ───────────────
   (function wireLibrary () {
-    const fileInput  = document.getElementById('libraryFiles');
-    const listEl     = document.getElementById('libraryList');
-    if (!fileInput || !listEl) return;
+    const FOLDERS = ['playbooks', 'research', 'case-studies'];
 
-    let queuedFiles = [];
+    function pdfIcon () {
+      return `<svg class="library-item-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+    }
 
-    function renderLibraryList () {
-      if (queuedFiles.length === 0) {
-        listEl.innerHTML = '<div class="library-empty">No PDFs in the library yet. Upload reference books to teach the agent your house style.</div>';
+    function fmtSize (bytes) {
+      if (!bytes) return '';
+      return bytes < 1024 * 1024
+        ? `${(bytes / 1024).toFixed(0)} KB`
+        : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    async function loadFolder (folder) {
+      const listEl = document.getElementById(`libList-${folder}`);
+      if (!listEl) return;
+      listEl.innerHTML = '<div class="library-empty" style="opacity:.5">Loading…</div>';
+      try {
+        const res  = await fetch(`/api/library/${folder}`);
+        const data = await res.json();
+        renderFolder(folder, data.files || []);
+      } catch (e) {
+        listEl.innerHTML = `<div class="library-empty" style="color:var(--red)">Failed to load: ${e.message}</div>`;
+      }
+    }
+
+    function renderFolder (folder, files) {
+      const listEl = document.getElementById(`libList-${folder}`);
+      if (!listEl) return;
+      if (!files.length) {
+        listEl.innerHTML = '<div class="library-empty">No examples yet. Upload PDFs to train the agent.</div>';
         return;
       }
-      listEl.innerHTML = queuedFiles.map((f, i) => `
-        <div class="library-item" data-idx="${i}">
-          <svg class="library-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      listEl.innerHTML = files.map(f => `
+        <div class="library-item" data-key="${encodeURIComponent(f.key)}">
+          ${pdfIcon()}
           <span class="library-item-name">${f.name}</span>
-          <span class="library-item-size">${(f.size / 1024).toFixed(0)} KB</span>
-          <button type="button" class="library-item-remove" data-idx="${i}" title="Remove">×</button>
+          <span class="library-item-size">${fmtSize(f.size)}</span>
+          <button type="button" class="library-item-remove" data-key="${encodeURIComponent(f.key)}" data-folder="${folder}" title="Remove">×</button>
         </div>
       `).join('');
-
       listEl.querySelectorAll('.library-item-remove').forEach(btn => {
-        btn.addEventListener('click', e => {
+        btn.addEventListener('click', async e => {
           e.stopPropagation();
-          const idx = parseInt(btn.dataset.idx, 10);
-          queuedFiles.splice(idx, 1);
-          renderLibraryList();
+          const key    = decodeURIComponent(btn.dataset.key);
+          const folder = btn.dataset.folder;
+          btn.disabled = true; btn.textContent = '…';
+          try {
+            await fetch(`/api/library-file/${encodeURIComponent(key)}`, { method: 'DELETE' });
+            await loadFolder(folder);
+          } catch (err) {
+            btn.disabled = false; btn.textContent = '×';
+            alert(`Delete failed: ${err.message}`);
+          }
         });
       });
     }
 
-    fileInput.addEventListener('change', () => {
-      const incoming = Array.from(fileInput.files).filter(f => f.type === 'application/pdf');
-      // Dedupe by name
-      incoming.forEach(f => {
-        if (!queuedFiles.find(q => q.name === f.name)) queuedFiles.push(f);
+    async function uploadFiles (folder, files) {
+      const listEl = document.getElementById(`libList-${folder}`);
+      const label  = document.querySelector(`label[for="libUpload-${folder}"]`);
+      if (label) label.style.opacity = '0.5';
+      for (const file of files) {
+        if (file.type !== 'application/pdf') continue;
+        try {
+          const res = await fetch(
+            `/api/library/${folder}/upload?filename=${encodeURIComponent(file.name)}`,
+            { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        } catch (err) {
+          if (listEl) listEl.innerHTML += `<div class="library-empty" style="color:var(--red)">Failed: ${file.name} — ${err.message}</div>`;
+        }
+      }
+      if (label) label.style.opacity = '';
+      await loadFolder(folder);
+    }
+
+    FOLDERS.forEach(folder => {
+      const input = document.getElementById(`libUpload-${folder}`);
+      if (!input) return;
+      input.addEventListener('change', async () => {
+        const files = Array.from(input.files);
+        input.value = '';
+        await uploadFiles(folder, files);
       });
-      fileInput.value = '';
-      renderLibraryList();
+      // Load existing files from R2
+      loadFolder(folder);
     });
-
-    // Also accept drops on the label area
-    const dropLabel = listEl.closest('.assets-subpanel')?.querySelector('.library-upload-label');
-    if (dropLabel) {
-      dropLabel.addEventListener('dragover', e => { e.preventDefault(); dropLabel.classList.add('drag-over'); });
-      dropLabel.addEventListener('dragleave', () => dropLabel.classList.remove('drag-over'));
-      dropLabel.addEventListener('drop', e => {
-        e.preventDefault();
-        dropLabel.classList.remove('drag-over');
-        const pdfs = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
-        pdfs.forEach(f => {
-          if (!queuedFiles.find(q => q.name === f.name)) queuedFiles.push(f);
-        });
-        renderLibraryList();
-      });
-    }
   })();
 
   // Initial render

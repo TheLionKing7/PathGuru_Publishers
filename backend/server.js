@@ -42,6 +42,10 @@ import {
   uploadMediaAsset,
   listMediaAssets,
   deleteMediaAsset,
+  uploadLibraryFile,
+  listLibraryFiles,
+  deleteLibraryFile,
+  isValidLibraryFolder,
 } from './cloudflareR2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -635,6 +639,48 @@ ent.refundOrder(shopRefundMatch[1], body);
     try {
       const key    = decodeURIComponent(mediaDeleteMatch[1]);
       const result = await deleteMediaAsset(key);
+      json(res, result);
+    } catch (e) { err(res, e.message || 'Delete failed'); }
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════
+  // LEARNING LIBRARY — /api/library/:folder
+  // ═══════════════════════════════════════════════════
+
+  // ── GET /api/library/:folder ─────────────────────
+  const libListMatch = path.match(/^\/api\/library\/([\w-]+)$/);
+  if (req.method === 'GET' && libListMatch) {
+    const folder = libListMatch[1];
+    if (!isValidLibraryFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
+    try {
+      const files = await listLibraryFiles(folder);
+      json(res, { folder, files });
+    } catch (e) { err(res, e.message || 'List failed'); }
+    return;
+  }
+
+  // ── POST /api/library/:folder/upload ─────────────
+  const libUploadMatch = path.match(/^\/api\/library\/([\w-]+)\/upload$/);
+  if (req.method === 'POST' && libUploadMatch) {
+    const folder = libUploadMatch[1];
+    if (!isValidLibraryFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
+    try {
+      const filename    = url.searchParams.get('filename') || 'upload.pdf';
+      const contentType = req.headers['content-type'] || 'application/pdf';
+      const body        = await readRawBody(req);
+      const file        = await uploadLibraryFile(folder, filename, body);
+      json(res, file, 201);
+    } catch (e) { err(res, e.message || 'Upload failed'); }
+    return;
+  }
+
+  // ── DELETE /api/library/:key* ─────────────────────
+  const libDeleteMatch = path.match(/^\/api\/library-file\/(.+)$/);
+  if (req.method === 'DELETE' && libDeleteMatch) {
+    try {
+      const key    = decodeURIComponent(libDeleteMatch[1]);
+      const result = await deleteLibraryFile(key);
       json(res, result);
     } catch (e) { err(res, e.message || 'Delete failed'); }
     return;

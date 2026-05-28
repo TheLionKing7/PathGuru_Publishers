@@ -150,3 +150,78 @@ export async function deleteMediaAsset (key) {
   }
   return { deleted: key };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// LEARNING LIBRARY — organised by publishing intent folder
+// Prefixes: library/playbooks/  library/research/  library/case-studies/
+// ═══════════════════════════════════════════════════════════════
+
+const VALID_LIBRARY_FOLDERS = ['playbooks', 'research', 'case-studies'];
+
+export function isValidLibraryFolder (folder) {
+  return VALID_LIBRARY_FOLDERS.includes(folder);
+}
+
+/**
+ * Upload a PDF example to a library folder.
+ * @param {string} folder   - 'playbooks' | 'research' | 'case-studies'
+ * @param {string} filename - original filename
+ * @param {Buffer|Uint8Array} body
+ * @returns {{ key: string, url: string, name: string }}
+ */
+export async function uploadLibraryFile (folder, filename, body) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  if (!isValidLibraryFolder(folder)) throw new Error(`Invalid library folder: ${folder}`);
+  const safe = safeFileName(filename);
+  const key  = `library/${folder}/${Date.now()}-${safe}`;
+  const r2Url = await uploadToR2(key, body, 'application/pdf');
+  const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '';
+  const url = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${key}` : r2Url;
+  return { key, url, name: filename };
+}
+
+/**
+ * List all PDFs in a library folder.
+ * @param {string} folder - 'playbooks' | 'research' | 'case-studies'
+ */
+export async function listLibraryFiles (folder) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  if (!isValidLibraryFolder(folder)) throw new Error(`Invalid library folder: ${folder}`);
+  const prefix  = `library/${folder}/`;
+  const apiUrl  = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}&limit=200`;
+  const res     = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${apiToken}` } });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`R2 list failed: ${res.status} ${t.slice(0, 200)}`);
+  }
+  const data      = await res.json();
+  const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '';
+  return (data.result?.objects || []).map(o => ({
+    key:       o.key,
+    name:      o.key.split('/').pop().replace(/^\d+-/, ''), // strip timestamp prefix
+    size:      o.size,
+    uploaded:  o.uploaded,
+    url:       publicUrl
+      ? `${publicUrl.replace(/\/$/, '')}/${o.key}`
+      : `${getBaseUrl()}/${encodeKey(o.key)}`,
+  }));
+}
+
+/**
+ * Delete a library file by its full R2 key.
+ */
+export async function deleteLibraryFile (key) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  // Safety: only allow deletion inside library/ prefix
+  if (!key.startsWith('library/')) throw new Error('Key must be inside library/ prefix.');
+  const url = getObjectUrl(key);
+  const res = await fetch(url, {
+    method:  'DELETE',
+    headers: { 'Authorization': `Bearer ${apiToken}` },
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`R2 delete failed: ${res.status} ${t.slice(0, 200)}`);
+  }
+  return { deleted: key };
+}
