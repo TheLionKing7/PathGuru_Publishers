@@ -527,9 +527,12 @@
         if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
         try {
           const res = await fetch('/api/shop/vektor/users');
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          if (!res.ok) {
+            const d = await res.json().catch(() => ({}));
+            throw new Error(d.error || `HTTP ${res.status}`);
+          }
           const data = await res.json();
-          vkAllUsers = data.users || data || [];
+          vkAllUsers = data.users || [];
           const paid = vkAllUsers.filter(u => u.plan && u.plan !== 'free').length;
           const free = vkAllUsers.filter(u => !u.plan || u.plan === 'free').length;
           const mrr  = vkAllUsers.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
@@ -538,12 +541,18 @@
           set('vkDetailPaid',  String(paid));
           set('vkDetailFree',  String(free));
           set('vkDetailMrr',   `$${mrr}`);
+          // Show cached notice if data is stale
+          if (data._stale && refreshBtn) {
+            refreshBtn.title = 'Vektor API is rate-limited — showing cached data. Try again shortly.';
+            refreshBtn.textContent = 'Cached';
+            setTimeout(() => { refreshBtn.textContent = 'Refresh'; refreshBtn.title = ''; }, 5000);
+          }
           renderVkDetailUsers();
         } catch (e) {
           shopToast(e.message, 'error');
           if (wrap) wrap.innerHTML = `<div style="padding:12px 0;color:var(--red);font-size:12px">Error: ${esc(e.message)}</div>`;
         } finally {
-          if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh'; }
+          if (refreshBtn) { refreshBtn.disabled = false; if (refreshBtn.textContent === 'Loading…') refreshBtn.textContent = 'Refresh'; }
         }
       }
 

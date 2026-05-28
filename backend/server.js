@@ -596,27 +596,50 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ── GET /api/shop/vektor/users ───────────────────
-  // Proxy to Vektor admin API — key stays server-side, response cached 60s
+  // Proxy to Vektor admin API — cached 2 min; serves stale on 429
   if (req.method === 'GET' && path === '/api/shop/vektor/users') {
+    const adminKey   = process.env.VEKTOR_ADMIN_KEY;
+    const serviceKey = process.env.VEKTOR_SERVICE_KEY;
+    if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
+
+    const now      = Date.now();
+    const CACHE_MS = 2 * 60_000; // 2 minutes
+
+    // Serve from cache if fresh
+    if (_vektorUsersCache && (now - _vektorUsersCacheTs) < CACHE_MS) {
+      json(res, _vektorUsersCache); return;
+    }
+
     try {
-      const adminKey   = process.env.VEKTOR_ADMIN_KEY;
-      const serviceKey = process.env.VEKTOR_SERVICE_KEY;
-      if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
-
-      const now = Date.now();
-      if (_vektorUsersCache && (now - _vektorUsersCacheTs) < 60_000) {
-        json(res, _vektorUsersCache); return;
-      }
-
       const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
         headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
+        signal: AbortSignal.timeout(10_000),
       });
-      if (!vRes.ok) throw Object.assign(new Error(`Vektor API ${vRes.status}`), { status: vRes.status });
-      const data = await vRes.json();
+
+      if (vRes.status === 429) {
+        // Rate limited — serve stale cache if we have it, otherwise surface the error
+        if (_vektorUsersCache) {
+          json(res, { ..._vektorUsersCache, _stale: true, _staleReason: 'rate_limited' });
+        } else {
+          err(res, 'Vektor API is temporarily rate-limited. Please try again in a moment.', 429);
+        }
+        return;
+      }
+
+      if (!vRes.ok) { err(res, `Vektor API returned ${vRes.status}`, vRes.status); return; }
+
+      const data          = await vRes.json();
       _vektorUsersCache   = data;
       _vektorUsersCacheTs = now;
       json(res, data);
-    } catch (e) { err(res, e.message, e.status || 502); }
+    } catch (e) {
+      // Network/timeout — serve stale if available
+      if (_vektorUsersCache) {
+        json(res, { ..._vektorUsersCache, _stale: true, _staleReason: e.message });
+      } else {
+        err(res, e.message || 'Failed to reach Vektor API', 502);
+      }
+    }
     return;
   }
 
