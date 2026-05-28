@@ -256,7 +256,6 @@
       return;
     }
 
-    // Combine all three sections into a single markdown document
     const parts = [];
     if (refund)  parts.push(`## Refund Policy\n\n${refund}`);
     if (terms)   parts.push(`## Terms of Service\n\n${terms}`);
@@ -284,7 +283,6 @@
     const freeThreshold = parseFloat(document.getElementById('shipFreeThreshold')?.value || '0');
     const zonesRaw      = document.getElementById('shipZones')?.value?.trim()         || '';
 
-    // Parse zones textarea: "Country=rate" per line → ShippingRule array
     const rules = zonesRaw
       .split('\n')
       .map(l => l.trim())
@@ -295,12 +293,11 @@
         return {
           region:    region || 'Unknown',
           method:    method || 'Standard',
-          price_usd: Math.round(rate * 100),  // convert to cents
+          price_usd: Math.round(rate * 100),
           eta:       `${leadTime || 3}–${(leadTime || 3) + 2} days`,
         };
       });
 
-    // Add a flat-rate default rule if no zones defined
     if (!rules.length && (method || flatRate)) {
       rules.push({
         region:    'Worldwide',
@@ -340,17 +337,16 @@
 
       const d = data.data || data;
 
-      const revEl    = document.getElementById('shopStatRevenue');
-      const ordEl    = document.getElementById('shopStatOrders');
-      const aovEl    = document.getElementById('shopStatAov');
-      const convEl   = document.getElementById('shopStatConv');
+      const revEl  = document.getElementById('shopStatRevenue');
+      const ordEl  = document.getElementById('shopStatOrders');
+      const aovEl  = document.getElementById('shopStatAov');
+      const convEl = document.getElementById('shopStatConv');
 
-      if (revEl) revEl.textContent = `$${esc(d.revenue_usd || '0.00')}`;
-      if (ordEl) ordEl.textContent = String(d.orders_paid || 0);
-      if (aovEl) aovEl.textContent = `$${esc(d.aov_usd || '0.00')}`;
-      if (convEl) convEl.textContent = '—'; // Not computed server-side yet
+      if (revEl)  revEl.textContent  = `$${esc(d.revenue_usd || '0.00')}`;
+      if (ordEl)  ordEl.textContent  = String(d.orders_paid || 0);
+      if (aovEl)  aovEl.textContent  = `$${esc(d.aov_usd || '0.00')}`;
+      if (convEl) convEl.textContent = '—';
 
-      // Show per-currency breakdown if mixed currencies
       const byCurrency = d.revenue_by_currency || {};
       const currencies = Object.keys(byCurrency);
       if (currencies.length > 1) {
@@ -376,7 +372,6 @@
   }
 
   function fmtPrice (product) {
-    // DigiFusion stores prices as { USD: 4900, NGN: 6500000 } in minor units
     const prices   = product.prices || {};
     const currency = Object.keys(prices)[0] || product.currency || 'USD';
     const minor    = prices[currency] ?? product.price_usd ?? (product.price ? product.price * 100 : 0);
@@ -425,46 +420,38 @@
 
   function openProductDetail (product) {
     detailProduct = product;
-    const overlay   = document.getElementById('prodDetailOverlay');
-    const panel     = document.getElementById('prodDetailPanel');
-    const nameEl    = document.getElementById('prodDetailName');
-    const slugEl    = document.getElementById('prodDetailSlug');
-    const badgeEl   = document.getElementById('prodDetailBadge');
-    const editBtn   = document.getElementById('prodDetailEditBtn');
-    const bodyEl    = document.getElementById('prodDetailBody');
+    const overlay = document.getElementById('prodDetailOverlay');
+    const panel   = document.getElementById('prodDetailPanel');
+    const nameEl  = document.getElementById('prodDetailName');
+    const slugEl  = document.getElementById('prodDetailSlug');
+    const badgeEl = document.getElementById('prodDetailBadge');
+    const editBtn = document.getElementById('prodDetailEditBtn');
+    const bodyEl  = document.getElementById('prodDetailBody');
     if (!overlay || !panel || !bodyEl) return;
 
     const categoryLabel = {
-      'field-guide': '📗 Field Guide',
-      'playbook':    '⚡ Playbook',
-      'research':    '🔍 Research',
-      'tool':        '🔧 Tool',
-      'saas':        '☁️ SaaS',
-      'service':     '🤝 Service',
-      'bundle':      '📦 Bundle',
+      'field-guide': '📗 Field Guide', 'playbook': '⚡ Playbook',
+      'research': '🔍 Research',       'tool': '🔧 Tool',
+      'saas': '☁️ SaaS',               'service': '🤝 Service', 'bundle': '📦 Bundle',
     };
     const typeLabel = {
-      'download':     '⬇️ Download',
-      'subscription': '🔄 Subscription',
-      'service':      '📞 Service',
-      'saas':         '☁️ SaaS',
+      'download': '⬇️ Download', 'subscription': '🔄 Subscription',
+      'service':  '📞 Service',  'saas': '☁️ SaaS',
     };
 
-    if (nameEl) nameEl.textContent = product.name || 'Untitled';
-    if (slugEl) slugEl.textContent = product.slug ? `/${product.slug}` : '';
+    if (nameEl)  nameEl.textContent  = product.name || 'Untitled';
+    if (slugEl)  slugEl.textContent  = product.slug ? `/${product.slug}` : '';
     if (badgeEl) badgeEl.textContent = categoryLabel[product.category] || product.category || '';
 
-    const price   = fmtPrice(product);
-    const active  = product.active !== false;
-    const isVektor = (product.slug || '').toLowerCase().includes('vektor') || (product.name || '').toLowerCase().includes('vektor');
+    const price    = fmtPrice(product);
+    const active   = product.active !== false;
+    const isVektor = (product.slug || '').toLowerCase().includes('vektor') ||
+                     (product.name || '').toLowerCase().includes('vektor');
 
-    const coverHtml = product.cover_image_url
-      ? `<img src="${esc(product.cover_image_url)}" class="prod-detail-cover" alt="Cover">`
-      : '';
-
+    const coverHtml      = product.cover_image_url
+      ? `<img src="${esc(product.cover_image_url)}" class="prod-detail-cover" alt="Cover">` : '';
     const fulfillmentStr = product.fulfillment && Object.keys(product.fulfillment).length
-      ? JSON.stringify(product.fulfillment, null, 2)
-      : null;
+      ? JSON.stringify(product.fulfillment, null, 2) : null;
 
     bodyEl.innerHTML = `
       ${coverHtml}
@@ -474,16 +461,8 @@
         <div class="prod-detail-field"><label>Type</label><div class="val">${typeLabel[product.type] || product.type || '—'}</div></div>
         <div class="prod-detail-field"><label>Featured</label><div class="val">${product.featured ? 'Yes' : 'No'}</div></div>
       </div>
-      ${product.description ? `
-        <div>
-          <div class="prod-detail-section-title">Description</div>
-          <div class="prod-detail-desc">${esc(product.description)}</div>
-        </div>` : ''}
-      ${fulfillmentStr ? `
-        <div>
-          <div class="prod-detail-section-title">Fulfillment metadata</div>
-          <pre class="prod-detail-json">${esc(fulfillmentStr)}</pre>
-        </div>` : ''}
+      ${product.description ? `<div><div class="prod-detail-section-title">Description</div><div class="prod-detail-desc">${esc(product.description)}</div></div>` : ''}
+      ${fulfillmentStr ? `<div><div class="prod-detail-section-title">Fulfillment metadata</div><pre class="prod-detail-json">${esc(fulfillmentStr)}</pre></div>` : ''}
       ${isVektor ? `
         <div>
           <div class="prod-detail-section-title" style="display:flex;align-items:center;justify-content:space-between">
@@ -511,11 +490,8 @@
         </div>` : ''}
     `;
 
-    if (editBtn) {
-      editBtn.onclick = () => { closeProductDetail(); openProductForm(product); };
-    }
+    if (editBtn) editBtn.onclick = () => { closeProductDetail(); openProductForm(product); };
 
-    // Auto-load Vektor users and wire controls if this is Vektor
     if (isVektor) {
       let vkAllUsers = [];
 
@@ -545,7 +521,7 @@
       }
 
       async function fetchVkDetailUsers () {
-        const wrap = document.getElementById('vkDetailUsersWrap');
+        const wrap       = document.getElementById('vkDetailUsersWrap');
         const refreshBtn = document.getElementById('vkDetailRefreshBtn');
         if (wrap) wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Loading users…</p></div>';
         if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
@@ -571,11 +547,8 @@
         }
       }
 
-      // Auto-load on open
       fetchVkDetailUsers();
-
-      // Wire search & filter
-      document.getElementById('vkDetailSearch')?.addEventListener('input',  debounceShop(renderVkDetailUsers, 250));
+      document.getElementById('vkDetailSearch')?.addEventListener('input', debounceShop(renderVkDetailUsers, 250));
       document.getElementById('vkDetailPlanFilter')?.addEventListener('change', renderVkDetailUsers);
       document.getElementById('vkDetailRefreshBtn')?.addEventListener('click', fetchVkDetailUsers);
     }
@@ -598,19 +571,13 @@
       return;
     }
     const categoryLabel = {
-      'field-guide': '📗 Field Guide',
-      'playbook':    '⚡ Playbook',
-      'research':    '🔍 Research',
-      'tool':        '🔧 Tool',
-      'saas':        '☁️ SaaS',
-      'service':     '🤝 Service',
-      'bundle':      '📦 Bundle',
+      'field-guide': '📗 Field Guide', 'playbook': '⚡ Playbook',
+      'research':    '🔍 Research',    'tool':     '🔧 Tool',
+      'saas':        '☁️ SaaS',        'service':  '🤝 Service', 'bundle': '📦 Bundle',
     };
     const typeLabel = {
-      'download':     '⬇️ Download',
-      'subscription': '🔄 Subscription',
-      'service':      '📞 Service',
-      'saas':         '☁️ SaaS',
+      'download': '⬇️ Download', 'subscription': '🔄 Subscription',
+      'service':  '📞 Service',  'saas': '☁️ SaaS',
     };
     wrap.innerHTML = products.map(p => {
       const catBadge  = categoryLabel[p.category] || p.category || '—';
@@ -650,8 +617,6 @@
         archiveProduct(btn.dataset.id);
       });
     });
-
-    // Click row → detail panel
     wrap.querySelectorAll('.prod-row').forEach(row => {
       row.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
@@ -682,14 +647,12 @@
                                 : product?.prices?.NGN != null ? (product.prices.NGN / 100).toFixed(2)
                                 : product?.price_usd != null ? (product.price_usd / 100).toFixed(2)
                                 : (product?.price || ''));
-    // Infer primary currency from prices object
     const firstCurrency = product?.prices ? Object.keys(product.prices)[0] : null;
     set('prodFormCurrency',    firstCurrency || product?.currency || 'USD');
     set('prodFormDesc',        product?.description || '');
     set('prodFormCoverUrl',    product?.cover_image_url || '');
     set('prodFormFulfillment', product?.fulfillment && Object.keys(product.fulfillment).length
-                                ? JSON.stringify(product.fulfillment, null, 2)
-                                : '');
+                                ? JSON.stringify(product.fulfillment, null, 2) : '');
     if (title) title.textContent = product ? 'Edit Product' : 'Add Product';
     const errEl = document.getElementById('prodFormError');
     if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
@@ -708,8 +671,8 @@
 
   async function saveProduct (e) {
     e.preventDefault();
-    const errEl   = document.getElementById('prodFormError');
-    const saveBtn = document.getElementById('prodFormSave');
+    const errEl    = document.getElementById('prodFormError');
+    const saveBtn  = document.getElementById('prodFormSave');
     const name     = document.getElementById('prodFormName')?.value.trim();
     const slug     = document.getElementById('prodFormSlug')?.value.trim();
     const category = document.getElementById('prodFormCategory')?.value || null;
@@ -733,25 +696,18 @@
       catch { if (errEl) { errEl.textContent = 'Fulfillment metadata must be valid JSON.'; errEl.hidden = false; } return; }
     }
 
-    // Build prices object using the selected currency — DigiFusion stores minor units per currency
     const priceMinor = Math.round(priceRaw * 100);
     const prices = priceMinor > 0 ? { [currency]: priceMinor } : {};
 
     const payload = {
-      name,
-      slug:            slug || slugify(name),
-      type,
-      active:          statusVal === 'active',
-      featured,
-      description:     desc,
-      prices,
-      fulfillment,
-      ...(category  ? { category }  : {}),
-      ...(coverUrl  ? { cover_image_url: coverUrl } : {}),
+      name, slug: slug || slugify(name), type,
+      active: statusVal === 'active', featured, description: desc, prices, fulfillment,
+      ...(category ? { category } : {}),
+      ...(coverUrl ? { cover_image_url: coverUrl } : {}),
     };
 
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
-    if (errEl) { errEl.textContent = ''; errEl.hidden = true; }
+    if (errEl)   { errEl.textContent = ''; errEl.hidden = true; }
 
     try {
       const url    = editingProductId
@@ -783,7 +739,6 @@
 
   let _productsWired = false;
   function wireProducts () {
-    // Guard: only bind event listeners once; subsequent calls just refresh data
     if (_productsWired) { loadProducts(); return; }
     _productsWired = true;
 
@@ -795,7 +750,6 @@
     if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) closeProductForm(); });
     if (cancel)  cancel.addEventListener('click', closeProductForm);
 
-    // Detail panel close
     const detailOverlay = document.getElementById('prodDetailOverlay');
     const detailClose   = document.getElementById('prodDetailClose');
     if (detailOverlay) detailOverlay.addEventListener('click', (e) => { if (e.target === detailOverlay) closeProductDetail(); });
@@ -814,33 +768,29 @@
 
     ['shopProductSearch', 'shopProductCategory', 'shopProductStatus'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) {
-        const ev = id === 'shopProductSearch' ? 'input' : 'change';
-        el.addEventListener(ev, debounceShop(loadProducts, 300));
-      }
+      if (el) el.addEventListener(id === 'shopProductSearch' ? 'input' : 'change', debounceShop(loadProducts, 300));
     });
 
     const refreshBtn = document.getElementById('shopProductRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadProducts);
 
-    // Auto-load on first activation
     loadProducts();
   }
 
   /* ── SITE TRAFFIC ANALYTICS ──────────────────────────────────── */
   async function loadTrafficAnalytics () {
-    const range   = document.getElementById('shopTrafficRange')?.value || '30d';
-    const btn     = document.getElementById('shopTrafficRefresh');
+    const range = document.getElementById('shopTrafficRange')?.value || '30d';
+    const btn   = document.getElementById('shopTrafficRefresh');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
 
     try {
-      const res  = await fetch(`${getBackendUrl()}/api/shop/analytics/pageviews?range=${range}`);
+      const res = await fetch(`${getBackendUrl()}/api/shop/analytics/pageviews?range=${range}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d    = await res.json();
+      const d = await res.json();
 
       const viewEl = document.getElementById('shopStatViews');
       const sessEl = document.getElementById('shopStatSessions');
-      if (viewEl) viewEl.textContent = String(d.total_views   || 0);
+      if (viewEl) viewEl.textContent = String(d.total_views    || 0);
       if (sessEl) sessEl.textContent = String(d.unique_sessions || 0);
 
       const pagesWrap = document.getElementById('shopTopPages');
@@ -861,8 +811,8 @@
 
       const chartWrap = document.getElementById('shopDailyChart');
       if (chartWrap) {
-        const days  = d.daily_views || [];
-        const max   = Math.max(...days.map(d => d.views), 1);
+        const days = d.daily_views || [];
+        const max  = Math.max(...days.map(d => d.views), 1);
         chartWrap.innerHTML = `<div class="spark-chart">${days.map(day => {
           const pct = Math.round((day.views / max) * 100);
           return `<div class="spark-bar" style="height:${pct}%" title="${day.date}: ${day.views} views"></div>`;
@@ -877,23 +827,19 @@
     }
   }
 
-  /* ── VEKTOR USERS (accessed via product "Users" panel) ───────── */
+  /* ── VEKTOR USERS ─────────────────────────────────────────────── */
   const VEKTOR_API = 'https://vektor-xr-1.onrender.com';
   let allVektorUsers = [];
 
   async function loadVektorUsers () {
-    const wrap      = document.getElementById('vektorUsersTable');
-    const btn       = document.getElementById('vektorUsersRefresh');
-    const searchEl  = document.getElementById('vektorSearch');
-    const planEl    = document.getElementById('vektorPlanFilter');
+    const wrap    = document.getElementById('vektorUsersTable');
+    const btn     = document.getElementById('vektorUsersRefresh');
     if (!wrap) return;
-
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
     wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Fetching Vektor users…</p></div>';
-
     try {
       const res = await fetch(`${VEKTOR_API}/admin/users`);
-      if (!res.ok) throw new Error(`Vektor API returned ${res.status} — check admin endpoint exists`);
+      if (!res.ok) throw new Error(`Vektor API returned ${res.status}`);
       const data = await res.json();
       allVektorUsers = data.users || data || [];
       renderVektorUsers();
@@ -920,12 +866,11 @@
       return true;
     });
 
-    // Update stat cards
-    const total   = allVektorUsers.length;
-    const paid    = allVektorUsers.filter(u => u.plan && u.plan !== 'free').length;
-    const free    = allVektorUsers.filter(u => !u.plan || u.plan === 'free').length;
-    const mrr     = allVektorUsers.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
-    const sweeps  = allVektorUsers.reduce((s, u) => s + (Number(u.sweeps_this_month) || 0), 0);
+    const total  = allVektorUsers.length;
+    const paid   = allVektorUsers.filter(u => u.plan && u.plan !== 'free').length;
+    const free   = allVektorUsers.filter(u => !u.plan || u.plan === 'free').length;
+    const mrr    = allVektorUsers.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
+    const sweeps = allVektorUsers.reduce((s, u) => s + (Number(u.sweeps_this_month) || 0), 0);
 
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     set('vkStatTotal',  String(total));
@@ -940,19 +885,9 @@
     }
 
     const planLimit = { free: 3, solo: 40, pro: '∞' };
-
     wrap.innerHTML = `
       <table class="shop-table vk-users-table">
-        <thead>
-          <tr>
-            <th>Email</th>
-            <th>Plan</th>
-            <th>Sweeps used</th>
-            <th>Monthly limit</th>
-            <th>Joined</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Email</th><th>Plan</th><th>Sweeps used</th><th>Monthly limit</th><th>Joined</th><th>Actions</th></tr></thead>
         <tbody>
           ${filtered.map(u => {
             const plan  = u.plan || 'free';
@@ -962,24 +897,18 @@
             return `<tr>
               <td class="mono" style="font-size:12px">${esc(u.email || '—')}</td>
               <td><span class="vk-plan-pill ${esc(plan)}">${esc(plan.toUpperCase())}</span></td>
-              <td>
-                <div style="display:flex;align-items:center;gap:8px">
-                  <span>${used}</span>
-                  ${pct !== null ? `<div class="vk-sweep-bar"><div class="vk-sweep-fill" style="width:${pct}%;background:${pct >= 90 ? 'var(--red)' : 'var(--gold)'}"></div></div>` : ''}
-                </div>
-              </td>
+              <td><div style="display:flex;align-items:center;gap:8px"><span>${used}</span>${pct !== null ? `<div class="vk-sweep-bar"><div class="vk-sweep-fill" style="width:${pct}%;background:${pct >= 90 ? 'var(--red)' : 'var(--gold)'}"></div></div>` : ''}</div></td>
               <td>${limit}</td>
               <td style="font-size:12px;color:var(--text-muted)">${fmtDate(u.created_at)}</td>
               <td class="action-cell">
-                ${plan === 'free'  ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="solo" title="Upgrade to Solo">→ Solo</button>` : ''}
-                ${plan === 'solo'  ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="pro"  title="Upgrade to Pro">→ Pro</button>` : ''}
-                ${plan !== 'free'  ? `<button class="btn-sm btn-secondary vk-plan-btn" data-email="${esc(u.email)}" data-plan="free" title="Downgrade to Free">↓ Free</button>` : ''}
+                ${plan === 'free' ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="solo">→ Solo</button>` : ''}
+                ${plan === 'solo' ? `<button class="btn-sm btn-primary vk-plan-btn" data-email="${esc(u.email)}" data-plan="pro">→ Pro</button>` : ''}
+                ${plan !== 'free' ? `<button class="btn-sm btn-secondary vk-plan-btn" data-email="${esc(u.email)}" data-plan="free">↓ Free</button>` : ''}
               </td>
             </tr>`;
           }).join('')}
         </tbody>
-      </table>
-    `;
+      </table>`;
 
     wrap.querySelectorAll('.vk-plan-btn').forEach(b => {
       b.addEventListener('click', async () => {
@@ -994,7 +923,6 @@
           });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || `HTTP ${r.status}`); }
           shopToast(`${email} moved to ${plan.toUpperCase()} plan.`, 'success');
-          // Update local state and re-render
           const u = allVektorUsers.find(x => x.email === email);
           if (u) u.plan = plan;
           renderVektorUsers();
@@ -1013,40 +941,27 @@
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
   }
 
-  /* ── WIRE SHOP ──────────────────────────────────────────────────
-     Called once on DOMContentLoaded.  Each tab lazily loads its
-     data the first time it is activated.
-  ──────────────────────────────────────────────────────────────── */
+  /* ── WIRE SHOP ────────────────────────────────────────────────── */
   function wireShop () {
-    // Module-level tab switching (module-tab buttons inside module-shop)
     const shopShell = document.getElementById('module-shop');
     if (!shopShell) return;
 
-    // Wires sub-tab switching for all .shop-tab elements
     shopShell.querySelectorAll('.shop-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         shopShell.querySelectorAll('.shop-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
         btn.classList.add('active');
         btn.setAttribute('aria-selected', 'true');
-        // data-subtab is "shop-products", "shop-services", etc.
-        // Strip the "shop-" prefix for panel ID construction and lazy-load checks.
-        const fullTab = btn.dataset.subtab;
-        const target  = fullTab.replace(/^shop-/, '');
+        const target = btn.dataset.subtab.replace(/^shop-/, '');
         shopShell.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         const panel = document.getElementById(`tab-shop-${target}`);
         if (panel) panel.classList.add('active');
-        // Lazy-load on first activation
-        // "services" maps to the bookings data source
-        // "payments" loads both orders and subscriptions
-        if (target === 'services')   loadBookings();
-        if (target === 'payments')   { loadPayments(); loadSubscriptions(); }
-        if (target === 'analytics')  loadAnalytics();
-        if (target === 'products')   { wireProducts(); }
-        if (target === 'vektor')     loadVektorUsers();
+        if (target === 'services')  loadBookings();
+        if (target === 'payments')  { loadOrders(); loadSubscriptions(); }
+        if (target === 'analytics') loadAnalytics();
+        if (target === 'products')  wireProducts();
       });
     });
 
-    // Analytics sub-tabs (Sales vs Site Traffic)
     document.querySelectorAll('.shop-analytics-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.shop-analytics-tab').forEach(b => b.classList.remove('active'));
@@ -1058,36 +973,19 @@
       });
     });
 
-    // Traffic range + refresh
     document.getElementById('shopTrafficRange')?.addEventListener('change', loadTrafficAnalytics);
     document.getElementById('shopTrafficRefresh')?.addEventListener('click', loadTrafficAnalytics);
-
-    // Refresh buttons wired statically
     document.getElementById('shopSubsRefresh')?.addEventListener('click', loadSubscriptions);
     document.getElementById('shopBookingsRefresh')?.addEventListener('click', loadBookings);
-    document.getElementById('shopPaymentsRefresh')?.addEventListener('click', loadPayments);
+    document.getElementById('shopPaymentsRefresh')?.addEventListener('click', loadOrders);
     document.getElementById('shopAnalyticsRefresh')?.addEventListener('click', loadAnalytics);
-    document.getElementById('vektorUsersRefresh')?.addEventListener('click', loadVektorUsers);
-
-    // Vektor filter inputs — re-render without refetching
-    document.getElementById('vektorSearch')?.addEventListener('input',  debounceShop(renderVektorUsers, 250));
-    document.getElementById('vektorPlanFilter')?.addEventListener('change', renderVektorUsers);
-
-    // T&C save
     document.getElementById('shopTcSave')?.addEventListener('click', saveTerms);
-
-    // Shipping save
     document.getElementById('shopShippingSave')?.addEventListener('click', saveShipping);
 
-    // Wire products tab on startup (it's now the default first tab)
-    const activeTab = shopShell.querySelector('.shop-tab.active');
+    // Wire products on startup — it's the default active tab
+    const activeTab  = shopShell.querySelector('.shop-tab.active');
     const initTarget = activeTab?.dataset?.subtab?.replace(/^shop-/, '');
     if (initTarget === 'products') wireProducts();
-  }
-
-  /* ── esc helper ───────────────────────────────────────────────── */
-  function esc (s) {
-            return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireShop);
