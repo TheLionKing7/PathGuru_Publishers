@@ -514,8 +514,8 @@
           <tbody>${filtered.map(u => `<tr>
             <td style="color:var(--text-secondary)">${esc(u.email || '—')}</td>
             <td><span class="vk-plan-pill ${esc(u.plan || 'free')}">${(u.plan || 'free').toUpperCase()}</span></td>
-            <td>${u.sweeps_this_month ?? 0}</td>
-            <td style="color:var(--text-muted)">${fmtDate(u.created_at)}</td>
+            <td>${u.sweeps ?? 0}</td>
+            <td style="color:var(--text-muted)">${fmtDate(u.createdAt)}</td>
           </tr>`).join('')}</tbody>
         </table>`;
       }
