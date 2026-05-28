@@ -42,13 +42,13 @@ import {
 } from './referenceLibrary.js';
 import { extractPdfProfile }                     from './pdfDesignExtractor.js';
 import {
+  isR2Enabled,
   uploadMediaAsset,
   listMediaAssets,
   deleteMediaAsset,
   uploadLibraryFile,
-  listLibraryFiles,
-  deleteLibraryFile,
-  isValidLibraryFolder,
+  listLibraryFiles  as listLibraryFilesR2,
+  deleteLibraryFile as deleteLibraryFileR2,
 } from './cloudflareR2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -683,7 +683,8 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ═══════════════════════════════════════════════════
-  // LEARNING LIBRARY — /api/library/:folder  (local disk)
+  // LEARNING LIBRARY — /api/library/:folder
+  // Uses R2 when credentials are available, local disk otherwise
   // ═══════════════════════════════════════════════════
 
   // ── GET /api/library/:folder ─────────────────────
@@ -692,8 +693,10 @@ ent.refundOrder(shopRefundMatch[1], body);
     const folder = libListMatch[1];
     if (!isValidIntentFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
     try {
-      const files = await listIntentFolder(folder);
-      json(res, { folder, files });
+      const files = isR2Enabled()
+        ? await listLibraryFilesR2(folder)
+        : await listIntentFolder(folder);
+      json(res, { folder, files, storage: isR2Enabled() ? 'r2' : 'local' });
     } catch (e) { err(res, e.message || 'List failed'); }
     return;
   }
@@ -707,8 +710,10 @@ ent.refundOrder(shopRefundMatch[1], body);
       const filename = url.searchParams.get('filename') || 'upload.pdf';
       const body     = await readRawBody(req);
       if (!body.length) { err(res, 'Empty file body', 400); return; }
-      const file = await saveIntentFile(folder, filename, body);
-      json(res, file, 201);
+      const file = isR2Enabled()
+        ? await uploadLibraryFile(folder, filename, body)
+        : await saveIntentFile(folder, filename, body);
+      json(res, { ...file, storage: isR2Enabled() ? 'r2' : 'local' }, 201);
     } catch (e) { err(res, e.message || 'Upload failed'); }
     return;
   }
@@ -718,7 +723,9 @@ ent.refundOrder(shopRefundMatch[1], body);
   if (req.method === 'DELETE' && libDeleteMatch) {
     try {
       const key    = decodeURIComponent(libDeleteMatch[1]);
-      const result = await deleteIntentFile(key);
+      const result = isR2Enabled()
+        ? await deleteLibraryFileR2(key)
+        : await deleteIntentFile(key);
       json(res, result);
     } catch (e) { err(res, e.message || 'Delete failed'); }
     return;
