@@ -144,8 +144,15 @@ const server = createServer(async (req, res) => {
   // ── Static (webapp) ─────────────────────────────
   if (req.method === 'GET' && STATIC[path]) {
     const { file, mime } = STATIC[path];
-    if (existsSync(file)) { res.writeHead(200, { 'Content-Type': mime }); res.end(readFileSync(file)); }
-    else err(res, `Not found: ${path}`, 404);
+    if (existsSync(file)) {
+      res.writeHead(200, {
+        'Content-Type': mime,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      });
+      res.end(readFileSync(file));
+    } else err(res, `Not found: ${path}`, 404);
     return;
   }
 

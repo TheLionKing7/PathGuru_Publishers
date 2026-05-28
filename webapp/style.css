@@ -3161,6 +3161,91 @@ select option { background: var(--surface-2); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   VEKTOR USERS TAB
+═══════════════════════════════════════════════════════════════ */
+.vk-admin-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  padding: 20px 24px 16px;
+  flex-shrink: 0;
+}
+.vk-admin-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  transition: border-color 0.15s;
+}
+.vk-admin-stat:hover { border-color: var(--border-light); }
+.vk-admin-stat-val {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.vk-admin-stat-val.gold  { color: var(--gold); }
+.vk-admin-stat-val.green { color: var(--green); }
+.vk-admin-stat-lbl {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.vk-plan-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.vk-plan-pill.free { background: rgba(77,159,255,.12); color: var(--blue); border: 1px solid rgba(77,159,255,.2); }
+.vk-plan-pill.solo { background: rgba(201,168,76,.14); color: var(--gold); border: 1px solid rgba(201,168,76,.25); }
+.vk-plan-pill.pro  { background: rgba(62,207,142,.12); color: var(--green); border: 1px solid rgba(62,207,142,.2); }
+.vk-sweep-bar {
+  width: 60px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.vk-sweep-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.vektor-tab { position: relative; }
+.vektor-tab::after {
+  content: 'V';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--gold);
+  border-radius: 50%;
+  font-size: 7px;
+  font-weight: 900;
+  color: #0a0e17;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 12px;
+  text-align: center;
+}
+.vk-users-table td { vertical-align: middle; }
+@media (max-width: 900px) {
+  .vk-admin-stats { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 600px) {
+  .vk-admin-stats { grid-template-columns: 1fr 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    PRODUCTS TAB — missing layout (prod-panel-body / prod-toolbar)
 ═══════════════════════════════════════════════════════════════ */
 .prod-panel-body {

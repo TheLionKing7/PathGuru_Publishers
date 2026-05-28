@@ -403,7 +403,7 @@
       const res  = await fetch(`${getBackendUrl()}/api/shop/products?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      const raw   = data.data ?? data.products ?? data;
+      const raw   = data.data?.products ?? data.data ?? data.products ?? data;
       allProducts = Array.isArray(raw) ? raw : [];
 
       const filtered = allProducts.filter(p => {
@@ -486,14 +486,27 @@
         </div>` : ''}
       ${isVektor ? `
         <div>
-          <div class="prod-detail-section-title">Vektor — User management</div>
-          <div class="vk-admin-stats" style="padding:0;margin-bottom:14px">
+          <div class="prod-detail-section-title" style="display:flex;align-items:center;justify-content:space-between">
+            Vektor — User management
+            <button class="btn-secondary btn-sm" id="vkDetailRefreshBtn">Refresh</button>
+          </div>
+          <div class="vk-admin-stats" style="padding:0;margin-bottom:14px;grid-template-columns:repeat(4,1fr)">
             <div class="vk-admin-stat"><div class="vk-admin-stat-val" id="vkDetailTotal">—</div><div class="vk-admin-stat-lbl">Total users</div></div>
             <div class="vk-admin-stat"><div class="vk-admin-stat-val gold" id="vkDetailPaid">—</div><div class="vk-admin-stat-lbl">Paid</div></div>
+            <div class="vk-admin-stat"><div class="vk-admin-stat-val" id="vkDetailFree">—</div><div class="vk-admin-stat-lbl">Free</div></div>
             <div class="vk-admin-stat"><div class="vk-admin-stat-val green" id="vkDetailMrr">—</div><div class="vk-admin-stat-lbl">MRR</div></div>
           </div>
-          <div id="vkDetailUsersWrap" style="font-size:12px;color:var(--text-muted)">
-            <button class="btn-secondary btn-sm" id="vkDetailLoadBtn">Load Vektor users</button>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <input type="search" id="vkDetailSearch" placeholder="Search by email…" style="flex:1;height:32px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:12px">
+            <select id="vkDetailPlanFilter" style="height:32px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text-primary);font-size:12px">
+              <option value="">All plans</option>
+              <option value="free">Free</option>
+              <option value="solo">Solo</option>
+              <option value="pro">Pro</option>
+            </select>
+          </div>
+          <div id="vkDetailUsersWrap">
+            <div class="shop-loading"><div class="shop-spinner"></div><p>Loading users…</p></div>
           </div>
         </div>` : ''}
     `;
@@ -502,35 +515,69 @@
       editBtn.onclick = () => { closeProductDetail(); openProductForm(product); };
     }
 
-    // Wire Vektor load button if present
-    const vkBtn = document.getElementById('vkDetailLoadBtn');
-    if (vkBtn) {
-      vkBtn.addEventListener('click', async () => {
-        vkBtn.disabled = true;
-        vkBtn.textContent = 'Loading…';
+    // Auto-load Vektor users and wire controls if this is Vektor
+    if (isVektor) {
+      let vkAllUsers = [];
+
+      function renderVkDetailUsers () {
+        const wrap      = document.getElementById('vkDetailUsersWrap');
+        const searchVal = (document.getElementById('vkDetailSearch')?.value || '').trim().toLowerCase();
+        const planVal   = document.getElementById('vkDetailPlanFilter')?.value || '';
+        if (!wrap) return;
+        const filtered = vkAllUsers.filter(u => {
+          if (searchVal && !(u.email || '').toLowerCase().includes(searchVal)) return false;
+          if (planVal && (u.plan || 'free') !== planVal) return false;
+          return true;
+        });
+        if (!filtered.length) {
+          wrap.innerHTML = '<div style="padding:12px 0;color:var(--text-muted);font-size:12px">No users match the filter.</div>';
+          return;
+        }
+        wrap.innerHTML = `<table class="shop-table" style="font-size:12px">
+          <thead><tr><th>Email</th><th>Plan</th><th>Sweeps used</th><th>Joined</th></tr></thead>
+          <tbody>${filtered.map(u => `<tr>
+            <td style="color:var(--text-secondary)">${esc(u.email || '—')}</td>
+            <td><span class="vk-plan-pill ${esc(u.plan || 'free')}">${(u.plan || 'free').toUpperCase()}</span></td>
+            <td>${u.sweeps_this_month ?? 0}</td>
+            <td style="color:var(--text-muted)">${fmtDate(u.created_at)}</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      }
+
+      async function fetchVkDetailUsers () {
+        const wrap = document.getElementById('vkDetailUsersWrap');
+        const refreshBtn = document.getElementById('vkDetailRefreshBtn');
+        if (wrap) wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Loading users…</p></div>';
+        if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
         try {
           const res = await fetch(`${VEKTOR_API}/admin/users`);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          const users = data.users || data || [];
-          const paid  = users.filter(u => u.plan && u.plan !== 'free').length;
-          const mrr   = users.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
-          const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-          set('vkDetailTotal', String(users.length));
+          vkAllUsers = data.users || data || [];
+          const paid = vkAllUsers.filter(u => u.plan && u.plan !== 'free').length;
+          const free = vkAllUsers.filter(u => !u.plan || u.plan === 'free').length;
+          const mrr  = vkAllUsers.reduce((s, u) => s + (u.plan === 'solo' ? 19 : u.plan === 'pro' ? 39 : 0), 0);
+          const set  = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+          set('vkDetailTotal', String(vkAllUsers.length));
           set('vkDetailPaid',  String(paid));
+          set('vkDetailFree',  String(free));
           set('vkDetailMrr',   `$${mrr}`);
-          const wrap = document.getElementById('vkDetailUsersWrap');
-          if (wrap) wrap.innerHTML = users.slice(0,8).map(u => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-              <span style="color:var(--text-secondary)">${esc(u.email)}</span>
-              <span class="vk-plan-pill ${esc(u.plan || 'free')}">${(u.plan || 'free').toUpperCase()}</span>
-            </div>`).join('') + (users.length > 8 ? `<div style="padding:8px 0;color:var(--text-muted);font-size:11px">+ ${users.length - 8} more — open Vektor tab for full list</div>` : '');
+          renderVkDetailUsers();
         } catch (e) {
           shopToast(e.message, 'error');
-          vkBtn.disabled = false;
-          vkBtn.textContent = 'Retry';
+          if (wrap) wrap.innerHTML = `<div style="padding:12px 0;color:var(--red);font-size:12px">Error: ${esc(e.message)}</div>`;
+        } finally {
+          if (refreshBtn) { refreshBtn.disabled = false; refreshBtn.textContent = 'Refresh'; }
         }
-      });
+      }
+
+      // Auto-load on open
+      fetchVkDetailUsers();
+
+      // Wire search & filter
+      document.getElementById('vkDetailSearch')?.addEventListener('input',  debounceShop(renderVkDetailUsers, 250));
+      document.getElementById('vkDetailPlanFilter')?.addEventListener('change', renderVkDetailUsers);
+      document.getElementById('vkDetailRefreshBtn')?.addEventListener('click', fetchVkDetailUsers);
     }
 
     overlay.classList.add('active');
