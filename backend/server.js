@@ -49,14 +49,22 @@ import {
   uploadLibraryFile,
   listLibraryFiles  as listLibraryFilesR2,
   deleteLibraryFile as deleteLibraryFileR2,
+  putJsonCache,
+  getJsonCache,
 } from './cloudflareR2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
 const PORT      = parseInt(process.env.PORT || '8787', 10);
 
-// Vektor users cache — avoids hammering the Vektor API on every panel open
-let _vektorUsersCache   = null;
+// ── Vektor users cache ───────────────────────────────────────────────────────
+// In-memory for the current process lifetime.
+// On first request after a restart, warmed from R2 (cache/vektor-users.json)
+// so users never see a cold-start error.
+const VEKTOR_CACHE_TTL  = 10 * 60_000; // 10 minutes
+const VEKTOR_R2_KEY     = 'cache/vektor-users.json';
+
+let _vektorUsersCache   = null; // in-memory
 let _vektorUsersCacheTs = 0;
 
 const STATIC = {
@@ -596,49 +604,73 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ── GET /api/shop/vektor/users ───────────────────
-  // Proxy to Vektor admin API — cached 2 min; serves stale on 429
+  // Proxy to Vektor admin API.
+  // • In-memory cache (TTL 10 min) for the current process
+  // • R2-persisted cache (cache/vektor-users.json) survives Render restarts
+  // • Auto-retry up to 3× on 429/503 (Render free-tier cold start) with 4 s backoff
+  // • Falls back to last-known R2 snapshot rather than surfacing an error
   if (req.method === 'GET' && path === '/api/shop/vektor/users') {
     const adminKey   = process.env.VEKTOR_ADMIN_KEY;
     const serviceKey = process.env.VEKTOR_SERVICE_KEY;
     if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
 
-    const now      = Date.now();
-    const CACHE_MS = 2 * 60_000; // 2 minutes
+    const now   = Date.now();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    // Serve from cache if fresh
-    if (_vektorUsersCache && (now - _vektorUsersCacheTs) < CACHE_MS) {
+    // 1. Serve in-memory cache if still fresh
+    if (_vektorUsersCache && (now - _vektorUsersCacheTs) < VEKTOR_CACHE_TTL) {
       json(res, _vektorUsersCache); return;
     }
 
-    try {
-      const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
-        headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
-        signal: AbortSignal.timeout(10_000),
-      });
+    let lastStatus = null;
+    let lastError  = null;
 
-      if (vRes.status === 429) {
-        // Rate limited — serve stale cache if we have it, otherwise surface the error
-        if (_vektorUsersCache) {
-          json(res, { ..._vektorUsersCache, _stale: true, _staleReason: 'rate_limited' });
-        } else {
-          err(res, 'Vektor API is temporarily rate-limited. Please try again in a moment.', 429);
+    // 2. Try to fetch fresh data from Vektor, with retries on cold-start responses
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
+          headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
+          signal:  AbortSignal.timeout(15_000),
+        });
+        lastStatus = vRes.status;
+
+        if (vRes.status === 429 || vRes.status === 503) {
+          if (attempt < 3) { await sleep(4_000); continue; }
+          break; // exhausted — fall through to stale cache
         }
+
+        if (!vRes.ok) { lastError = `Vektor API returned ${vRes.status}`; break; }
+
+        // Success — update in-memory cache and persist to R2
+        const data          = await vRes.json();
+        _vektorUsersCache   = data;
+        _vektorUsersCacheTs = now;
+        putJsonCache(VEKTOR_R2_KEY, { ...data, _cachedAt: now }).catch(() => {}); // fire-and-forget
+        json(res, data);
         return;
-      }
 
-      if (!vRes.ok) { err(res, `Vektor API returned ${vRes.status}`, vRes.status); return; }
-
-      const data          = await vRes.json();
-      _vektorUsersCache   = data;
-      _vektorUsersCacheTs = now;
-      json(res, data);
-    } catch (e) {
-      // Network/timeout — serve stale if available
-      if (_vektorUsersCache) {
-        json(res, { ..._vektorUsersCache, _stale: true, _staleReason: e.message });
-      } else {
-        err(res, e.message || 'Failed to reach Vektor API', 502);
+      } catch (e) {
+        lastError = e.message || 'Network error';
+        if (attempt < 3) { await sleep(4_000); continue; }
+        break;
       }
+    }
+
+    // 3. All live attempts failed — try R2 snapshot first, then in-memory stale
+    let stale = _vektorUsersCache;
+    if (!stale) {
+      try { stale = await getJsonCache(VEKTOR_R2_KEY); } catch {}
+      if (stale) { _vektorUsersCache = stale; _vektorUsersCacheTs = stale._cachedAt ?? 0; }
+    }
+
+    if (stale) {
+      const reason = lastStatus === 429 ? 'rate_limited' : (lastError || `status_${lastStatus}`);
+      json(res, { ...stale, _stale: true, _staleReason: reason });
+    } else {
+      const msg = lastStatus === 429
+        ? 'Vektor is warming up — please refresh in a moment.'
+        : (lastError || `Vektor API returned ${lastStatus}`);
+      err(res, msg, lastStatus || 502);
     }
     return;
   }

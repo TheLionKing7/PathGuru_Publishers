@@ -207,6 +207,36 @@ export async function listLibraryFiles (folder) {
   }));
 }
 
+// ═══════════════════════════════════════════════════════════════
+// GENERIC JSON CACHE — lightweight key/value store in R2
+// Used for small, infrequently-changing payloads (e.g. Vektor users)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Persist any JSON-serialisable value to R2.
+ * @param {string} key  - R2 object key, e.g. 'cache/vektor-users.json'
+ * @param {object} data - value to store (will be JSON-stringified)
+ */
+export async function putJsonCache (key, data) {
+  if (!isR2Enabled()) return;
+  await uploadToR2(key, JSON.stringify(data), 'application/json');
+}
+
+/**
+ * Retrieve and parse a cached JSON object from R2.
+ * Returns null if the object does not exist or R2 is not configured.
+ * @param {string} key
+ * @returns {object|null}
+ */
+export async function getJsonCache (key) {
+  if (!isR2Enabled()) return null;
+  const url = getObjectUrl(key);
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiToken}` } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`R2 get failed for ${key}: ${res.status}`);
+  return await res.json();
+}
+
 /**
  * Delete a library file by its full R2 key.
  */
