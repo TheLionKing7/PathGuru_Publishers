@@ -55,6 +55,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
 const PORT      = parseInt(process.env.PORT || '8787', 10);
 
+// Vektor users cache — avoids hammering the Vektor API on every panel open
+let _vektorUsersCache   = null;
+let _vektorUsersCacheTs = 0;
+
 const STATIC = {
   '/':           { file: join(WEBAPP, 'index.html'),  mime: 'text/html; charset=utf-8' },
   '/index.html': { file: join(WEBAPP, 'index.html'),  mime: 'text/html; charset=utf-8' },
@@ -592,17 +596,25 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ── GET /api/shop/vektor/users ───────────────────
-  // Proxy to Vektor admin API — key stays server-side
+  // Proxy to Vektor admin API — key stays server-side, response cached 60s
   if (req.method === 'GET' && path === '/api/shop/vektor/users') {
     try {
       const adminKey   = process.env.VEKTOR_ADMIN_KEY;
       const serviceKey = process.env.VEKTOR_SERVICE_KEY;
       if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
-      const vRes  = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
+
+      const now = Date.now();
+      if (_vektorUsersCache && (now - _vektorUsersCacheTs) < 60_000) {
+        json(res, _vektorUsersCache); return;
+      }
+
+      const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
         headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
       });
       if (!vRes.ok) throw Object.assign(new Error(`Vektor API ${vRes.status}`), { status: vRes.status });
       const data = await vRes.json();
+      _vektorUsersCache   = data;
+      _vektorUsersCacheTs = now;
       json(res, data);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;
