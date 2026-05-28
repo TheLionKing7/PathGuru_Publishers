@@ -403,7 +403,8 @@
       const res  = await fetch(`${getBackendUrl()}/api/shop/products?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      allProducts = (data.data || data.products || data || []);
+      const raw   = data.data ?? data.products ?? data;
+      allProducts = Array.isArray(raw) ? raw : [];
 
       const filtered = allProducts.filter(p => {
         if (searchVal && !(p.name || '').toLowerCase().includes(searchVal)) return false;
