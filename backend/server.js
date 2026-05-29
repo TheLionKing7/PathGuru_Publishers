@@ -630,7 +630,7 @@ ent.refundOrder(shopRefundMatch[1], body);
       try {
         const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users', {
           headers: { 'x-api-key': serviceKey, 'x-admin-secret': adminKey },
-          signal:  AbortSignal.timeout(15_000),
+          signal:  AbortSignal.timeout(35_000), // Render free-tier cold start takes up to ~30 s
         });
         lastStatus = vRes.status;
 
