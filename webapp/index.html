@@ -9,26 +9,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
-  <!-- OneSignal Web SDK -->
-  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-  <script>
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.init({
-        appId: "3b533b15-d684-4e35-8b95-a4ddbca6c6ac",
-        // Show the native browser prompt automatically via the OneSignal dashboard
-        // permission prompt config. Set notifyButton.enable to false because this is
-        // an admin panel — operators subscribe via the Pulse console instead.
-        notifyButton: { enable: false },
-        // Expose subscription & permission state on window for agents.js to read.
-        serviceWorkerPath: "/OneSignalSDKWorker.js",
-      });
-
-      // Surface current state on window so the Pulse panel can read it.
-      window._osReady = true;
-      document.dispatchEvent(new CustomEvent('onesignal:ready'));
-    });
-  </script>
+  <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
+       The browser SDK belongs on digitafusion.com where subscribers opt in.
+       To receive push on this admin panel too, create a separate OneSignal app
+       registered to your PathGuru domain and add its App ID here. -->
 </head>
 <body>
 
