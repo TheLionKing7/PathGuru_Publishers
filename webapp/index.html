@@ -8,6 +8,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+
+  <!-- OneSignal Web SDK -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "3b533b15-d684-4e35-8b95-a4ddbca6c6ac",
+        // Show the native browser prompt automatically via the OneSignal dashboard
+        // permission prompt config. Set notifyButton.enable to false because this is
+        // an admin panel — operators subscribe via the Pulse console instead.
+        notifyButton: { enable: false },
+        // Expose subscription & permission state on window for agents.js to read.
+        serviceWorkerPath: "/OneSignalSDKWorker.js",
+      });
+
+      // Surface current state on window so the Pulse panel can read it.
+      window._osReady = true;
+      document.dispatchEvent(new CustomEvent('onesignal:ready'));
+    });
+  </script>
 </head>
 <body>
 
@@ -32,6 +53,10 @@
       <button class="nav-btn" data-module="analytics" title="Site Analytics — pageviews, sessions, top pages" aria-label="Site Analytics module">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         <span class="nav-label">Stats</span>
+      </button>
+      <button class="nav-btn" data-module="agents" title="Intelligence Network — Agents, Console, Tasks, Leads" aria-label="Agent Network module">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="M5 15V11a7 7 0 0 1 14 0v4"/><path d="M12 11v4"/><path d="M9.5 17h5"/></svg>
+        <span class="nav-label">Agents</span>
       </button>
     </nav>
     <div class="sidebar-footer">
@@ -1388,116 +1413,234 @@
       </div>
       <div class="module-topnav" role="tablist" aria-label="Analytics sections">
         <button class="module-tab active" data-subtab="analytics" role="tab" aria-selected="true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
           Overview
         </button>
-      </div>
+      </div><!-- /.module-topnav -->
+
       <div class="module-body">
-        <section class="tab-panel active" id="tab-analytics" aria-label="Site Analytics Overview">
-          <div class="analytics-body">
-            <!-- KPI strip -->
-            <div class="analytics-kpi-row" id="analyticsKpiRow">
-              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiViews">—</div><div class="analytics-kpi-label">Total pageviews</div></div>
-              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiSessions">—</div><div class="analytics-kpi-label">Unique sessions</div></div>
-              <div class="analytics-kpi"><div class="analytics-kpi-val" id="akpiAvgPerDay">—</div><div class="analytics-kpi-label">Avg / day</div></div>
-            </div>
-            <!-- Daily chart -->
-            <div class="analytics-section">
-              <div class="analytics-section-title">Daily views</div>
-              <div class="analytics-chart-bars" id="analyticsDailyChart"></div>
-            </div>
-            <!-- Top pages + referrers -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <section class="tab-panel active" id="tab-analytics" aria-label="Site Analytics">
+          <div class="analytics-shell">
+            <div class="analytics-body">
+              <div class="analytics-kpi-row">
+                <div class="analytics-kpi">
+                  <div class="analytics-kpi-val" id="akpiViews">—</div>
+                  <div class="analytics-kpi-label">Total Views</div>
+                </div>
+                <div class="analytics-kpi">
+                  <div class="analytics-kpi-val" id="akpiSessions">—</div>
+                  <div class="analytics-kpi-label">Sessions</div>
+                </div>
+                <div class="analytics-kpi">
+                  <div class="analytics-kpi-val" id="akpiAvgPerDay">—</div>
+                  <div class="analytics-kpi-label">Avg / Day</div>
+                </div>
+              </div><!-- /.analytics-kpi-row -->
+
               <div class="analytics-section">
-                <div class="analytics-section-title">Top pages</div>
-                <div id="analyticsTopPages"><div class="analytics-empty">Click Refresh to load.</div></div>
+                <div class="analytics-section-title">Daily Views</div>
+                <div class="analytics-chart-bars" id="analyticsDailyChart">
+                  <div class="analytics-empty">Loading…</div>
+                </div>
               </div>
+
               <div class="analytics-section">
-                <div class="analytics-section-title">Top referrers</div>
-                <div id="analyticsTopReferrers"><div class="analytics-empty">Click Refresh to load.</div></div>
+                <div class="analytics-section-title">Top Pages</div>
+                <div id="analyticsTopPages">
+                  <div class="analytics-empty">Loading…</div>
+                </div>
               </div>
-            </div>
-          </div>
-        </section>
-      </div>
+
+              <div class="analytics-section">
+                <div class="analytics-section-title">Top Referrers</div>
+                <div id="analyticsTopReferrers">
+                  <div class="analytics-empty">Loading…</div>
+                </div>
+              </div>
+            </div><!-- /.analytics-body -->
+          </div><!-- /.analytics-shell -->
+        </section><!-- /#tab-analytics -->
+      </div><!-- /.module-body -->
     </div><!-- /#module-analytics -->
 
-  </div><!-- /.app-body -->
+    <!-- ══════════════════════════════════════════════
+         MODULE: AGENTS  (Network / Console / Tasks / Leads)
+    ══════════════════════════════════════════════ -->
+    <div class="module-shell" id="module-agents" data-module="agents">
 
-  <script type="module" src="/app.js"></script>
-  <script type="module" src="/blog.js"></script>
-  <script type="module" src="/shop.js"></script>
-  <script type="module" src="/analytics.js"></script>
+      <!-- Per-tab headers -->
+      <div class="module-headers">
+        <header class="panel-header active" data-for="agents-network">
+          <div>
+            <p class="panel-eyebrow">Intelligence Network</p>
+            <h1 class="panel-title">Agent Roster</h1>
+          </div>
+          <div class="header-actions">
+            <span class="agents-status-summary" id="agentsStatusSummary"></span>
+            <button class="btn-secondary btn-sm" id="agentsRefreshBtn">Refresh</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-console">
+          <div>
+            <p class="panel-eyebrow">Intelligence Network</p>
+            <h1 class="panel-title">Agent Console</h1>
+          </div>
+          <div class="header-actions">
+            <span class="agents-active-agent-label" id="consoleAgentLabel"></span>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-tasks">
+          <div>
+            <p class="panel-eyebrow">Intelligence Network</p>
+            <h1 class="panel-title">Task History</h1>
+          </div>
+          <div class="header-actions">
+            <select class="agents-filter-select" id="tasksAgentFilter">
+              <option value="">All agents</option>
+              <option value="nexus">Nexus</option>
+              <option value="atlas">Atlas</option>
+              <option value="nova">Nova</option>
+              <option value="aether">Aether</option>
+              <option value="pulse">Pulse</option>
+              <option value="synthesizer">Synthesizer</option>
+              <option value="assistant">Assistant</option>
+            </select>
+            <select class="agents-filter-select" id="tasksStatusFilter">
+              <option value="">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="running">Running</option>
+              <option value="done">Done</option>
+              <option value="failed">Failed</option>
+            </select>
+            <button class="btn-secondary btn-sm" id="tasksRefreshBtn">Refresh</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-leads">
+          <div>
+            <p class="panel-eyebrow">Intelligence Network</p>
+            <h1 class="panel-title">Lead Pipeline</h1>
+          </div>
+          <div class="header-actions">
+            <select class="agents-filter-select" id="leadsStatusFilter">
+              <option value="">All leads</option>
+              <option value="new">New</option>
+              <option value="qualified">Qualified</option>
+              <option value="booked">Booked</option>
+              <option value="closed">Closed</option>
+            </select>
+            <button class="btn-secondary btn-sm" id="leadsRefreshBtn">Refresh</button>
+          </div>
+        </header>
+      </div><!-- /.module-headers -->
 
-  <!-- ── Settings Modal ──────────────────────────────────────── -->
-  <div id="settingsModal" class="modal-backdrop" style="display:none" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
-    <div class="modal">
-      <div class="modal-header">
-        <h2 class="modal-title" id="settingsModalTitle">Settings</h2>
-        <button class="modal-close" id="closeSettings" aria-label="Close settings">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <div class="module-topnav" role="tablist" aria-label="Agents sections">
+        <button class="module-tab active" data-subtab="agents-network" role="tab" aria-selected="true">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="M5 15V11a7 7 0 0 1 14 0v4"/></svg>
+          Network
         </button>
-      </div>
-      <div class="modal-body">
+        <button class="module-tab" data-subtab="agents-console" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          Console
+        </button>
+        <button class="module-tab" data-subtab="agents-tasks" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Tasks
+        </button>
+        <button class="module-tab" data-subtab="agents-leads" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Leads
+        </button>
+      </div><!-- /.module-topnav -->
 
-        <!-- Backend Connection -->
-        <div class="settings-section">
-          <div class="settings-section-label">Backend Connection</div>
+      <div class="module-body">
 
-          <div class="settings-field">
-            <label class="settings-label" for="backendUrl">Backend URL</label>
-            <input type="url" id="backendUrl" class="settings-input" placeholder="https://your-backend.onrender.com" autocomplete="off" />
-            <p class="settings-hint">The Render deployment URL for your PathGuru server.</p>
-          </div>
-
-          <div class="settings-field">
-            <label class="settings-label" for="cmsToken">CMS Token</label>
-            <input type="password" id="cmsToken" class="settings-input" placeholder="Paste your CMS bearer token" autocomplete="off" />
-            <p class="settings-hint">Required for blog publishing and analytics API calls.</p>
-          </div>
-        </div>
-
-        <!-- Brand Identity -->
-        <div class="settings-section">
-          <div class="settings-section-label">Brand Identity</div>
-
-          <div class="settings-field">
-            <label class="settings-label" for="brandLogoUrl">Logo URL</label>
-            <input type="url" id="brandLogoUrl" class="settings-input" placeholder="https://..." autocomplete="off" />
-            <p class="settings-hint">Public URL of your brand logo (PNG or SVG).</p>
-          </div>
-
-          <div class="settings-field settings-field--row">
-            <div>
-              <label class="settings-label" for="brandPrimaryColor">Primary Colour</label>
-              <div class="settings-color-row">
-                <input type="color" id="brandPrimaryColor" class="settings-color-swatch" value="#7c6af7" />
-                <input type="text" id="brandPrimaryColorText" class="settings-input settings-input--color-text" placeholder="#7c6af7" />
-              </div>
-            </div>
-            <div>
-              <label class="settings-label" for="brandSecondaryColor">Secondary Colour</label>
-              <div class="settings-color-row">
-                <input type="color" id="brandSecondaryColor" class="settings-color-swatch" value="#f7c76a" />
-                <input type="text" id="brandSecondaryColorText" class="settings-input settings-input--color-text" placeholder="#f7c76a" />
+        <!-- ── NETWORK TAB ── -->
+        <section class="tab-panel active" id="tab-agents-network" aria-label="Agent Network">
+          <div class="agents-network-body">
+            <div class="agents-grid" id="agentsGrid">
+              <!-- Agent cards rendered by agents.js -->
+              <div class="agents-grid-loading">
+                <div class="agents-spinner"></div>
+                <span>Polling agent status…</span>
               </div>
             </div>
           </div>
+        </section><!-- /#tab-agents-network -->
 
-          <div class="settings-field">
-            <label class="settings-label" for="brandFontStack">Font Stack</label>
-            <input type="text" id="brandFontStack" class="settings-input" placeholder="Inter, system-ui, sans-serif" autocomplete="off" />
-            <p class="settings-hint">CSS font-family string used across generated content.</p>
+        <!-- ── CONSOLE TAB ── -->
+        <section class="tab-panel" id="tab-agents-console" aria-label="Agent Console">
+          <div class="console-shell">
+
+            <!-- Left: slim agent selector -->
+            <nav class="console-agent-nav" id="consoleAgentNav">
+              <!-- Populated by agents.js -->
+            </nav>
+
+            <!-- Right: agent work area -->
+            <div class="console-work-area" id="consoleWorkArea">
+              <div class="console-placeholder">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.3"><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="M5 15V11a7 7 0 0 1 14 0v4"/></svg>
+                <p>Select an agent to open its console</p>
+              </div>
+            </div>
+
+          </div><!-- /.console-shell -->
+        </section><!-- /#tab-agents-console -->
+
+        <!-- ── TASKS TAB ── -->
+        <section class="tab-panel" id="tab-agents-tasks" aria-label="Task History">
+          <div class="agents-tasks-body">
+            <div class="agents-table-wrap">
+              <table class="agents-table" id="tasksTable">
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>Task</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Duration</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="tasksTableBody">
+                  <tr><td colspan="6" class="agents-table-empty">Loading tasks…</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </section><!-- /#tab-agents-tasks -->
 
-      </div><!-- /.modal-body -->
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelSettings">Cancel</button>
-        <button class="btn-primary" id="saveSettings">Save Settings</button>
-      </div>
-    </div><!-- /.modal -->
-  </div><!-- /#settingsModal -->
+        <!-- ── LEADS TAB ── -->
+        <section class="tab-panel" id="tab-agents-leads" aria-label="Lead Pipeline">
+          <div class="agents-leads-body">
+            <div class="leads-grid" id="leadsGrid">
+              <div class="agents-grid-loading">
+                <div class="agents-spinner"></div>
+                <span>Loading leads…</span>
+              </div>
+            </div>
+          </div>
+        </section><!-- /#tab-agents-leads -->
 
+      </div><!-- /.module-body -->
+    </div><!-- /#module-agents -->
+
+  </main><!-- /.main-panel -->
+
+  <!-- ── Task output drawer (shared across Console + Tasks tabs) ── -->
+  <div class="task-output-drawer" id="taskOutputDrawer" aria-hidden="true">
+    <div class="task-output-header">
+      <span class="task-output-title" id="taskOutputTitle">Task Output</span>
+      <button class="task-output-close" id="taskOutputClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="task-output-body" id="taskOutputBody"></div>
+  </div>
+  <div class="task-output-overlay" id="taskOutputOverlay"></div>
+
+  <script src="app.js"></script>
+  <script src="blog.js"></script>
+  <script src="shop.js"></script>
+  <script src="analytics.js"></script>
+  <script src="agents.js"></script>
 </body>
 </html>

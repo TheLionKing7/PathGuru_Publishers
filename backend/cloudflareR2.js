@@ -154,6 +154,11 @@ export async function deleteMediaAsset (key) {
 // ═══════════════════════════════════════════════════════════════
 // LEARNING LIBRARY — organised by publishing intent folder
 // Prefixes: library/playbooks/  library/research/  library/case-studies/
+//
+// Listing uses a manifest file (library/<folder>/_manifest.json)
+// maintained on every upload/delete. This avoids the Cloudflare
+// REST API (which needs a global token), relying only on the
+// same S3-compatible Bearer token used for PUT/GET/DELETE.
 // ═══════════════════════════════════════════════════════════════
 
 const VALID_LIBRARY_FOLDERS = ['playbooks', 'research', 'case-studies'];
@@ -162,49 +167,75 @@ export function isValidLibraryFolder (folder) {
   return VALID_LIBRARY_FOLDERS.includes(folder);
 }
 
+// ── Manifest helpers ──────────────────────────────────────────
+
+function manifestKey (folder) {
+  return `library/${folder}/_manifest.json`;
+}
+
+async function readLibraryManifest (folder) {
+  try {
+    const url = getObjectUrl(manifestKey(folder));
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${apiToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+async function writeLibraryManifest (folder, items) {
+  await uploadToR2(manifestKey(folder), JSON.stringify(items), 'application/json');
+}
+
+// ── Public API ────────────────────────────────────────────────
+
 /**
- * Upload a PDF example to a library folder.
+ * Upload a PDF to a library folder and record it in the manifest.
  * @param {string} folder   - 'playbooks' | 'research' | 'case-studies'
  * @param {string} filename - original filename
  * @param {Buffer|Uint8Array} body
- * @returns {{ key: string, url: string, name: string }}
+ * @returns {{ key: string, url: string, name: string, size: number, uploaded: string }}
  */
 export async function uploadLibraryFile (folder, filename, body) {
   if (!isR2Enabled()) throw new Error('R2 is not configured.');
   if (!isValidLibraryFolder(folder)) throw new Error(`Invalid library folder: ${folder}`);
-  const safe = safeFileName(filename);
-  const key  = `library/${folder}/${Date.now()}-${safe}`;
-  const r2Url = await uploadToR2(key, body, 'application/pdf');
-  const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '';
-  const url = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${key}` : r2Url;
-  return { key, url, name: filename };
+
+  const safe    = safeFileName(filename);
+  const ts      = Date.now();
+  const key     = `library/${folder}/${ts}-${safe}`;
+  const r2Url   = await uploadToR2(key, body, 'application/pdf');
+  const cdnBase = (process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
+  const url     = cdnBase ? `${cdnBase}/${key}` : r2Url;
+
+  const entry = {
+    key,
+    name:     filename,
+    size:     body.length ?? body.byteLength ?? 0,
+    uploaded: new Date(ts).toISOString(),
+    url,
+  };
+
+  // Update manifest (read-modify-write; on conflict the last writer wins — fine for this use case)
+  const manifest = await readLibraryManifest(folder);
+  manifest.unshift(entry);           // newest first
+  await writeLibraryManifest(folder, manifest);
+
+  return entry;
 }
 
 /**
- * List all PDFs in a library folder.
+ * List all PDFs in a library folder (reads manifest, no Cloudflare REST API needed).
  * @param {string} folder - 'playbooks' | 'research' | 'case-studies'
  */
 export async function listLibraryFiles (folder) {
   if (!isR2Enabled()) throw new Error('R2 is not configured.');
   if (!isValidLibraryFolder(folder)) throw new Error(`Invalid library folder: ${folder}`);
-  const prefix  = `library/${folder}/`;
-  const apiUrl  = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}&limit=200`;
-  const res     = await fetch(apiUrl, { headers: { 'Authorization': `Bearer ${apiToken}` } });
-  if (!res.ok) {
-    const t = await res.text().catch(() => '');
-    throw new Error(`R2 list failed: ${res.status} ${t.slice(0, 200)}`);
-  }
-  const data      = await res.json();
-  const publicUrl = process.env.CLOUDFLARE_R2_PUBLIC_URL || process.env.R2_PUBLIC_URL || '';
-  return (data.result?.objects || []).map(o => ({
-    key:       o.key,
-    name:      o.key.split('/').pop().replace(/^\d+-/, ''), // strip timestamp prefix
-    size:      o.size,
-    uploaded:  o.uploaded,
-    url:       publicUrl
-      ? `${publicUrl.replace(/\/$/, '')}/${o.key}`
-      : `${getBaseUrl()}/${encodeKey(o.key)}`,
-  }));
+  return readLibraryManifest(folder);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -238,12 +269,13 @@ export async function getJsonCache (key) {
 }
 
 /**
- * Delete a library file by its full R2 key.
+ * Delete a library file by its full R2 key and remove it from the manifest.
  */
 export async function deleteLibraryFile (key) {
   if (!isR2Enabled()) throw new Error('R2 is not configured.');
   // Safety: only allow deletion inside library/ prefix
   if (!key.startsWith('library/')) throw new Error('Key must be inside library/ prefix.');
+
   const url = getObjectUrl(key);
   const res = await fetch(url, {
     method:  'DELETE',
@@ -253,5 +285,15 @@ export async function deleteLibraryFile (key) {
     const t = await res.text().catch(() => '');
     throw new Error(`R2 delete failed: ${res.status} ${t.slice(0, 200)}`);
   }
+
+  // Remove from manifest
+  const parts  = key.split('/');            // library/<folder>/filename
+  const folder = parts[1];
+  if (folder && isValidLibraryFolder(folder)) {
+    const manifest = await readLibraryManifest(folder);
+    const updated  = manifest.filter(f => f.key !== key);
+    await writeLibraryManifest(folder, updated);
+  }
+
   return { deleted: key };
 }

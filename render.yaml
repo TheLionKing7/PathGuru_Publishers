@@ -3,28 +3,62 @@ services:
     name: pathguru-publishers-api
     runtime: node
     plan: free
-    buildCommand: npm install && npx playwright install --with-deps chromium
+    # pandoc: system binary for DOCX/PDF generation from markdown (consulting docs)
+    buildCommand: apt-get install -y pandoc && npm install && npx playwright install --with-deps chromium
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+
       # ── AI Provider ──────────────────────────────
       - key: AI_PROVIDER
-        value: gemini            # gemini | cerebras | deepseek
+        value: gemini            # gemini | claude | deepseek | cerebras | perplexity
+      - key: AI_MAX_TOKENS
+        value: "65536"
+
       - key: GEMINI_API_KEY
-        sync: false              # set in Render dashboard
+        sync: false
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
-      - key: AI_MAX_TOKENS
-        value: "5000"
+
+      - key: CLAUDE_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-4-6
+
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-chat
+
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: CEREBRAS_MODEL
+        value: llama3.3-70b
+
+      - key: PERPLEXITY_API_KEY
+        sync: false
+      - key: PERPLEXITY_MODEL
+        value: sonar-pro
+
       # ── Research ─────────────────────────────────
       - key: TAVILY_API_KEY
         sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
+
       # ── Assets ───────────────────────────────────
       - key: PEXELS_API_KEY
         sync: false
+
       # ── Storage ──────────────────────────────────
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_R2_BUCKET
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -35,6 +69,47 @@ services:
         sync: false
       - key: R2_PUBLIC_URL
         sync: false
+
+      # ── Database ─────────────────────────────────
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+
+      # ── DigiFusion CMS integration ────────────────
+      - key: DIGIFUSION_API_URL
+        value: https://www.digitafusion.com
+      - key: DIGIFUSION_CMS_TOKEN
+        sync: false
+
+      # ── Agent network ─────────────────────────────
+      - key: CALENDLY_BOOKING_URL
+        sync: false
+
+      # ── Notifications ─────────────────────────────
+      - key: ONESIGNAL_APP_ID
+        sync: false
+      - key: ONESIGNAL_API_KEY
+        sync: false
+      - key: WHATSAPP_TO
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: META_WHATSAPP_TOKEN
+        sync: false
+      - key: META_PHONE_NUMBER_ID
+        sync: false
+
+      # ── Vektor ───────────────────────────────────
+      - key: VEKTOR_ADMIN_KEY
+        sync: false
+      - key: VEKTOR_SERVICE_KEY
+        sync: false
+
       # ── KDP Defaults ─────────────────────────────
       - key: KDP_DEFAULT_TRIM_WIDTH_IN
         value: "6"

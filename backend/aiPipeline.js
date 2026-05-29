@@ -316,11 +316,34 @@ export function resolveProvider(overrideName) {
       baseUrl: process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
       model:   process.env.CEREBRAS_MODEL || "gpt-oss-120b",
     } : null,
+    // Perplexity — OpenAI-compatible, native web-search grounding.
+    // Best used for research queries that benefit from real-time sourcing.
+    perplexity: process.env.PERPLEXITY_API_KEY ? {
+      name:    "perplexity",
+      apiKey:  process.env.PERPLEXITY_API_KEY,
+      baseUrl: "https://api.perplexity.ai",
+      model:   process.env.PERPLEXITY_MODEL || "sonar-pro",
+    } : null,
   };
 
   if (requested && providers[requested]) return providers[requested];
-  // Priority: Gemini → Claude → DeepSeek → Cerebras
-  return providers.gemini || providers.claude || providers.deepseek || providers.cerebras || null;
+  // Priority: Gemini → Claude → DeepSeek → Cerebras → Perplexity
+  return providers.gemini || providers.claude || providers.deepseek || providers.cerebras || providers.perplexity || null;
+}
+
+/**
+ * Resolve a provider specifically for research tasks.
+ * Prefers Perplexity (built-in web search) → Gemini → Claude → others.
+ * Falls back to the default provider if none are research-optimised.
+ */
+export function resolveResearchProvider() {
+  const perplexity = process.env.PERPLEXITY_API_KEY ? {
+    name:    "perplexity",
+    apiKey:  process.env.PERPLEXITY_API_KEY,
+    baseUrl: "https://api.perplexity.ai",
+    model:   process.env.PERPLEXITY_MODEL || "sonar-pro",
+  } : null;
+  return perplexity || resolveProvider();
 }
 
 

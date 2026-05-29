@@ -35,6 +35,17 @@ import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
 import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supabaseClient.js';
+
+// ── Agent network ──────────────────────────────────────────────────────────────
+import { synthesizer } from './agents/synthesizer.js';
+import { nexus }       from './agents/nexus.js';
+import { atlas }       from './agents/atlas.js';
+import { nova }        from './agents/nova.js';
+import { aether }      from './agents/aether.js';
+import { pulse }       from './agents/pulse.js';
+import { assistant }   from './agents/assistant.js';
+
+const AGENTS = { synthesizer, nexus, atlas, nova, aether, pulse, assistant };
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
   getLibrarySummary, ensureLibraryDir,
@@ -68,12 +79,17 @@ let _vektorUsersCache   = null; // in-memory
 let _vektorUsersCacheTs = 0;
 
 const STATIC = {
-  '/':           { file: join(WEBAPP, 'index.html'),  mime: 'text/html; charset=utf-8' },
-  '/index.html': { file: join(WEBAPP, 'index.html'),  mime: 'text/html; charset=utf-8' },
-  '/style.css':  { file: join(WEBAPP, 'style.css'),   mime: 'text/css; charset=utf-8' },
-  '/app.js':     { file: join(WEBAPP, 'app.js'),      mime: 'application/javascript; charset=utf-8' },
-  '/blog.js':    { file: join(WEBAPP, 'blog.js'),     mime: 'application/javascript; charset=utf-8' },
-  '/shop.js':    { file: join(WEBAPP, 'shop.js'),     mime: 'application/javascript; charset=utf-8' },
+  '/':                      { file: join(WEBAPP, 'index.html'),            mime: 'text/html; charset=utf-8' },
+  '/index.html':            { file: join(WEBAPP, 'index.html'),            mime: 'text/html; charset=utf-8' },
+  '/style.css':             { file: join(WEBAPP, 'style.css'),             mime: 'text/css; charset=utf-8' },
+  '/app.js':                { file: join(WEBAPP, 'app.js'),                mime: 'application/javascript; charset=utf-8' },
+  '/blog.js':               { file: join(WEBAPP, 'blog.js'),               mime: 'application/javascript; charset=utf-8' },
+  '/shop.js':               { file: join(WEBAPP, 'shop.js'),               mime: 'application/javascript; charset=utf-8' },
+  '/analytics.js':          { file: join(WEBAPP, 'analytics.js'),          mime: 'application/javascript; charset=utf-8' },
+  '/agents.js':             { file: join(WEBAPP, 'agents.js'),             mime: 'application/javascript; charset=utf-8' },
+  // OneSignal service worker — MUST be served as application/javascript from the origin root.
+  // Browsers reject service workers with any other Content-Type.
+  '/OneSignalSDKWorker.js': { file: join(WEBAPP, 'OneSignalSDKWorker.js'), mime: 'application/javascript; charset=utf-8' },
 };
 
 function cors(res) {
@@ -763,6 +779,229 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ═══════════════════════════════════════════════════
+  // AGENT NETWORK — /api/agents/*
+  // ═══════════════════════════════════════════════════
+
+  // ── POST /api/agents/:agentId/run ────────────────────────────────────────
+  // Dispatch a task to a specific agent. Body is the task instruction object.
+  // Example: POST /api/agents/atlas/run  { action: 'research', topic: 'SaaS BD' }
+  const agentRunMatch = path.match(/^\/api\/agents\/([\w-]+)\/run$/);
+  if (req.method === 'POST' && agentRunMatch) {
+    const agentId = agentRunMatch[1];
+    const agent   = AGENTS[agentId];
+    if (!agent) { err(res, `Unknown agent: ${agentId}`, 404); return; }
+    try {
+      const body   = await readBody(req);
+      const result = await agent.run(body);
+      json(res, result);
+    } catch (e) { err(res, e.message || 'Agent run failed', 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nexus/orchestrate ───────────────────────────────────
+  // Send a natural-language instruction — Nexus decomposes and routes it.
+  if (req.method === 'POST' && path === '/api/agents/nexus/orchestrate') {
+    try {
+      const { instruction, priority } = await readBody(req);
+      if (!instruction) { err(res, 'instruction required', 400); return; }
+      const result = await nexus.orchestrate(instruction, { priority });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/status ───────────────────────────────────────────────
+  // Live snapshot of all agents and their active tasks.
+  if (req.method === 'GET' && path === '/api/agents/status') {
+    try {
+      const status = await nexus.getNetworkStatus();
+      json(res, status);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/tasks ────────────────────────────────────────────────
+  // Task history with optional ?agent=atlas&status=completed&limit=30 filters
+  if (req.method === 'GET' && path === '/api/agents/tasks') {
+    try {
+      const agentId = url.searchParams.get('agent')  || null;
+      const status  = url.searchParams.get('status') || null;
+      const limit   = parseInt(url.searchParams.get('limit')  || '30', 10);
+      const offset  = parseInt(url.searchParams.get('offset') || '0',  10);
+      const result  = await nexus.getTaskHistory({ agentId, status, limit, offset });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/report ───────────────────────────────────────────────
+  // Generate a status report from Nexus. ?type=daily|weekly|monthly
+  if (req.method === 'GET' && path === '/api/agents/report') {
+    try {
+      const period = url.searchParams.get('period') || 'weekly';
+      const report = await nexus.generateStatusReport();
+      json(res, { report, period });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/synthesizer/ingest ─────────────────────────────────
+  // Trigger PDF ingestion. Body: { prefix, domain } or { r2Key, domain }
+  if (req.method === 'POST' && path === '/api/agents/synthesizer/ingest') {
+    try {
+      const { r2Key, prefix, domain } = await readBody(req);
+      let result;
+      if (r2Key) {
+        result = await synthesizer.ingestPDF(r2Key, domain || 'general');
+      } else {
+        result = await synthesizer.ingestAll(prefix || 'knowledge/', domain || 'general');
+      }
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/synthesizer/query ──────────────────────────────────
+  // Query the knowledge base. Body: { query, forAgent, domains }
+  if (req.method === 'POST' && path === '/api/agents/synthesizer/query') {
+    try {
+      const { query, forAgent, domains } = await readBody(req);
+      if (!query) { err(res, 'query required', 400); return; }
+      const answer = await synthesizer.answer(query, forAgent || 'team', domains || []);
+      json(res, { answer });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/research ─────────────────────────────────────
+  // Full research + document production. Returns JSON with result text + doc metadata.
+  // Body: { topic, docType, docFormat, depth, audience, researchType, client, buildDoc }
+  if (req.method === 'POST' && path === '/api/agents/atlas/research') {
+    try {
+      const body   = await readBody(req);
+      const { topic, ...options } = body;
+      if (!topic) { err(res, 'topic required', 400); return; }
+      const output = await atlas.research(topic, options);
+      // Strip the raw buffer from JSON response — use /download for file delivery
+      const docMeta = output.document
+        ? { filename: output.document.filename, format: output.document.format, hasDoc: true }
+        : null;
+      json(res, { result: output.result || output, sources: output.sources || [], document: docMeta });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/produce-doc ──────────────────────────────────
+  // Build a consulting document from provided content (no research step).
+  // Body: { content, title, subtitle, docType, format, author, client }
+  if (req.method === 'POST' && path === '/api/agents/atlas/produce-doc') {
+    try {
+      const { buildConsultingDoc, listDocTemplates } = await import('./skills/docBuilder.js');
+      const body = await readBody(req);
+      if (!body.content || !body.title) { err(res, 'content and title required', 400); return; }
+      const doc  = await buildConsultingDoc(body);
+      res.setHeader('Content-Type', doc.format === 'docx'
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : doc.format === 'pdf' ? 'application/pdf' : 'text/html');
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
+      res.end(doc.buffer);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/doc-templates ───────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/agents/doc-templates') {
+    try {
+      const { listDocTemplates } = await import('./skills/docBuilder.js');
+      json(res, { templates: listDocTemplates() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/pulse/sweep ────────────────────────────────────────
+  // Run a monitoring sweep manually.
+  if (req.method === 'POST' && path === '/api/agents/pulse/sweep') {
+    try {
+      const report = await pulse.sweep();
+      json(res, report);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/pulse/report
+  if (req.method === 'GET' && path === '/api/agents/pulse/report') {
+    try {
+      const period = url.searchParams.get('period') || 'weekly';
+      json(res, await pulse.generateReport(period));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/pulse/dispatch ─────────────────────────────────────
+  // Manually trigger notification dispatch (push + WhatsApp for all pending).
+  if (req.method === 'POST' && path === '/api/agents/pulse/dispatch') {
+    try {
+      const { dispatchPendingNotifications } = await import('./skills/notifier.js');
+      const result = await dispatchPendingNotifications(100);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/notifications ───────────────────────────────────────
+  // Fetch recent notifications for the dashboard.
+  if (req.method === 'GET' && path === '/api/agents/notifications') {
+    const { getSupabase: _db2 } = await import('./supabaseClient.js');
+    const db = _db2();
+    if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const status = url.searchParams.get('status') || null;
+      const limit  = parseInt(url.searchParams.get('limit') || '50', 10);
+      let q = db.from('notifications').select('*').order('created_at', { ascending: false }).limit(limit);
+      if (status) q = q.eq('status', status);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      json(res, { notifications: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/assistant/chat
+  if (req.method === 'POST' && path === '/api/agents/assistant/chat') {
+    try {
+      const body = await readBody(req);
+      if (!body.message) { err(res, 'message required', 400); return; }
+      json(res, await assistant.chat(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/assistant/lead
+  if (req.method === 'POST' && path === '/api/agents/assistant/lead') {
+    try {
+      json(res, await assistant.saveLead(await readBody(req)));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/leads
+  if (req.method === 'GET' && path === '/api/agents/leads') {
+    const { getSupabase: _getDb } = await import('./supabaseClient.js');
+    const db = _getDb();
+    if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const status = url.searchParams.get('status') || null;
+      const limit  = parseInt(url.searchParams.get('limit') || '50', 10);
+      let q = db.from('leads').select('*', { count: 'exact' }).order('created_at', { ascending: false }).limit(limit);
+      if (status) q = q.eq('status', status);
+      const { data, count, error } = await q;
+      if (error) throw new Error(error.message);
+      json(res, { leads: data || [], total: count });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   err(res, `Not found: ${path}`, 404);
 });
 
@@ -770,18 +1009,17 @@ prewarmFonts().catch((e) => console.warn('[fontEmbedder] prewarm failed:', e.mes
 
 server.listen(PORT, () => {
   console.log(`
-  ┌─────────────────────────────────────────────┐
-  │   PathGuru Publishers v3 — API Server        │
-  │   http://localhost:${PORT}                       │
-  │                                             │
-  │   GET  /            → Web App               │
-  │   POST /api/generate → Book pipeline        │
-  │   GET  /api/assets   → Pexels search        │
-  │   POST /api/blog     → Blog + publish       │
-  │   POST /api/epub     → EPUB only            │
-  │   GET  /api/media/list   → R2 media list    │
-  │   POST /api/media/upload → R2 upload        │
-  └─────────────────────────────────────────────┘
+  ┌────────────────────────────────────────────┐
+  │   PathGuru Publishers v3 + Agent Network     │
+  │   http://localhost:${PORT}                        │
+  │                                              │
+  │   POST /api/agents/nexus/orchestrate          │
+  │   GET  /api/agents/status                     │
+  │   GET  /api/agents/tasks                      │
+  │   POST /api/agents/:id/run                    │
+  │   POST /api/agents/synthesizer/ingest         │
+  │   POST /api/agents/assistant/chat             │
+  └────────────────────────────────────────────┘
 `);
 });
 server.on('error', e => { console.error('[PathGuru] Server error:', e); process.exit(1); });

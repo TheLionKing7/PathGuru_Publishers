@@ -20,12 +20,16 @@ const MODULE_OF_TAB = {
   'shop-analytics': 'shop', 'shop-settings': 'shop',
   // Analytics module
   analytics: 'analytics',
+  // Agents module
+  'agents-network': 'agents', 'agents-console': 'agents',
+  'agents-tasks': 'agents',   'agents-leads': 'agents',
 };
 const DEFAULT_TAB_OF_MODULE = {
   publishing: 'brief',
   blog: 'blog',
   shop: 'shop-products',
   analytics: 'analytics',
+  agents: 'agents-network',
 };
 
 const State = (() => {

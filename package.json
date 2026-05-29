@@ -19,6 +19,8 @@
     "@supabase/supabase-js": "^2.106.0",
     "dotenv": "^16.4.5",
     "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^4.4.168",
     "playwright": "^1.39.0"
   },
   "engines": {

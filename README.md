@@ -1,31 +1,39 @@
 # PathGuru Publishers v3
 
-**The command centre for the DigiFusion Intelligence Library and a standalone AI publishing studio.**
+**The intelligence and publishing engine behind DigiFusion.**
 
-PathGuru is the kitchen. DigiFusion is the storefront. Books, blog posts, products, services, and payments pass through PathGuru first and land on DigiFusion for customers to read or buy.
-
-Three modules in one webapp:
-
-- **Publishing** — brief → KDP-ready PDF + EPUB with project branding, design templates, and a PDF learning library
-- **Blog** — persona-driven AI blog posts published to WordPress, Ghost, Webflow, or directly to DigiFusion's blog and Intelligence Library
-- **Shop** — operator console for the DigiFusion storefront: products (Field Guides, Playbooks, Tools), orders, subscriptions, bookings, payments, T&C, shipping, analytics
-
-### DigiFusion site architecture (for context)
+PathGuru is the backend — it runs the AI publishing pipeline, the 7-agent intelligence network, the blog CMS proxy, and the shop console. DigiFusion is the frontend storefront at [www.digitafusion.com](https://www.digitafusion.com). Everything produced here flows there.
 
 ```
-Blog (attract)  →  Intelligence (convert)  →  Products (retain)  →  Agency (upsell)
+PathGuru (Render)  ──────────────────────────────────▶  DigiFusion (Vercel)
+Publishing · Agents · Research · Blog · Shop             Blog · Intelligence · Products · Agency
 ```
 
-| DigiFusion section | Routes | What PathGuru publishes here |
+---
+
+## What's inside
+
+### 1. AI Publishing Studio
+Brief → KDP-ready PDF with full design — cover, chapter openers, interior layout, all generated from a single form. Backed by a Learning Library of reference PDFs (stored in Cloudflare R2) that teach the pipeline your house style.
+
+### 2. DigiFusion Intelligence Network — 7-Agent System
+A coordinated network of AI agents that operate as a firm's back-office. Agents communicate through a shared Supabase task table and share knowledge via the Synthesizer.
+
+| Agent | Role | Key capabilities |
 |---|---|---|
-| Blog | `/blog`, `/blog/:slug` | AI-written blog posts (all types) |
-| Intelligence | `/intelligence/field-guides` | Premium books + ebooks |
-| Intelligence | `/intelligence/playbooks` | Automation workflow packs |
-| Intelligence | `/intelligence/research` | Research papers + case studies |
-| Intelligence | `/intelligence/tools` | Extensions + utilities |
-| Products | `/products/sabiwork` | SabiWork SaaS product page |
-| Products | `/products/receptra` | Receptra SaaS product page |
-| Products | `/products/adpilot` | AdPilot SaaS product page |
+| **Synthesizer** | Knowledge engine | Ingests PDFs from R2 into structured knowledge; answers queries for other agents |
+| **Nexus** | Project manager & coordinator | Decomposes instructions into tasks, routes to agents, monitors network health |
+| **Atlas** | Research & BD intelligence | Deep market research (Tavily + Firecrawl), prospect analysis, framework development |
+| **Nova** | Automation engineering | Automation system design, technical blueprints, workflow architecture |
+| **Aether** | Content strategy | Content strategies, content production, cross-channel repurposing plans |
+| **Pulse** | Analytics & monitoring | Monitoring sweeps, analytics reports, alert dispatch (push + WhatsApp) |
+| **Assistant** | Customer VA & lead qualification | DigiFusion.com chat widget, lead scoring 0–5, Calendly booking integration |
+
+### 3. Blog Pipeline
+AI-written blog posts published directly to DigiFusion via the CMS API. Four built-in personas, Tavily research integration, one-click publish/unpublish.
+
+### 4. Shop Console
+Operator dashboard for the DigiFusion storefront — products, orders, subscriptions, bookings, analytics, T&C, shipping.
 
 ---
 
@@ -35,23 +43,190 @@ Blog (attract)  →  Intelligence (convert)  →  Products (retain)  →  Agency
 
 | Area | What was built |
 |---|---|
-| DigiFusion site | Full site including blog, Intelligence hub + 4 sub-pages, Products hub + 3 product landing pages, Agency, About, sitemap, schema |
-| DigiFusion blog post page | White-card layout, prose-blog-light CSS, ToC sidebar, PathGuru meta element suppression |
-| DigiFusion CMS API | 15+ endpoints under `/api/cms/*` including PATCH for publish/unpublish |
-| Database | Supabase — `posts`, `products`, `orders`, `subscriptions`, `service_bookings`, `settings` tables |
-| PathGuru → DigiFusion | `backend/cmsClient.js` — fetch wrapper with bearer auth, retry logic, all methods including `publishPost` / `unpublishPost` |
-| Blog publish — bug fixes | Post type now correctly preserved (not defaulting to "article"); author name uses `input.author` not hardcoded fallback; social captions removed from HTML |
-| Blog dashboard | Routes in `server.js` now proxy through `cmsClient.js` (not direct Supabase) — resolves 500 errors on Render |
-| Shop module | All 6 Shop tab buttons wired via `webapp/shop.js` → PathGuru backend proxy → DigiFusion CMS API; product form CSS + responsive breakpoints added |
-| Persona system | `GET /api/personas` endpoint live; persona injected into Gemini prompt at generation time |
-| Navigation | DigiFusion nav updated: Shop → Intelligence (with sub-menu) + Products (with sub-menu per product) |
+| **Agent network** | All 7 agents built and wired; agent routes live under `/api/agents/*` |
+| **Agent memory** | 4-layer memory model: working (context), episodic (Supabase), semantic (Synthesizer), procedural (system prompt) |
+| **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, Gartner, etc.) |
+| **Synthesizer** | PDF ingestion from R2 → structured knowledge → Supabase `knowledge_base` table |
+| **Notifications** | OneSignal push + WhatsApp (Twilio or Meta Cloud API); dispatched by Pulse on each sweep |
+| **Learning Library** | R2-backed with manifest per folder — uploads, listing, and deletes all persist across Render restarts |
+| **Vektor user cache** | R2 JSON cache replaces disk; 35s timeout handles cold-start |
+| **CMS integration** | `cmsClient.js` — all 15+ DigiFusion CMS endpoints with bearer auth and retry |
+| **Blog pipeline** | Persona injection, Tavily research, publish/unpublish to DigiFusion |
+| **Shop module** | All 6 tabs wired — products, orders, subscriptions, bookings, analytics, settings |
+| **Persona system** | 4 personas; injected into LLM prompts at generation time |
 
 ### Pending / known gaps
 
-- **Checkout flow** — orders exist in the DB; the buyer-facing checkout (payment gateway integration, order creation) is not built.
-- **Intelligence product sales** — Field Guides and Tools pages are built; payment flow for purchasing them is not yet wired.
-- **Persona injection for Publishing (books)** — `injectPersonaIntoPrompt()` is connected to blog generation but not to the book pipeline (`designGuru.js`).
-- **SabiWork / Receptra / AdPilot** — SaaS products in development; landing pages live with Early Access CTA only.
+| Area | Status |
+|---|---|
+| Checkout flow | Orders exist in DB; buyer-facing payment flow not yet built |
+| Intelligence product sales | Field Guides / Tools pages live; purchase flow not wired |
+| Persona injection for books | Connected to blog only; not yet applied to the book pipeline |
+| SabiWork / Receptra / AdPilot | SaaS products in development; landing pages live with Early Access CTA |
+
+---
+
+## Agent API routes
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `POST` | `/api/agents/:agentId/run` | Dispatch a task to any agent |
+| `POST` | `/api/agents/nexus/orchestrate` | Send natural-language instruction — Nexus decomposes and routes it |
+| `GET` | `/api/agents/status` | Live network snapshot: all agents + active tasks |
+| `GET` | `/api/agents/tasks` | Task history (`?agent=atlas&status=completed&limit=30`) |
+| `GET` | `/api/agents/report` | Nexus status report |
+| `POST` | `/api/agents/synthesizer/ingest` | Ingest PDFs from R2 into knowledge base |
+| `POST` | `/api/agents/synthesizer/query` | Query the knowledge base |
+| `POST` | `/api/agents/pulse/sweep` | Run a monitoring sweep manually |
+| `GET` | `/api/agents/pulse/report` | Analytics report (`?period=weekly`) |
+| `POST` | `/api/agents/pulse/dispatch` | Dispatch all pending notifications now |
+| `GET` | `/api/agents/notifications` | Fetch notification history for dashboard |
+| `POST` | `/api/agents/assistant/chat` | Single chat turn (used by DigiFusion chat widget) |
+| `POST` | `/api/agents/assistant/lead` | Save or update a lead |
+| `GET` | `/api/agents/leads` | Lead pipeline (`?status=qualified&limit=50`) |
+
+---
+
+## Supabase schema
+
+Run `supabase/001_agent_network.sql` in the Supabase SQL editor to create all tables.
+
+| Table | Purpose |
+|---|---|
+| `agents` | Agent registry (seeded with all 7 agents) |
+| `tasks` | Task queue — agents read from and write to this |
+| `agent_memory` | Episodic memory — agents store and recall experience here |
+| `knowledge_base` | Synthesizer knowledge — structured extracts from PDFs |
+| `leads` | Lead pipeline from the DigiFusion Assistant VA |
+| `notifications` | Alert queue — written by agents, dispatched by Pulse |
+
+If upgrading an existing deployment, also run:
+```sql
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dispatch_log JSONB;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
+```
+
+---
+
+## Research pipeline — how Atlas works
+
+```
+Atlas.research(topic)
+  │
+  ├─ Synthesizer.answer()      — internal knowledge base first
+  │
+  └─ runDeepResearch(topic)
+       │
+       ├─ Tavily (discovery)   — searches the web, returns summaries + ranked URLs
+       │
+       └─ Firecrawl (depth)    — reads top 3–8 URLs in full (full article markdown)
+             │
+             └─ LLM synthesis  → structured brief: exec summary, findings, frameworks, competitive landscape
+```
+
+Priority domains scraped first: McKinsey, BCG, Bain, KPMG, PwC, Deloitte, HBR, MIT, Stanford, WEF, Gartner, Forrester, Statista, Reuters, Bloomberg, FT, Economist.
+
+---
+
+## File structure
+
+```
+backend/
+├── server.js                   HTTP server — all routes
+├── aiPipeline.js               Provider router: Gemini → Claude → DeepSeek → Cerebras
+├── cloudflareR2.js             R2 storage — projects, media, library, JSON cache
+├── supabaseClient.js           Supabase singleton
+├── cmsClient.js                DigiFusion CMS API client
+├── referenceLibrary.js         Learning Library — baked profiles + intent folders
+├── pdfDesignExtractor.js       PDF design DNA extraction
+├── designGuru.js               Book design package generator
+├── agents/
+│   ├── agentBase.js            Base class — memory, tasks, LLM, delegation, notifications
+│   ├── synthesizer.js          Knowledge engine — PDF ingestion + knowledge queries
+│   ├── nexus.js                Coordinator — orchestration + network status
+│   ├── atlas.js                Research & BD — Tavily + Firecrawl deep research
+│   ├── nova.js                 Automation engineering
+│   ├── aether.js               Content strategy
+│   ├── pulse.js                Analytics & monitoring — sweeps + alert dispatch
+│   └── assistant.js            Customer VA — lead qualification + Calendly booking
+└── skills/
+    ├── research.js             Two-layer research pipeline (Tavily + Firecrawl)
+    ├── notifier.js             Notification dispatcher (OneSignal push + WhatsApp)
+    ├── editorial.js            Blog prompt builder
+    ├── personas.js             Persona profiles
+    ├── personaPrompt.js        Persona injection
+    ├── design.js               Design skill helpers
+    └── formatting.js           Output formatting
+
+webapp/
+├── index.html                  Three-module shell (Publishing, Blog, Shop)
+├── app.js                      State engine + module routing
+├── blog.js                     Blog UI
+├── shop.js                     Shop UI
+├── digifusion-chat-widget.js   Vanilla JS embeddable chat widget (standalone alternative)
+└── style.css                   Webapp styles
+
+supabase/
+└── 001_agent_network.sql       Full schema for the agent network
+```
+
+---
+
+## Environment variables
+
+```bash
+# AI providers — at least one required
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash
+CLAUDE_API_KEY=...
+CLAUDE_MODEL=claude-sonnet-4-6
+DEEPSEEK_API_KEY=...
+
+# Active provider (auto-selects first key found if blank)
+AI_PROVIDER=gemini
+AI_MAX_TOKENS=65536
+
+# Research
+TAVILY_API_KEY=...          # Layer 1 — discovery (summaries + ranked URLs)
+FIRECRAWL_API_KEY=...       # Layer 2 — full-content scraping
+
+# Storage
+CLOUDFLARE_ACCOUNT_ID=...   # or R2_ACCOUNT_ID
+CLOUDFLARE_R2_BUCKET=...    # or R2_BUCKET_NAME
+CLOUDFLARE_API_TOKEN=...
+R2_PUBLIC_URL=...           # CDN prefix for public URLs
+
+# Database
+SUPABASE_URL=...
+SUPABASE_SERVICE_ROLE_KEY=...
+
+# DigiFusion CMS integration
+DIGIFUSION_API_URL=https://www.digitafusion.com
+DIGIFUSION_CMS_TOKEN=...    # shared secret — same value as PATHGURU_CMS_TOKEN in Vercel
+
+# Vektor
+VEKTOR_ADMIN_KEY=...
+VEKTOR_SERVICE_KEY=...
+
+# Image stock
+PEXELS_API_KEY=...
+
+# Notifications (Pulse)
+ONESIGNAL_APP_ID=...
+ONESIGNAL_API_KEY=...
+WHATSAPP_TO=+447700900123   # comma-separated for multiple recipients
+TWILIO_ACCOUNT_SID=...      # WhatsApp via Twilio (primary)
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+# OR Meta Cloud API (fallback):
+META_WHATSAPP_TOKEN=...
+META_PHONE_NUMBER_ID=...
+
+# Booking
+CALENDLY_BOOKING_URL=https://calendly.com/digifusion/strategy-session
+
+PORT=8787
+```
 
 ---
 
@@ -63,125 +238,30 @@ cp .env.example .env   # fill in at minimum GEMINI_API_KEY
 node backend/server.js
 ```
 
-Open `webapp/index.html` in a browser. Set the backend URL to `http://localhost:8787` in Settings the first time.
+Open `webapp/index.html` in a browser. Set the backend URL to `http://localhost:8787` in Settings on first run.
 
 ---
 
-## Environment variables
-
-```bash
-# Required
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-2.5-flash        # default
-
-# Optional — stock imagery
-PEXELS_API_KEY=...
-
-# Optional — research during Brief stage
-TAVILY_API_KEY=...
-
-# Optional — cloud storage for PDFs and blog media
-R2_ACCOUNT_ID=...
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
-R2_BUCKET=...
-R2_PUBLIC_URL=https://cdn.your-domain.com
-
-# DigiFusion integration — required for Shop + Blog publish to DigiFusion
-DIGIFUSION_API_URL=https://www.digitafusion.com
-DIGIFUSION_CMS_TOKEN=...             # must match PATHGURU_CMS_TOKEN in DigiFusion Vercel env
-
-# Payments — for refund processing
-FLW_SECRET_KEY=...                   # Flutterwave
-STRIPE_SECRET_KEY=...                # Stripe (add when ready)
-
-# Server
-PORT=8787
-```
-
----
-
-## Architecture
-
-```
-PathGuru_Publishers_v3/
-├── backend/
-│   ├── server.js               HTTP server — all routes including /api/personas + /api/shop/* proxies
-│   ├── blogPublisher.js        Blog generation (Gemini) + persona injection + publish to WP/Ghost/Webflow/DigiFusion
-│   ├── cmsClient.js            DigiFusion CMS API client (bearer auth, retry)
-│   ├── designGuru.js           Book pipeline — niche → design package
-│   ├── supabaseClient.js       PathGuru's own Supabase client (internal use only — not used for blog dashboard on Render)
-│   └── skills/
-│       ├── personas.js         4 persona profiles — The Copy Desk, Marketing Desk, Engineering Bench, Strategy Room
-│       ├── personaPrompt.js    injectPersonaIntoPrompt() — merges persona voice + samples into Gemini prompt
-│       ├── editorial.js        buildBlogPrompt() — base blog prompt builder
-│       └── research.js         Tavily search
-│
-└── webapp/
-    ├── index.html              Three-module shell
-    ├── app.js                  State engine + module/tab routing
-    ├── blog.js                 Blog UI — persona picker (loads from /api/personas), generate, dashboard
-    └── shop.js                 Shop UI — all 6 tab buttons wired to /api/shop/* proxies
-```
-
----
-
-## DigiFusion integration
+## DigiFusion CMS integration
 
 ```
 PathGuru webapp  →  PathGuru backend  →  DigiFusion CMS API  →  Supabase
-                    (holds CMS token)     (verifies token)
+                    (holds CMS token)    (verifies token)
 ```
 
-PathGuru never touches DigiFusion's Supabase directly — only one bearer token crosses the boundary.
+PathGuru never touches DigiFusion's Supabase directly — one bearer token crosses the boundary.
 
-### CMS endpoints
-
-| Method | Endpoint | Used by |
-|---|---|---|
-| `POST` | `/api/cms/posts` | Blog → publish to DigiFusion |
-| `GET` | `/api/cms/posts` | Blog → dashboard |
-| `GET` | `/api/cms/posts/:slug` | Blog → single post |
-| `DELETE` | `/api/cms/posts/:slug` | Blog → archive |
-| `GET` | `/api/cms/products` | Shop → payments |
-| `POST` | `/api/cms/products` | Shop → create product |
-| `PUT` | `/api/cms/products/:id` | Shop → update product |
-| `GET` | `/api/cms/orders` | Shop → payments |
-| `POST` | `/api/cms/orders/:id/mark-paid` | Shop → payments |
-| `POST` | `/api/cms/orders/:id/refund` | Shop → payments |
-| `GET` | `/api/cms/subscriptions` | Shop → subscriptions |
-| `GET` | `/api/cms/bookings` | Shop → bookings |
-| `GET` | `/api/cms/analytics` | Shop → analytics |
-| `PUT` | `/api/cms/settings/terms` | Shop → T&C |
-| `PUT` | `/api/cms/settings/shipping` | Shop → shipping |
-
-### Setup
-
+Setup:
 1. Generate a shared secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-2. Set it as `PATHGURU_CMS_TOKEN` in Vercel (DigiFusion)
-3. Set the same value as `DIGIFUSION_CMS_TOKEN` in PathGuru `.env`
+2. Set as `PATHGURU_CMS_TOKEN` in Vercel (DigiFusion)
+3. Set same value as `DIGIFUSION_CMS_TOKEN` in PathGuru `.env`
 4. Set `DIGIFUSION_API_URL=https://www.digitafusion.com` in PathGuru `.env`
-
----
-
-## The persona system
-
-Four built-in personas covering the recurring blog archetypes. Selected in the Blog → Assets → Voice & Persona tab. The chosen persona is injected into the Gemini prompt at generation — voice descriptor in the system block, few-shot writing samples before the task instructions.
-
-| ID | Display name | Best for |
-|---|---|---|
-| `senior_editor` | The Copy Desk | Any post type — adapts structure to format conventions (listicles, guides, how-tos, reviews) |
-| `marketing_desk` | The Marketing Desk | Paid acquisition, funnels, brand growth, creative strategy |
-| `engineering_bench` | The Engineering Bench | AI/LLM ops, agent design, automation, technical how-tos |
-| `strategy_room` | The Strategy Room | Founder notes, operations, hiring, business strategy |
-
-To add a persona: edit `backend/skills/personas.js` and add a new entry to `PERSONA_PROFILES`. It will appear in the picker automatically on next page load (fetched from `GET /api/personas`).
 
 ---
 
 ## Deployment
 
-Backend → Render (`render.yaml` is in the repo). Webapp → any static host (Vercel, Cloudflare Pages, GitHub Pages). Set the backend URL in the webapp Settings panel.
+Backend → Render (`render.yaml` is in the repo). Webapp → any static host (Vercel, Cloudflare Pages, GitHub Pages).
 
 ---
 
