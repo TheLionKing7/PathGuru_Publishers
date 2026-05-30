@@ -313,6 +313,7 @@ export class Synthesizer extends AgentBase {
     // Download and extract text
     const buffer = await fetchFromR2(r2Key);
     const rawText = await extractPdfText(buffer);
+    console.log(`[Synthesizer] Text extracted from ${r2Key}: ${rawText.trim().length} chars`);
 
     if (!rawText || rawText.trim().length < 100) {
       return { error: 'Could not extract meaningful text from PDF', key: r2Key };
@@ -352,9 +353,10 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
       try {
         const raw     = await callAiProvider(this.provider, extractionPrompt, this.systemPrompt);
         const parsed  = this._parseJsonArray(raw);
+        console.log(`[Synthesizer] Chunk ${idx}: AI returned ${(raw||'').length} chars → ${parsed.length} units. Preview: ${(raw||'').slice(0,120)}`);
         allEntries.push(...parsed.map(e => ({ ...e, chunkIndex: idx })));
       } catch (e) {
-        console.warn(`[Synthesizer] Extraction failed for chunk ${idx}:`, e.message);
+        console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message, e.stack?.split('\n')[1] || '');
       }
     }
 
