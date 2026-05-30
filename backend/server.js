@@ -917,6 +917,48 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/agents/synthesizer/knowledge-stats ──────────────────────────
+  // Returns the count, domain breakdown, and recent entries in the knowledge_base.
+  if (req.method === 'GET' && path === '/api/agents/synthesizer/knowledge-stats') {
+    try {
+      const { getSupabase: _kdb } = await import('./supabaseClient.js');
+      const db = _kdb();
+      if (!db) { json(res, { error: 'Supabase not configured' }, 503); return; }
+
+      // Total count
+      const { count: total } = await db.from('knowledge_base').select('*', { count: 'exact', head: true });
+
+      // Count per domain
+      const { data: domainRows } = await db.from('knowledge_base').select('domain').order('domain');
+      const domainCounts = {};
+      for (const row of (domainRows || [])) {
+        domainCounts[row.domain] = (domainCounts[row.domain] || 0) + 1;
+      }
+
+      // Unique PDFs ingested
+      const { data: sourceRows } = await db.from('knowledge_base').select('source_key').order('source_key');
+      const uniqueSources = [...new Set((sourceRows || []).map(r => r.source_key))];
+
+      // 5 most recent entries
+      const { data: recent } = await db.from('knowledge_base')
+        .select('id, title, domain, source_name, relevance_score, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      json(res, {
+        totalUnits:      total || 0,
+        uniquePDFs:      uniqueSources.length,
+        domainCounts,
+        ingestedSources: uniqueSources,
+        recentEntries:   recent || [],
+        status: (total || 0) > 0 ? '✅ Knowledge base populated' : '⚠️ Knowledge base is empty',
+      });
+    } catch (e) {
+      json(res, { error: e.message }, 500);
+    }
+    return;
+  }
+
   // ── GET /api/agents/tasks/:taskId ───────────────────────────────────────
   // Poll a single task by its Supabase UUID — used by the frontend to track
   // long-running agent jobs (ingest, research, synthesis, etc.)

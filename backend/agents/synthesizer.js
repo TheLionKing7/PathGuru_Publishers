@@ -284,10 +284,67 @@ export class Synthesizer extends AgentBase {
       domains:      ['business_development', 'automation', 'digital_media', 'general'],
       model:        process.env.SYNTHESIZER_MODEL || 'claude-sonnet-4-5',
     });
-    // Synthesizer provider priority: Cerebras (fast+free) → Claude → global fallback.
-    // Gemini is excluded — blocked in many server regions.
-    const preferredProvider = resolveProvider('cerebras') || resolveProvider('claude');
-    if (preferredProvider) this.provider = preferredProvider;
+    // Build an ordered provider fallback chain.
+    // Gemini is excluded — blocked in many server regions (Render).
+    // If a provider hits a quota/token-limit error, _callWithFallback() advances
+    // to the next provider in the chain automatically.
+    this._providerChain = [
+      resolveProvider('cerebras'),
+      resolveProvider('claude'),
+      resolveProvider('deepseek'),
+      resolveProvider('perplexity'),
+    ].filter(Boolean);
+
+    // Also set this.provider to the first available (used by AgentBase.runLLM)
+    if (this._providerChain.length > 0) this.provider = this._providerChain[0];
+  }
+
+  /**
+   * Call the AI with automatic provider fallback.
+   * On 429 (rate-limit): retry the SAME provider with backoff (up to 3 times).
+   * On quota exhaustion (daily/monthly limit): switch to the NEXT provider in the chain.
+   * @param {string} prompt
+   * @param {string} [systemHint]
+   */
+  async _callWithFallback(prompt, systemHint) {
+    const isQuotaError = msg =>
+      msg.includes('token_quota_exceeded') ||
+      msg.includes('quota_exceeded') ||
+      msg.includes('Tokens per day limit') ||
+      msg.includes('Tokens per month limit') ||
+      msg.includes('exceeded your current quota') ||
+      msg.includes('insufficient_quota');
+
+    const isRateLimit = msg =>
+      msg.includes('429') ||
+      msg.includes('too_many_requests') ||
+      msg.includes('rate_limit') ||
+      (msg.includes('429') && !isQuotaError(msg));
+
+    for (let pi = 0; pi < this._providerChain.length; pi++) {
+      const provider = this._providerChain[pi];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await callAiProvider(provider, prompt, systemHint);
+        } catch (e) {
+          const msg = e.message || '';
+          if (isQuotaError(msg)) {
+            // Daily/monthly quota exhausted — no point retrying this provider
+            console.warn(`[Synthesizer] ${provider.name} quota exhausted, switching to next provider...`);
+            break; // advance to next provider
+          } else if (isRateLimit(msg) && attempt < 2) {
+            const wait = (attempt + 1) * 8000; // 8s → 16s
+            console.warn(`[Synthesizer] ${provider.name} rate-limited, retrying in ${wait / 1000}s...`);
+            await new Promise(r => setTimeout(r, wait));
+          } else {
+            // Non-retriable error or max retries reached — try next provider
+            console.warn(`[Synthesizer] ${provider.name} failed (attempt ${attempt + 1}): ${msg.slice(0, 120)}`);
+            break;
+          }
+        }
+      }
+    }
+    throw new Error('[Synthesizer] All AI providers exhausted or failed.');
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -357,24 +414,11 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
       // Throttle: pause between chunks to avoid rate limits (Cerebras: ~30 RPM free tier)
       if (idx > 0) await new Promise(r => setTimeout(r, parseInt(process.env.SYNTHESIZER_CHUNK_DELAY_MS || '2000', 10)));
 
-      // Retry up to 3 times on 429 rate-limit errors
       let raw = '';
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          raw = await callAiProvider(this.provider, extractionPrompt, this.systemPrompt);
-          break; // success
-        } catch (e) {
-          const is429 = e.message.includes('429') || e.message.includes('too_many_requests') || e.message.includes('quota');
-          if (is429 && attempt < 2) {
-            const wait = (attempt + 1) * 8000; // 8s, 16s
-            console.warn(`[Synthesizer] Rate limit hit chunk ${idx}, retrying in ${wait/1000}s...`);
-            await new Promise(r => setTimeout(r, wait));
-          } else {
-            console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message);
-            raw = '';
-            break;
-          }
-        }
+      try {
+        raw = await this._callWithFallback(extractionPrompt, this.systemPrompt);
+      } catch (e) {
+        console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message);
       }
       if (raw) {
         const parsed = this._parseJsonArray(raw);
@@ -503,7 +547,7 @@ Synthesize a focused, expert-level knowledge brief that directly answers the que
 — 300–600 words
 — No generic filler, no invented facts`;
 
-    return callAiProvider(this.provider, synthesisPrompt, this.systemPrompt);
+    return this._callWithFallback(synthesisPrompt, this.systemPrompt);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -528,7 +572,7 @@ Audience: senior consulting professionals and their clients
 Quality bar: equivalent to KPMG / BCG published work
 Draw only from the knowledge provided above. Be specific, cite sources, use real data.`;
 
-    return callAiProvider(this.provider, prompt, this.systemPrompt);
+    return this._callWithFallback(prompt, this.systemPrompt);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
