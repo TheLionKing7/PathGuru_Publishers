@@ -354,13 +354,32 @@ Return a JSON array of knowledge units extracted from this section. Each unit:
 Only extract substantive knowledge — skip boilerplate, tables of contents, and generic platitudes.
 Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
 
-      try {
-        const raw     = await callAiProvider(this.provider, extractionPrompt, this.systemPrompt);
-        const parsed  = this._parseJsonArray(raw);
-        console.log(`[Synthesizer] Chunk ${idx}: AI returned ${(raw||'').length} chars → ${parsed.length} units. Preview: ${(raw||'').slice(0,120)}`);
+      // Throttle: pause between chunks to avoid rate limits (Cerebras: ~30 RPM free tier)
+      if (idx > 0) await new Promise(r => setTimeout(r, parseInt(process.env.SYNTHESIZER_CHUNK_DELAY_MS || '2000', 10)));
+
+      // Retry up to 3 times on 429 rate-limit errors
+      let raw = '';
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          raw = await callAiProvider(this.provider, extractionPrompt, this.systemPrompt);
+          break; // success
+        } catch (e) {
+          const is429 = e.message.includes('429') || e.message.includes('too_many_requests') || e.message.includes('quota');
+          if (is429 && attempt < 2) {
+            const wait = (attempt + 1) * 8000; // 8s, 16s
+            console.warn(`[Synthesizer] Rate limit hit chunk ${idx}, retrying in ${wait/1000}s...`);
+            await new Promise(r => setTimeout(r, wait));
+          } else {
+            console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message);
+            raw = '';
+            break;
+          }
+        }
+      }
+      if (raw) {
+        const parsed = this._parseJsonArray(raw);
+        console.log(`[Synthesizer] Chunk ${idx}: ${parsed.length} units extracted`);
         allEntries.push(...parsed.map(e => ({ ...e, chunkIndex: idx })));
-      } catch (e) {
-        console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message, e.stack?.split('\n')[1] || '');
       }
     }
 
