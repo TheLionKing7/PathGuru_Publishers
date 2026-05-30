@@ -563,10 +563,28 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   _parseJsonArray(text) {
-    try { return JSON.parse(text); } catch (e) {}
+    const toArray = val => {
+      if (Array.isArray(val)) return val;
+      // Cerebras/other models sometimes wrap array in an object: {"units":[...]}
+      if (val && typeof val === 'object') {
+        const found = Object.values(val).find(v => Array.isArray(v));
+        if (found) return found;
+      }
+      return null;
+    };
+    // Try direct parse first
+    try {
+      const val = JSON.parse(text);
+      const arr = toArray(val);
+      if (arr) return arr;
+    } catch (e) {}
+    // Find the first [...] block in the response
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
-    try { return JSON.parse(match[0]); } catch (e) { return []; }
+    try {
+      const val = JSON.parse(match[0]);
+      return toArray(val) || [];
+    } catch (e) { return []; }
   }
 }
 
