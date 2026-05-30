@@ -284,11 +284,10 @@ export class Synthesizer extends AgentBase {
       domains:      ['business_development', 'automation', 'digital_media', 'general'],
       model:        process.env.SYNTHESIZER_MODEL || 'claude-sonnet-4-5',
     });
-    // Synthesizer always prefers Claude for structured JSON extraction.
-    // Gemini may be blocked in some server regions; Claude is reliable globally.
-    // Falls back to the global AI_PROVIDER if Claude is not configured.
-    const claudeProvider = resolveProvider('claude');
-    if (claudeProvider) this.provider = claudeProvider;
+    // Synthesizer provider priority: Cerebras (fast+free) → Claude → global fallback.
+    // Gemini is excluded — blocked in many server regions.
+    const preferredProvider = resolveProvider('cerebras') || resolveProvider('claude');
+    if (preferredProvider) this.provider = preferredProvider;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
