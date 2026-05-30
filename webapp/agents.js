@@ -135,14 +135,23 @@
     const base = getBackendUrl();
     if (!base) throw new Error('Backend URL not configured. Check Settings.');
     const url = `${base}${path}`;
+    const method = opts.method || (opts.body ? 'POST' : 'GET');
+    const body   = opts.body
+      ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body))
+      : opts.method === 'POST' || method === 'POST' ? (opts.data ? JSON.stringify(opts.data) : undefined) : undefined;
     const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-      ...opts,
+      body,
+      ...Object.fromEntries(Object.entries(opts).filter(([k]) => !['method','body','headers','data'].includes(k))),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.error || json.message || `HTTP ${res.status}`);
     return json;
   }
+  // Expose globally so functions outside this IIFE (Agency IP tab, etc.) can use it
+  window._agentApiFetch  = apiFetch;
+  window._agentBackendUrl = getBackendUrl;
 
   /* Fetch task list for the Tasks tab */
   async function fetchTasks (agentFilter = '', statusFilter = '') {
