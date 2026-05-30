@@ -10,7 +10,7 @@
  */
 
 import { AgentBase }       from './agentBase.js';
-import { callAiProvider, resolveResearchProvider }  from '../aiPipeline.js';
+import { callAiProvider }  from '../aiPipeline.js';
 import { synthesizer }     from './synthesizer.js';
 import { runDeepResearch } from '../skills/research.js';
 import { buildConsultingDoc } from '../skills/docBuilder.js';
@@ -160,35 +160,272 @@ Apply the Challenger Sale approach — what insight would force them to rethink 
   }
 
   /**
-   * Build a proprietary framework by synthesising source materials.
+   * Build a proprietary DigiFusion playbook/framework.
+   *
+   * Design logic (from DigiFusion Playbook Formula):
+   *   Phase 1 — Audit/Diagnostic  : BCG DAI assessment logic
+   *   Phase 2 — Setup/Infrastructure: AWS CAF technical approach
+   *   Phase 3 — Execution/Iteration : IBM Garage agile speed
+   *
+   * Output is a STRUCTURED JSON object (not free-form prose) so every field
+   * is guaranteed to be present and machine-readable.  After the framework is
+   * built, a second AI call generates Mermaid.js visualisation code.
+   *
+   * @returns {string} Markdown-formatted playbook rendered from the JSON
    */
   async buildFramework(frameworkName, domain, instruction) {
-    const knowledge = await synthesizer.answer(
-      `Frameworks, methodologies, and models for: ${domain} — ${frameworkName}`,
-      'atlas',
-      ['business_development', 'general'],
-    );
+    // ── Step 1: Pull knowledge from ALL relevant domains ─────────────────
+    const [bdKnowledge, dmKnowledge] = await Promise.all([
+      synthesizer.answer(
+        `Consulting frameworks, assessment models, and methodologies for: ${frameworkName}`,
+        'atlas',
+        ['business_development', 'general'],
+      ),
+      synthesizer.answer(
+        `Digital marketing, content strategy, and automation frameworks for: ${frameworkName}`,
+        'atlas',
+        ['digital_media', 'automation'],
+      ),
+    ]);
 
-    const prompt = `${knowledge ? `## Source frameworks from intelligence base\n${knowledge}\n\n---\n\n` : ''}
-## Framework Development Request
+    const knowledgeBlock = [
+      bdKnowledge ? `## Business & BD Intelligence\n${bdKnowledge}` : '',
+      dmKnowledge ? `## Digital Media & Automation Intelligence\n${dmKnowledge}` : '',
+    ].filter(Boolean).join('\n\n---\n\n');
 
-Framework name: ${frameworkName}
+    // ── Step 2: Enforce structured JSON output ───────────────────────────
+    const structurePrompt = `${knowledgeBlock ? `${knowledgeBlock}\n\n---\n\n` : ''}
+## DigiFusion Playbook Synthesis Request
+
+Framework name: "${frameworkName}"
 Domain: ${domain}
-Instruction: ${instruction}
+Additional instruction: ${instruction || 'none'}
 
-Produce a proprietary DigiFusion framework:
-1. Framework Overview (what it is, what problem it solves, who it is for)
-2. The Phases / Pillars (4–6 components with clear names and descriptions)
-3. Diagnostic Questions (5–10 questions to assess a client's current state)
-4. Scoring / Maturity Logic (how to grade the client's position)
-5. Deliverables per Phase (what the client gets at each stage)
-6. Differentiation (how this is superior to the standard approaches)
-7. Visual Structure Description (how this would look as a diagram or framework card)
+You are producing a proprietary DigiFusion consulting playbook.
+Follow the DigiFusion 3-Phase Formula exactly:
+  Phase 1 = The Audit      (BCG DAI diagnostic logic — assess current state)
+  Phase 2 = The Setup      (AWS CAF technical infrastructure approach)
+  Phase 3 = The Execution  (IBM Garage agile iteration and speed)
 
-This should be original, proprietary IP — not a restatement of existing frameworks.
-It must synthesise the source material into something distinctly DigiFusion's own.`;
+The secret differentiator: this is not just a playbook — it is a DIAGNOSTIC TOOL.
+The scorecard turns client answers into a personalised roadmap. Design it as something DigiFusion sells, not gives away.
 
-    return this.runLLM(prompt, { skipKnowledge: true, skipMemory: false });
+Return ONLY a valid JSON object matching this EXACT schema (no markdown fences, no commentary):
+
+{
+  "title": "Full playbook title",
+  "tagline": "One-line value proposition — what transformation this delivers",
+  "executive_summary": "3–5 sentences. Lead with the single most important insight. Who this is for, what it solves, why now.",
+  "phases": [
+    {
+      "number": 1,
+      "name": "Phase name (e.g. The Digital Audit)",
+      "label": "BCG DAI — Diagnostic Logic",
+      "objective": "What this phase achieves",
+      "methodology": "Which source framework(s) power this phase and how",
+      "activities": ["activity 1", "activity 2", "activity 3", "activity 4"],
+      "checklist": ["✓ item 1", "✓ item 2", "✓ item 3", "✓ item 4", "✓ item 5"],
+      "deliverable": "What the client receives at the end of this phase",
+      "duration": "Typical timeframe"
+    },
+    { "number": 2, "name": "...", "label": "AWS CAF — Infrastructure", "objective": "...", "methodology": "...", "activities": [], "checklist": [], "deliverable": "...", "duration": "..." },
+    { "number": 3, "name": "...", "label": "IBM Garage — Agile Execution", "objective": "...", "methodology": "...", "activities": [], "checklist": [], "deliverable": "...", "duration": "..." }
+  ],
+  "scorecard": {
+    "title": "DigiFusion [Framework Name] Diagnostic Scorecard",
+    "purpose": "How this scorecard is used in a client engagement",
+    "dimensions": [
+      {
+        "name": "Dimension name (e.g. Strategic Clarity)",
+        "weight": 20,
+        "description": "What this dimension measures",
+        "diagnostic_question": "The client-facing question that surfaces this score",
+        "scoring_guide": {
+          "1": "Description of score 1 (lowest — completely unprepared)",
+          "2": "Description of score 2",
+          "3": "Description of score 3 (average)",
+          "4": "Description of score 4",
+          "5": "Description of score 5 (highest — best-in-class)"
+        }
+      }
+    ],
+    "maturity_bands": [
+      { "band": "Nascent",      "score_range": "0–39",  "description": "What this means for the client", "recommended_entry_point": "Which phase to start" },
+      { "band": "Developing",   "score_range": "40–59", "description": "...", "recommended_entry_point": "..." },
+      { "band": "Established",  "score_range": "60–74", "description": "...", "recommended_entry_point": "..." },
+      { "band": "Advanced",     "score_range": "75–89", "description": "...", "recommended_entry_point": "..." },
+      { "band": "Best-in-Class","score_range": "90–100","description": "...", "recommended_entry_point": "..." }
+    ],
+    "scoring_formula": "Explain how dimension scores are combined into a final score (e.g. weighted average × 20)"
+  },
+  "diagnostic_questions": [
+    { "number": 1, "question": "Client-facing diagnostic question", "maps_to": "Which scorecard dimension", "insight": "What the answer reveals about the client" }
+  ],
+  "differentiators": ["Point 1: how this is superior to generic frameworks", "Point 2", "Point 3"],
+  "recommended_charts": [
+    { "name": "Chart name (e.g. Maturity Heatmap)", "type": "heatmap | bar | radar | matrix | scatter", "x_axis": "What goes on X axis", "y_axis": "What goes on Y axis", "data_points": "What data to plot", "insight": "What this chart reveals" }
+  ],
+  "visual_structure": "Description of how the full framework looks as a diagram — shapes, flow, colour coding"
+}
+
+Rules:
+- scorecard.dimensions must have exactly 5 dimensions, each with weight 20 (sums to 100)
+- diagnostic_questions must have 8–10 questions
+- recommended_charts must have exactly 5 charts
+- phases must have exactly 3 phases
+- All arrays must be populated — no empty arrays
+- Write in authoritative consultant-grade English
+- This is proprietary DigiFusion IP — original synthesis, not a restatement`;
+
+    // Call AI and parse the enforced JSON
+    let playbookJson;
+    try {
+      const raw = await this.runLLM(structurePrompt, { skipKnowledge: true, skipMemory: true, forceJson: true });
+      // Strip any accidental markdown fences
+      const cleaned = raw.replace(/^```[\w]*\n?/m, '').replace(/```\s*$/m, '').trim();
+      playbookJson = JSON.parse(cleaned);
+    } catch (e) {
+      console.warn('[Atlas] Structured JSON parse failed, falling back to prose:', e.message);
+      // Fallback: return the raw text rather than crashing
+      return this.runLLM(structurePrompt.replace('Return ONLY a valid JSON object', 'Return well-structured markdown'), { skipKnowledge: true });
+    }
+
+    // ── Step 3: Generate Mermaid.js flowchart ────────────────────────────
+    let mermaidChart = '';
+    try {
+      const mermaidPrompt = `Based on this consulting framework, generate clean Mermaid.js flowchart code that visualises the 3-phase journey from diagnostic to execution.
+
+Framework: ${playbookJson.title}
+Phase 1: ${playbookJson.phases[0]?.name} — ${playbookJson.phases[0]?.objective}
+Phase 2: ${playbookJson.phases[1]?.name} — ${playbookJson.phases[1]?.objective}
+Phase 3: ${playbookJson.phases[2]?.name} — ${playbookJson.phases[2]?.objective}
+Maturity bands: ${playbookJson.scorecard?.maturity_bands?.map(b => b.band).join(' → ')}
+
+Return ONLY valid Mermaid.js code starting with "flowchart TD" or "flowchart LR". No explanation. No markdown fences.
+The chart should show: entry (client) → diagnostic scorecard → maturity band → recommended phase entry → phase 1 → phase 2 → phase 3 → outcome/deliverable.
+Use subgraphs to group the scorecard bands. Keep node labels short (max 6 words).`;
+
+      const { resolveProvider: _rp } = await import('../aiPipeline.js');
+      const provider = _rp('cerebras') || _rp('claude') || _rp('deepseek');
+      if (provider) {
+        mermaidChart = await callAiProvider(provider, mermaidPrompt,
+          'You generate clean, valid Mermaid.js diagram code. Return only the diagram code with no explanation.');
+        // Ensure it starts correctly
+        if (!mermaidChart.trim().startsWith('flowchart') && !mermaidChart.trim().startsWith('graph')) {
+          const match = mermaidChart.match(/(flowchart|graph)[\s\S]+/);
+          mermaidChart = match ? match[0] : '';
+        }
+      }
+    } catch (e) {
+      console.warn('[Atlas] Mermaid generation failed:', e.message);
+    }
+
+    // ── Step 4: Render structured JSON → rich Markdown ──────────────────
+    const p = playbookJson;
+    const sc = p.scorecard || {};
+
+    const md = [
+      `# ${p.title}`,
+      `> ${p.tagline}`,
+      '',
+      `## Executive Summary`,
+      p.executive_summary,
+      '',
+      `---`,
+      '',
+      `## The DigiFusion 3-Phase Framework`,
+      '',
+      ...(p.phases || []).flatMap(ph => [
+        `### Phase ${ph.number}: ${ph.name}`,
+        `**Methodology:** ${ph.label} — ${ph.methodology}`,
+        '',
+        `**Objective:** ${ph.objective}`,
+        '',
+        `**Key Activities:**`,
+        ...(ph.activities || []).map(a => `- ${a}`),
+        '',
+        `**Actionable Checklist:**`,
+        ...(ph.checklist || []).map(c => `- ${c}`),
+        '',
+        `**Deliverable:** ${ph.deliverable}`,
+        `**Duration:** ${ph.duration}`,
+        '',
+      ]),
+      `---`,
+      '',
+      `## ${sc.title || 'Diagnostic Scorecard'}`,
+      '',
+      `**Purpose:** ${sc.purpose}`,
+      '',
+      `**Scoring Formula:** ${sc.scoring_formula}`,
+      '',
+      `### Scorecard Dimensions`,
+      '',
+      ...(sc.dimensions || []).flatMap(d => [
+        `#### ${d.name} *(Weight: ${d.weight}%)*`,
+        `${d.description}`,
+        '',
+        `**Diagnostic Question:** *"${d.diagnostic_question}"*`,
+        '',
+        `| Score | Meaning |`,
+        `|-------|---------|`,
+        ...Object.entries(d.scoring_guide || {}).map(([score, meaning]) => `| **${score}** | ${meaning} |`),
+        '',
+      ]),
+      `### Maturity Bands`,
+      '',
+      `| Band | Score | Description | Entry Point |`,
+      `|------|-------|-------------|-------------|`,
+      ...(sc.maturity_bands || []).map(b =>
+        `| **${b.band}** | ${b.score_range} | ${b.description} | ${b.recommended_entry_point} |`
+      ),
+      '',
+      `---`,
+      '',
+      `## Diagnostic Questions`,
+      '',
+      ...(p.diagnostic_questions || []).map(q =>
+        `**${q.number}. ${q.question}**\n*Maps to: ${q.maps_to} — ${q.insight}*\n`
+      ),
+      `---`,
+      '',
+      `## Why This Framework Is Different`,
+      '',
+      ...(p.differentiators || []).map(d => `- ${d}`),
+      '',
+      `---`,
+      '',
+      `## Recommended Diagnostic Charts`,
+      '',
+      ...(p.recommended_charts || []).flatMap(c => [
+        `### ${c.name} *(${c.type})*`,
+        `- **X-axis:** ${c.x_axis}`,
+        `- **Y-axis:** ${c.y_axis}`,
+        `- **Data points:** ${c.data_points}`,
+        `- **Insight:** ${c.insight}`,
+        '',
+      ]),
+      `---`,
+      '',
+      `## Visual Structure`,
+      '',
+      p.visual_structure,
+      '',
+      ...(mermaidChart ? [
+        `---`,
+        '',
+        `## Framework Flowchart`,
+        '',
+        '```mermaid',
+        mermaidChart.trim(),
+        '```',
+        '',
+      ] : []),
+      `---`,
+      `*Proprietary DigiFusion IP — synthesised from BCG DAI, AWS CAF, IBM Garage and the DigiFusion intelligence base.*`,
+    ].join('\n');
+
+    return md;
   }
 
   // ══════════════════════════════════════════════════════════════════════════

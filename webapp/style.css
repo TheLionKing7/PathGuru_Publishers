@@ -4304,6 +4304,49 @@ select option { background: var(--surface-2); }
   padding: 32px 0;
 }
 
+/* ── Playbook rendered output ─────────────────────────── */
+.ip-tagline {
+  border-left: 3px solid var(--accent, #f59e0b);
+  margin: 0 0 16px;
+  padding: 8px 16px;
+  color: var(--muted);
+  font-style: italic;
+  font-size: 15px;
+}
+.ip-divider {
+  border: none;
+  border-top: 1px solid var(--border, #2a2a2a);
+  margin: 24px 0;
+}
+.ip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0 20px;
+}
+.ip-table th {
+  background: rgba(255,255,255,0.06);
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+.ip-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  vertical-align: top;
+}
+.ip-table tr:last-child td { border-bottom: none; }
+.ip-mermaid-wrap {
+  background: #0d1117;
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+  padding: 24px;
+  margin: 20px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
 .ip-library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

@@ -1282,13 +1282,60 @@ async function deleteIPDoc(slug, btnEl) {
 }
 function renderAgentMarkdown(md) {
   if (!md) return '';
-  return md
+
+  // Extract mermaid blocks first so they don't get mangled by other replacements
+  const mermaidBlocks = [];
+  const withPlaceholders = md.replace(/```mermaid\n([\s\S]*?)```/g, (_, code) => {
+    const id = `mermaid-${mermaidBlocks.length}-${Date.now()}`;
+    mermaidBlocks.push({ id, code: code.trim() });
+    return `%%MERMAID_${mermaidBlocks.length - 1}%%`;
+  });
+
+  let html = withPlaceholders
+    // Tables: header row + separator + data rows
+    .replace(/^\|(.+)\|\s*\n\|[-| :]+\|\s*\n((?:\|.+\|\s*\n?)*)/gm, (_, header, rows) => {
+      const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+      const trs = rows.trim().split('\n').map(row => {
+        const tds = row.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+      return `<table class="ip-table"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+    })
+    // Other code blocks
     .replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+    // Headings
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
+    .replace(/^### (.+)$/gm,  '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,   '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,    '<h1>$1</h1>')
+    // Blockquote (tagline)
+    .replace(/^> (.+)$/gm, '<blockquote class="ip-tagline">$1</blockquote>')
+    // HR
+    .replace(/^---$/gm, '<hr class="ip-divider">')
+    // Bold / italic
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+    // Bullet lists
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+    // Paragraphs
     .replace(/\n\n/g, '</p><p>')
-    .replace(/^/, '<p>').replace(/$/, '</p>');
+    .replace(/^(?!<)/, '<p>').replace(/(?<!\>)$/, '</p>');
+
+  // Re-inject Mermaid diagrams as renderable divs
+  mermaidBlocks.forEach(({ id, code }, i) => {
+    html = html.replace(`%%MERMAID_${i}%%`,
+      `<div class="ip-mermaid-wrap"><div class="mermaid" id="${id}">${code}</div></div>`);
+  });
+
+  // Trigger Mermaid render after DOM insertion (deferred)
+  if (mermaidBlocks.length > 0) {
+    setTimeout(() => {
+      if (window.mermaid) {
+        try { window.mermaid.run({ querySelector: '.mermaid' }); } catch (e) { console.warn('Mermaid render:', e.message); }
+      }
+    }, 100);
+  }
+
+  return html;
 }
