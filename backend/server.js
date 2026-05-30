@@ -1103,11 +1103,94 @@ ent.refundOrder(shopRefundMatch[1], body);
         `Write in a professional consultant-grade tone. This is proprietary DigiFusion IP.`,
       ].filter(Boolean).join(' ');
 
-      const content = await atlas.buildFramework(title, domain, hybridInstruction);
-      if (!content) { err(res, 'Atlas returned no content', 500); return; }
+      // Route to the right specialist:
+      // digital_media → Aether (C2C Pipeline framework)
+      // all others    → Atlas  (BCG/AWS/IBM consulting framework)
+      let content;
+      if (domain === 'digital_media') {
+        content = await aether.buildDigitalMediaFramework(title, {
+          domain, instruction: hybridInstruction, targetAudience: body.audience || '', industry: body.industry || '',
+        });
+      } else {
+        content = await atlas.buildFramework(title, domain, hybridInstruction);
+      }
+      if (!content) { err(res, 'Agent returned no content', 500); return; }
 
       const entry = await saveAgencyPlaybook({ slug, title, domain, type, content, sources, tagline, access });
       json(res, { ok: true, entry, preview: content.slice(0, 500) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // AETHER — Digital Media Strategy Routes
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /api/agents/aether/strategy-session ─────────────────────────────
+  // Interactive strategy session with note-taking. Aether as co-strategist.
+  // Body: { message, sessionId, brand?, topic?, goals? }
+  if (req.method === 'POST' && path === '/api/agents/aether/strategy-session') {
+    try {
+      const body = await readBody(req);
+      const { message, sessionId, brand = '', topic = '', goals = '' } = body;
+      if (!message) { err(res, 'message is required', 400); return; }
+      const sid = sessionId || `session-${Date.now()}`;
+      const result = await aether.strategySession(message, sid, { brand, topic, goals });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/aether/session-notes/:sessionId ──────────────────────
+  // Retrieve all notes and compiled brief from a strategy session.
+  const sessionNotesMatch = path.match(/^\/api\/agents\/aether\/session-notes\/([^/]+)$/);
+  if (req.method === 'GET' && sessionNotesMatch) {
+    try {
+      const sessionId = decodeURIComponent(sessionNotesMatch[1]);
+      const result = await aether.getSessionNotes(sessionId);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/aether/diagnostic ───────────────────────────────────
+  // Run the Content Maturity Scorecard for a client.
+  // Body: { brand, answers: { q1: 3, q2: 4, ... } | "free text description", context? }
+  if (req.method === 'POST' && path === '/api/agents/aether/diagnostic') {
+    try {
+      const body = await readBody(req);
+      const { brand, answers, context = '' } = body;
+      if (!brand) { err(res, 'brand is required', 400); return; }
+      const result = await aether.runDiagnostic(brand, answers || '', context);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/aether/c2c-pipeline ─────────────────────────────────
+  // Run the full 4-phase Content-to-Capital Pipeline for a brand.
+  // Body: { brand, audience?, goals?, channels?, context? }
+  if (req.method === 'POST' && path === '/api/agents/aether/c2c-pipeline') {
+    try {
+      const body = await readBody(req);
+      const { brand, audience, goals, channels, context, topicArea, hubTopic } = body;
+      if (!brand) { err(res, 'brand is required', 400); return; }
+      const result = await aether.runFullPipeline(brand, { audience, goals, channels, context, topicArea, hubTopic });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/aether/framework ────────────────────────────────────
+  // Build a proprietary digital media framework using the C2C architecture.
+  // Body: { frameworkName, targetAudience?, industry?, instruction? }
+  if (req.method === 'POST' && path === '/api/agents/aether/framework') {
+    try {
+      const body = await readBody(req);
+      const { frameworkName, targetAudience, industry, instruction } = body;
+      if (!frameworkName) { err(res, 'frameworkName is required', 400); return; }
+      const result = await aether.buildDigitalMediaFramework(frameworkName, { targetAudience, industry, instruction });
+      json(res, { ok: true, framework: result });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
