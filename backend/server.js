@@ -787,10 +787,11 @@ ent.refundOrder(shopRefundMatch[1], body);
   // AGENT NETWORK — /api/agents/*
   // ═══════════════════════════════════════════════════
 
-  // ── POST /api/agents/:agentId/run ────────────────────────────────────────
+  // ── POST /api/agents/:agentId/run  (and /task alias) ───────────────────────
   // Dispatch a task to a specific agent. Body is the task instruction object.
   // Example: POST /api/agents/atlas/run  { action: 'research', topic: 'SaaS BD' }
-  const agentRunMatch = path.match(/^\/api\/agents\/([\w-]+)\/run$/);
+  //          POST /api/agents/synthesizer/task  { action: 'ingest_all' }
+  const agentRunMatch = path.match(/^\/api\/agents\/([\w-]+)\/(run|task)$/);
   if (req.method === 'POST' && agentRunMatch) {
     const agentId = agentRunMatch[1];
     const agent   = AGENTS[agentId];
