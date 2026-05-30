@@ -1195,6 +1195,144 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ATLAS — Senior Research Partner & BD Director (Deal Engine)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /api/agents/atlas/strategy-session ───────────────────────────────
+  // Interactive BD strategy session with note-taking. Atlas as co-strategist.
+  // Body: { message, sessionId, accountName?, dealStage?, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/strategy-session') {
+    try {
+      const body = await readBody(req);
+      const { message, sessionId, accountName = '', dealStage = '', context = '' } = body;
+      if (!message) { err(res, 'message is required', 400); return; }
+      const sid = sessionId || `session-${Date.now()}`;
+      const result = await atlas.strategySession(message, sid, { accountName, dealStage, context });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/atlas/session-notes/:sessionId ───────────────────────
+  // Retrieve compiled Deal Brief from a strategy session.
+  const atlasSessionNotesMatch = path.match(/^\/api\/agents\/atlas\/session-notes\/([^/]+)$/);
+  if (req.method === 'GET' && atlasSessionNotesMatch) {
+    try {
+      const sessionId = decodeURIComponent(atlasSessionNotesMatch[1]);
+      const result = await atlas.getSessionNotes(sessionId);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/deal-diagnostic ────────────────────────────────
+  // Run the BD Maturity Scorecard for a prospect account.
+  // Body: { accountName, answers: { q1: 3, q2: 4, ... } | "free text", context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/deal-diagnostic') {
+    try {
+      const body = await readBody(req);
+      const { accountName, answers, context = '' } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runDealDiagnostic(accountName, answers || '', context);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/deal-engine ────────────────────────────────────
+  // Run the full 4-phase Deal Engine for a target account.
+  // Body: { accountName, industry?, decisionMakers?, context?, painPoints? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/deal-engine') {
+    try {
+      const body = await readBody(req);
+      const { accountName, industry, decisionMakers, context, painPoints, dealSize } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runFullDealEngine(accountName, { industry, decisionMakers, context, painPoints, dealSize });
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/phase1-intelligence ────────────────────────────
+  // Body: { accountName, industry?, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/phase1-intelligence') {
+    try {
+      const body = await readBody(req);
+      const { accountName, industry = '', context = '' } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runPhase1Intelligence(accountName, industry, context);
+      json(res, { ok: true, phase: 'intelligence', output: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/phase2-diagnostic ─────────────────────────────
+  // Body: { accountName, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/phase2-diagnostic') {
+    try {
+      const body = await readBody(req);
+      const { accountName, context = '' } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runPhase2Diagnostic(accountName, context);
+      json(res, { ok: true, phase: 'diagnostic', output: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/phase3-insight ────────────────────────────────
+  // Body: { accountName, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/phase3-insight') {
+    try {
+      const body = await readBody(req);
+      const { accountName, context = '' } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runPhase3Insight(accountName, context);
+      json(res, { ok: true, phase: 'insight', output: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/phase4-consensus ───────────────────────────────
+  // Body: { accountName, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/phase4-consensus') {
+    try {
+      const body = await readBody(req);
+      const { accountName, context = '' } = body;
+      if (!accountName) { err(res, 'accountName is required', 400); return; }
+      const result = await atlas.runPhase4Consensus(accountName, context);
+      json(res, { ok: true, phase: 'consensus', output: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/research ──────────────────────────────────────
+  // Deep market / prospect research. Body: { topic, depth?, focus?, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/research') {
+    try {
+      const body = await readBody(req);
+      const { topic, depth, focus, context } = body;
+      if (!topic) { err(res, 'topic is required', 400); return; }
+      const result = await atlas.research(topic, { depth, focus, context });
+      json(res, { ok: true, research: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/analyse-prospect ───────────────────────────────
+  // Analyse a prospect through the Deal Engine lens.
+  // Body: { companyName, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/analyse-prospect') {
+    try {
+      const body = await readBody(req);
+      const { companyName, context = '' } = body;
+      if (!companyName) { err(res, 'companyName is required', 400); return; }
+      const result = await atlas.analyseProspect(companyName, context);
+      json(res, { ok: true, analysis: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── GET /api/agents/agency-ip ────────────────────────────────────────────
   // List all generated agency playbooks/frameworks (metadata only).
   if (req.method === 'GET' && path === '/api/agents/agency-ip') {
