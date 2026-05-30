@@ -301,10 +301,10 @@ export function resolveProvider(overrideName) {
     } : null,
     claude: process.env.CLAUDE_API_KEY ? {
       name:   "claude",
-      apiKey: process.env.CLAUDE_API_KEY,
-      model:  process.env.CLAUDE_MODEL || "claude-sonnet-4-5",
+      apiKey: (process.env.CLAUDE_API_KEY || "").trim(),
+      model:  (process.env.CLAUDE_MODEL  || "claude-sonnet-4-5").trim(),
     } : null,
-    deepseek: process.env.DEEPSEEK_API_KEY ? {
+        deepseek: process.env.DEEPSEEK_API_KEY ? {
       name:    "deepseek",
       apiKey:  process.env.DEEPSEEK_API_KEY,
       baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
