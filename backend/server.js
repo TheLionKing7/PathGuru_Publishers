@@ -840,6 +840,45 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/agents/tasks/:taskId ───────────────────────────────────────
+  // Poll a single task by its Supabase UUID — used by the frontend to track
+  // long-running agent jobs (ingest, research, synthesis, etc.)
+  const taskPollMatch = path.match(/^\/api\/agents\/tasks\/([\w-]+)$/);
+  if (req.method === 'GET' && taskPollMatch) {
+    const taskId = taskPollMatch[1];
+    try {
+      const { getSupabase: _db3 } = await import('./supabaseClient.js');
+      const db = _db3();
+      if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const { data, error } = await db
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .single();
+      if (error || !data) { err(res, 'Task not found', 404); return; }
+
+      // Normalise status: Supabase uses 'in_progress'/'completed', frontend also checks 'done'
+      const status = data.status === 'completed' ? 'done' : data.status;
+
+      // Extract a readable result string from the JSONB output blob
+      const raw = data.output || {};
+      let result = null;
+      if (typeof raw.result === 'string')       result = raw.result;
+      else if (typeof raw.result === 'object')  result = JSON.stringify(raw.result, null, 2);
+      else if (typeof raw === 'string')         result = raw;
+      else                                       result = JSON.stringify(raw, null, 2);
+
+      json(res, {
+        ...data,
+        taskId:  data.id,
+        status,
+        result,
+        error:   data.error_message || data.error || null,
+      });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── GET /api/agents/report ───────────────────────────────────────────────
   // Generate a status report from Nexus. ?type=daily|weekly|monthly
   if (req.method === 'GET' && path === '/api/agents/report') {
