@@ -491,6 +491,35 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
     return callAiProvider(this.provider, prompt, this.systemPrompt);
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXECUTE (task dispatch)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async execute(task) {
+    const { action, r2Key, domain, prefix, query, forAgent, instruction, domains, outputFormat } = task;
+
+    switch (action) {
+      case 'ingest_pdf':
+        return this.ingestPDF(r2Key, domain || 'general');
+
+      case 'ingest_all':
+        return this.ingestAll(prefix || ['knowledge/', 'library/'], domain || 'general');
+
+      case 'answer':
+        return { answer: await this.answer(query, forAgent || 'unknown', domains || []) };
+
+      case 'synthesize':
+        return { result: await this.synthesize({ instruction, domains, outputFormat }) };
+
+      default: {
+        const result = await this.runLLM(task.description || task.title || 'No instruction provided', {
+          knowledgeQuery: task.title,
+        });
+        return { result };
+      }
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   _parseJsonArray(text) {
