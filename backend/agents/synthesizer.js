@@ -46,19 +46,54 @@ async function extractPdfText(buffer) {
   }
 }
 
-// ── Download a file from R2 ───────────────────────────────────────────────────
+// ── Download a file from R2 (AWS Signature V4) ───────────────────────────────
 async function fetchFromR2(key) {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '';
-  const bucket    = process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '';
-  const apiToken  = process.env.CLOUDFLARE_API_TOKEN  || '';
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '').trim();
+  const bucket    = (process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '').trim();
+  const accessKey = (process.env.R2_ACCESS_KEY_ID      || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '').trim();
+  const secretKey = (process.env.R2_SECRET_ACCESS_KEY  || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '').trim();
 
-  if (!accountId || !bucket || !apiToken) throw new Error('R2 credentials not configured');
+  if (!accountId || !bucket) throw new Error('R2 credentials not configured (missing accountId or bucket)');
+  if (!accessKey || !secretKey) throw new Error('R2 S3 credentials not configured (missing R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY)');
 
-  const encodedKey = key.split('/').map(encodeURIComponent).join('/');
-  const url        = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${encodedKey}`;
+  const { createHash, createHmac } = await import('crypto');
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
-  if (!res.ok) throw new Error(`R2 fetch failed for ${key}: ${res.status}`);
+  const now       = new Date();
+  const amzDate   = now.toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15) + 'Z';
+  const dateStamp = amzDate.slice(0, 8);
+  const host      = `${accountId}.r2.cloudflarestorage.com`;
+  // Path: /<bucket>/<key> — each segment encoded but slashes preserved
+  const objectPath = `/${bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+
+  const payloadHash = createHash('sha256').update('').digest('hex');
+  const hdrs = {
+    host,
+    'x-amz-content-sha256': payloadHash,
+    'x-amz-date': amzDate,
+  };
+
+  const sortedHdrs       = Object.keys(hdrs).sort();
+  const canonicalHeaders = sortedHdrs.map(k => `${k}:${hdrs[k]}\n`).join('');
+  const signedHeaders    = sortedHdrs.join(';');
+
+  const canonicalRequest = ['GET', objectPath, '', canonicalHeaders, signedHeaders, payloadHash].join('\n');
+  const credScope        = `${dateStamp}/auto/s3/aws4_request`;
+  const strToSign        = ['AWS4-HMAC-SHA256', amzDate, credScope, createHash('sha256').update(canonicalRequest).digest('hex')].join('\n');
+
+  const kDate    = createHmac('sha256', 'AWS4' + secretKey).update(dateStamp).digest();
+  const kRegion  = createHmac('sha256', kDate).update('auto').digest();
+  const kService = createHmac('sha256', kRegion).update('s3').digest();
+  const kSigning = createHmac('sha256', kService).update('aws4_request').digest();
+  const signature = createHmac('sha256', kSigning).update(strToSign).digest('hex');
+
+  const auth = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const url  = `https://${host}${objectPath}`;
+
+  const res = await fetch(url, { headers: { ...hdrs, Authorization: auth } });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '');
+    throw new Error(`R2 fetch failed for ${key}: ${res.status} — ${errBody.slice(0, 200)}`);
+  }
   return Buffer.from(await res.arrayBuffer());
 }
 
@@ -454,36 +489,6 @@ Quality bar: equivalent to KPMG / BCG published work
 Draw only from the knowledge provided above. Be specific, cite sources, use real data.`;
 
     return callAiProvider(this.provider, prompt, this.systemPrompt);
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // EXECUTE (task dispatch)
-  // ══════════════════════════════════════════════════════════════════════════
-
-  async execute(task) {
-    const { action, r2Key, domain, prefix, query, forAgent, instruction, domains, outputFormat } = task;
-
-    switch (action) {
-      case 'ingest_pdf':
-        return this.ingestPDF(r2Key, domain || 'general');
-
-      case 'ingest_all':
-        // Default: scan both knowledge/ and library/ to cover the full R2 structure
-        return this.ingestAll(prefix || ['knowledge/', 'library/'], domain || 'general');
-
-      case 'answer':
-        return { answer: await this.answer(query, forAgent || 'unknown', domains || []) };
-
-      case 'synthesize':
-        return { result: await this.synthesize({ instruction, domains, outputFormat }) };
-
-      default:
-        // Generic: run the LLM with knowledge context
-        const result = await this.runLLM(task.description || task.title || 'No instruction provided', {
-          knowledgeQuery: task.title,
-        });
-        return { result };
-    }
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────

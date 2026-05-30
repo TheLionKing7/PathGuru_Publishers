@@ -860,22 +860,60 @@ ent.refundOrder(shopRefundMatch[1], body);
       resolvedBucket:         bucket     || 'NONE — neither CLOUDFLARE_R2_BUCKET nor R2_BUCKET_NAME is set!',
     };
 
-    // Attempt REST API listing on 'knowledge/' prefix
-    let listTest = null;
+    // Test S3 listing (preferred path) if credentials are available
+    let s3Test = null;
+    if (accountId && bucket && s3Key && s3Secret) {
+      try {
+        const { synthesizer: _syn } = await import('./agents/synthesizer.js');
+        // We can't call the private helper directly, so just try ingestAll with limit=0 dry-run
+        // Instead, manually do a small S3 list to verify credentials
+        const { createHash, createHmac } = await import('crypto');
+        const now      = new Date();
+        const amzDate  = now.toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15) + 'Z';
+        const dateStamp = amzDate.slice(0, 8);
+        const host     = `${accountId}.r2.cloudflarestorage.com`;
+        const path_    = `/${bucket}`;
+        const qparams  = `list-type=2&max-keys=5&prefix=knowledge%2F`;
+        const payloadHash = createHash('sha256').update('').digest('hex');
+        const hdrs = { host, 'x-amz-content-sha256': payloadHash, 'x-amz-date': amzDate };
+        const sortedHdrs = Object.keys(hdrs).sort();
+        const canonicalHeaders = sortedHdrs.map(k => `${k}:${hdrs[k]}\n`).join('');
+        const signedHeaders = sortedHdrs.join(';');
+        const canonicalRequest = ['GET', path_, qparams, canonicalHeaders, signedHeaders, payloadHash].join('\n');
+        const credScope = `${dateStamp}/auto/s3/aws4_request`;
+        const strToSign = ['AWS4-HMAC-SHA256', amzDate, credScope, createHash('sha256').update(canonicalRequest).digest('hex')].join('\n');
+        const kDate    = createHmac('sha256', 'AWS4' + s3Secret).update(dateStamp).digest();
+        const kRegion  = createHmac('sha256', kDate).update('auto').digest();
+        const kService = createHmac('sha256', kRegion).update('s3').digest();
+        const kSigning = createHmac('sha256', kService).update('aws4_request').digest();
+        const signature = createHmac('sha256', kSigning).update(strToSign).digest('hex');
+        const auth = `AWS4-HMAC-SHA256 Credential=${s3Key}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+        const s3Url = `https://${host}${path_}?${qparams}`;
+        const s3r = await fetch(s3Url, { headers: { ...hdrs, Authorization: auth } });
+        const s3body = await s3r.text();
+        const keys = [...s3body.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
+        s3Test = { status: s3r.status, objectsFound: keys.length, sampleKeys: keys.slice(0, 5) };
+      } catch (e) {
+        s3Test = { error: e.message };
+      }
+    } else {
+      s3Test = { skipped: 'S3 credentials not set — add R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY on Render' };
+    }
+
+    // Also test REST API (for reference — expected to 401 unless you have a dashboard token)
+    let restTest = null;
     if (accountId && bucket && apiToken) {
       try {
         const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=knowledge%2F&limit=5`;
         const r = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
         const body = await r.text();
-        listTest = { status: r.status, statusText: r.statusText, body: body.slice(0, 500) };
+        restTest = { status: r.status, note: r.status === 401 ? 'Expected — CLOUDFLARE_API_TOKEN is not a dashboard REST token' : 'OK', body: body.slice(0, 200) };
       } catch (e) {
-        listTest = { error: e.message };
+        restTest = { error: e.message };
       }
-    } else {
-      listTest = { skipped: 'missing accountId, bucket, or apiToken' };
     }
 
-    json(res, { env: envReport, listTest });
+    json(res, { env: envReport, s3Test, restTest });
     return;
   }
 
