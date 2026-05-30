@@ -1534,6 +1534,10 @@
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Leads
         </button>
+        <button class="module-tab" data-subtab="agents-ip" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Agency IP
+        </button>
       </div><!-- /.module-topnav -->
 
       <div class="module-body">
@@ -1605,6 +1609,108 @@
             </div>
           </div>
         </section><!-- /#tab-agents-leads -->
+
+        <!-- ── AGENCY IP TAB ── -->
+        <section class="tab-panel" id="tab-agents-ip" aria-label="Agency IP">
+          <div class="agents-ip-body">
+
+            <!-- Synthesis form -->
+            <div class="ip-synthesizer-card">
+              <div class="ip-synth-header">
+                <div>
+                  <h3 class="ip-synth-title">Playbook Synthesizer</h3>
+                  <p class="ip-synth-sub">Run the 3-phase pipeline: Extract → Hybridize → Store as agency IP</p>
+                </div>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              </div>
+
+              <div class="ip-synth-form">
+                <div class="ip-field-row">
+                  <div class="ip-field">
+                    <label class="ip-label">Playbook Title</label>
+                    <input id="ipTitle" type="text" class="console-input" placeholder="e.g. DigiFusion Digital Transformation Playbook v1" />
+                  </div>
+                  <div class="ip-field ip-field--sm">
+                    <label class="ip-label">Type</label>
+                    <select id="ipType" class="console-select">
+                      <option value="playbook">Playbook</option>
+                      <option value="framework">Framework</option>
+                      <option value="template">Template</option>
+                      <option value="methodology">Methodology</option>
+                    </select>
+                  </div>
+                  <div class="ip-field ip-field--sm">
+                    <label class="ip-label">Domain</label>
+                    <select id="ipDomain" class="console-select">
+                      <option value="business_development">Business Development</option>
+                      <option value="automation">Automation</option>
+                      <option value="digital_media">Digital Media</option>
+                      <option value="general">General</option>
+                    </select>
+                  </div>
+                  <div class="ip-field ip-field--sm">
+                    <label class="ip-label">Access</label>
+                    <select id="ipAccess" class="console-select">
+                      <option value="premium">Premium</option>
+                      <option value="public">Public</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="ip-field">
+                  <label class="ip-label">Source Frameworks <span class="ip-label-hint">(select all that apply)</span></label>
+                  <div class="ip-sources-grid" id="ipSourcesGrid">
+                    <label class="ip-source-check"><input type="checkbox" value="McKinsey 7S Framework" checked /> McKinsey 7S</label>
+                    <label class="ip-source-check"><input type="checkbox" value="BCG Digital Acceleration Index" checked /> BCG DAI</label>
+                    <label class="ip-source-check"><input type="checkbox" value="IBM Garage Methodology" checked /> IBM Garage</label>
+                    <label class="ip-source-check"><input type="checkbox" value="AWS Cloud Adoption Framework" checked /> AWS CAF</label>
+                    <label class="ip-source-check"><input type="checkbox" value="PwC Digital IQ" /> PwC Digital IQ</label>
+                    <label class="ip-source-check"><input type="checkbox" value="Capgemini Digital Transformation" /> Capgemini</label>
+                  </div>
+                </div>
+
+                <div class="ip-field">
+                  <label class="ip-label">Tagline <span class="ip-label-hint">(one-line description)</span></label>
+                  <input id="ipTagline" type="text" class="console-input" placeholder="e.g. Our proprietary 3-phase digital transformation system for SMBs" />
+                </div>
+
+                <div class="ip-field">
+                  <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional — guide the synthesis)</span></label>
+                  <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost tools…"></textarea>
+                </div>
+
+                <div class="ip-synth-actions">
+                  <button class="btn-console-run" id="btnSynthesize" onclick="synthesizePlaybook()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    Synthesize Playbook
+                  </button>
+                  <span class="ip-synth-status" id="ipSynthStatus"></span>
+                </div>
+              </div>
+
+              <!-- Output preview -->
+              <div class="ip-output-wrap" id="ipOutputWrap" style="display:none">
+                <div class="ip-output-header">
+                  <span class="ip-output-label">Generated Output Preview</span>
+                  <button class="ip-btn-secondary" onclick="downloadIPDoc()">Download DOCX</button>
+                </div>
+                <div class="ip-output-body markdown-output" id="ipOutputBody"></div>
+              </div>
+            </div><!-- /.ip-synthesizer-card -->
+
+            <!-- Library of generated IP -->
+            <div class="ip-library-card">
+              <div class="ip-library-header">
+                <h3 class="ip-synth-title">Agency IP Library</h3>
+                <button class="ip-btn-secondary" onclick="loadIPLibrary()">Refresh</button>
+              </div>
+              <div id="ipLibraryBody">
+                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading IP library…</span></div>
+              </div>
+            </div>
+
+          </div><!-- /.agents-ip-body -->
+        </section><!-- /#tab-agents-ip -->
 
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->

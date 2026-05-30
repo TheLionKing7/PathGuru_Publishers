@@ -1052,6 +1052,7 @@
         if (tab === 'agents-tasks')   loadTasks();
         if (tab === 'agents-leads')   loadLeads();
         if (tab === 'agents-console') buildConsoleNav();
+        if (tab === 'agents-ip')      loadIPLibrary();
       });
     });
 
@@ -1067,3 +1068,186 @@
     init();
   }
 })();
+
+// ══════════════════════════════════════════════════════════════════════════
+// AGENCY IP — Playbook Synthesizer + IP Library
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Collect selected source frameworks from the checkbox grid.
+ */
+function getSelectedSources() {
+  return Array.from(
+    document.querySelectorAll('#ipSourcesGrid input[type=checkbox]:checked')
+  ).map(cb => cb.value);
+}
+
+/**
+ * Trigger Phase 1+2+3 synthesis via Atlas → save to R2 agency IP store.
+ */
+async function synthesizePlaybook() {
+  const title       = document.getElementById('ipTitle')?.value.trim();
+  const type        = document.getElementById('ipType')?.value        || 'playbook';
+  const domain      = document.getElementById('ipDomain')?.value      || 'business_development';
+  const access      = document.getElementById('ipAccess')?.value      || 'premium';
+  const tagline     = document.getElementById('ipTagline')?.value.trim() || '';
+  const instruction = document.getElementById('ipInstruction')?.value.trim() || '';
+  const sources     = getSelectedSources();
+
+  if (!title) { alert('Please enter a playbook title.'); return; }
+
+  const btn    = document.getElementById('btnSynthesize');
+  const status = document.getElementById('ipSynthStatus');
+  const wrap   = document.getElementById('ipOutputWrap');
+  const body   = document.getElementById('ipOutputBody');
+
+  btn.disabled  = true;
+  btn.textContent = 'Synthesizing…';
+  status.textContent = 'Sending to Atlas — this may take 30–60 seconds…';
+  if (wrap) wrap.style.display = 'none';
+
+  try {
+    const res = await apiFetch('/api/agents/atlas/synthesize-playbook', 'POST', {
+      title, type, domain, access, tagline, instruction, sources,
+    });
+
+    if (res.ok && res.entry) {
+      status.textContent = `✓ Saved as "${res.entry.slug}"`;
+      status.style.color = '#22c55e';
+
+      // Show preview
+      if (wrap && body) {
+        body.innerHTML = renderMarkdown(res.preview + '\n\n*…(full document saved to Agency IP Library)*');
+        wrap.style.display = 'block';
+      }
+      // Refresh library
+      loadIPLibrary();
+    } else {
+      throw new Error(res.error || 'Unexpected response');
+    }
+  } catch (e) {
+    status.textContent = `✗ ${e.message}`;
+    status.style.color = '#ef4444';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Synthesize Playbook';
+  }
+}
+
+/**
+ * Download the last generated playbook as a DOCX via the produce-doc endpoint.
+ */
+async function downloadIPDoc() {
+  const title   = document.getElementById('ipTitle')?.value.trim() || 'Agency Playbook';
+  const content = document.getElementById('ipOutputBody')?.innerText || '';
+  if (!content) return;
+
+  try {
+    const res = await fetch('/api/agents/atlas/produce-doc', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ title, content, docType: 'framework', format: 'docx', author: 'DigiFusion Agency' }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = title.replace(/[^a-z0-9]/gi, '-').toLowerCase() + '.docx';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Download failed: ' + e.message);
+  }
+}
+
+/**
+ * Load and render the Agency IP library.
+ */
+async function loadIPLibrary() {
+  const container = document.getElementById('ipLibraryBody');
+  if (!container) return;
+  container.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading…</span></div>';
+
+  try {
+    const data = await apiFetch('/api/agents/agency-ip');
+    const items = data.playbooks || [];
+
+    if (!items.length) {
+      container.innerHTML = '<p class="ip-library-empty">No agency IP generated yet. Use the Synthesizer above to create your first playbook.</p>';
+      return;
+    }
+
+    const TYPE_COLOURS = {
+      playbook:    '#6366f1',
+      framework:   '#0ea5e9',
+      template:    '#f59e0b',
+      methodology: '#22c55e',
+    };
+
+    container.innerHTML = `
+      <div class="ip-library-grid">
+        ${items.map(pb => `
+          <div class="ip-library-item">
+            <div class="ip-item-top">
+              <span class="ip-badge" style="background:${TYPE_COLOURS[pb.type] || '#6b7280'}22;color:${TYPE_COLOURS[pb.type] || '#6b7280'};border-color:${TYPE_COLOURS[pb.type] || '#6b7280'}44">${pb.type}</span>
+              <span class="ip-badge ip-badge--access ${pb.access === 'public' ? 'ip-badge--public' : ''}">${pb.access}</span>
+            </div>
+            <h4 class="ip-item-title">${pb.title}</h4>
+            <p class="ip-item-tagline">${pb.tagline || pb.domain?.replace(/_/g, ' ') || ''}</p>
+            ${pb.sources?.length ? `<p class="ip-item-sources">Sources: ${pb.sources.join(', ')}</p>` : ''}
+            <div class="ip-item-footer">
+              <span class="ip-item-date">${new Date(pb.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <div class="ip-item-actions">
+                <button class="ip-btn-secondary" onclick="viewIPDoc('${pb.slug}')">View</button>
+                <button class="ip-btn-secondary ip-btn-danger" onclick="deleteIPDoc('${pb.slug}', this)">Delete</button>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  } catch (e) {
+    container.innerHTML = `<p class="ip-library-empty" style="color:#ef4444">Failed to load: ${e.message}</p>`;
+  }
+}
+
+/**
+ * Open a playbook in a full-screen drawer (reuses the task output drawer pattern).
+ */
+async function viewIPDoc(slug) {
+  const wrap   = document.getElementById('ipOutputWrap');
+  const body   = document.getElementById('ipOutputBody');
+  if (!wrap || !body) return;
+
+  wrap.style.display = 'block';
+  body.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading full document…</span></div>';
+  // Scroll into view
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const pb = await apiFetch(`/api/agents/agency-ip/${slug}`);
+    document.getElementById('ipTitle').value    = pb.title   || '';
+    document.getElementById('ipTagline').value  = pb.tagline || '';
+    document.getElementById('ipDomain').value   = pb.domain  || 'business_development';
+    document.getElementById('ipType').value     = pb.type    || 'playbook';
+    document.getElementById('ipAccess').value   = pb.access  || 'premium';
+    body.innerHTML = renderMarkdown(pb.content || '*(no content)*');
+  } catch (e) {
+    body.innerHTML = `<p style="color:#ef4444">Failed to load: ${e.message}</p>`;
+  }
+}
+
+/**
+ * Delete an agency IP document with confirmation.
+ */
+async function deleteIPDoc(slug, btnEl) {
+  if (!confirm(`Delete "${slug}"? This cannot be undone.`)) return;
+  btnEl.disabled = true;
+  try {
+    await apiFetch(`/api/agents/agency-ip/${slug}`, 'DELETE');
+    loadIPLibrary();
+  } catch (e) {
+    alert('Delete failed: ' + e.message);
+    btnEl.disabled = false;
+  }
+}

@@ -223,18 +223,31 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
 
   /**
    * Scan R2 for unprocessed PDFs and ingest them all.
-   * @param {string} prefix   — R2 prefix to scan (default: 'knowledge/')
-   * @param {string} domain   — domain to assign to all found PDFs
+   * @param {string|string[]} prefix — R2 prefix(es) to scan. Pass an array to scan multiple.
+   *                                   Defaults to both 'knowledge/' and 'library/' to cover
+   *                                   the full R2 structure automatically.
+   * @param {string} domain          — fallback domain if prefix doesn't match domainMap
    */
-  async ingestAll(prefix = 'knowledge/', domain = 'general') {
-    const pdfs    = await listR2PDFs(prefix);
+  async ingestAll(prefix = ['knowledge/', 'library/'], domain = 'general') {
+    const prefixes = Array.isArray(prefix) ? prefix : [prefix];
+    const allPdfs  = [];
+    for (const p of prefixes) {
+      const found = await listR2PDFs(p);
+      allPdfs.push(...found);
+    }
+    // Deduplicate by key (in case prefix overlap)
+    const pdfs    = [...new Map(allPdfs.map(p => [p.key, p])).values()];
     const results = [];
 
     // Map R2 prefix → domain
+    // Covers both the legacy paths and the user's actual R2 structure:
+    //   knowledge/automation/   knowledge/business/   knowledge/media/
+    //   library/frameworks/     library/playbooks/    library/research/   library/case-studies/
     const domainMap = {
       'knowledge/business':   'business_development',
       'knowledge/automation': 'automation',
       'knowledge/media':      'digital_media',
+      'library/frameworks':   'business_development',   // source frameworks (McKinsey, BCG, etc.)
       'library/playbooks':    'business_development',
       'library/research':     'business_development',
       'library/case-studies': 'digital_media',
@@ -330,7 +343,8 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
         return this.ingestPDF(r2Key, domain || 'general');
 
       case 'ingest_all':
-        return this.ingestAll(prefix || 'knowledge/', domain || 'general');
+        // Default: scan both knowledge/ and library/ to cover the full R2 structure
+        return this.ingestAll(prefix || ['knowledge/', 'library/'], domain || 'general');
 
       case 'answer':
         return { answer: await this.answer(query, forAgent || 'unknown', domains || []) };

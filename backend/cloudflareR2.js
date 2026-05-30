@@ -297,3 +297,132 @@ export async function deleteLibraryFile (key) {
 
   return { deleted: key };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// AGENCY IP STORE — generated playbooks, frameworks, templates
+//
+// Matches the user's actual R2 output structure:
+//   Digifusion/Playbooks/Business/    → business_development
+//   Digifusion/Playbooks/Automation/  → automation
+//   Digifusion/Playbooks/Media/       → digital_media
+//
+// Each document is stored as a JSON object at:
+//   Digifusion/Playbooks/<DomainFolder>/<slug>.json
+//
+// A single top-level manifest tracks all generated IP:
+//   Digifusion/Playbooks/_manifest.json
+// ═══════════════════════════════════════════════════════════════
+
+const AGENCY_IP_BASE     = 'Digifusion/Playbooks';
+const AGENCY_IP_MANIFEST = `${AGENCY_IP_BASE}/_manifest.json`;
+
+// Map domain → R2 subfolder (matches user's Cloudflare folder names)
+const DOMAIN_FOLDER_MAP = {
+  business_development: 'Business',
+  automation:           'Automation',
+  digital_media:        'Media',
+  general:              'Business',   // fallback
+};
+
+function agencyIPKey (slug, domain) {
+  const folder = DOMAIN_FOLDER_MAP[domain] || 'Business';
+  return `${AGENCY_IP_BASE}/${folder}/${slug}.json`;
+}
+
+async function readAgencyManifest () {
+  try {
+    const url = getObjectUrl(AGENCY_IP_MANIFEST);
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${apiToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+async function writeAgencyManifest (items) {
+  await uploadToR2(AGENCY_IP_MANIFEST, JSON.stringify(items), 'application/json');
+}
+
+/**
+ * Save a generated agency playbook/framework to R2.
+ * @param {object} p
+ * @param {string} p.slug        - URL-safe id, e.g. 'digi-automation-playbook-v1'
+ * @param {string} p.title       - Display title
+ * @param {string} p.domain      - 'automation' | 'business_development' | 'digital_media'
+ * @param {string} p.type        - 'playbook' | 'framework' | 'template' | 'methodology'
+ * @param {string} p.content     - Full markdown content
+ * @param {string[]} p.sources   - Source framework names used
+ * @param {string} [p.tagline]   - One-line description
+ * @param {string} [p.access]    - 'public' | 'premium'  (default 'premium')
+ */
+export async function saveAgencyPlaybook (p) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  const { slug, title, domain, type = 'playbook', content,
+          sources = [], tagline = '', access = 'premium' } = p;
+  if (!slug || !title || !content) throw new Error('slug, title, and content are required.');
+
+  // Store in the domain-specific subfolder: Digifusion/Playbooks/Business|Automation|Media/
+  const key = agencyIPKey(slug, domain);
+  const now = new Date().toISOString();
+  await uploadToR2(key, JSON.stringify({ slug, title, domain, type, content, sources, tagline, access, createdAt: now }), 'application/json');
+
+  const entry = { slug, title, domain, type, sources, tagline, access, key, createdAt: now };
+  const manifest = await readAgencyManifest();
+  const filtered = manifest.filter(e => e.slug !== slug);
+  filtered.unshift(entry);
+  await writeAgencyManifest(filtered);
+  return entry;
+}
+
+/**
+ * Retrieve a single agency playbook (full content) by slug.
+ * Looks up key from manifest so it works regardless of which domain subfolder it's in.
+ */
+export async function getAgencyPlaybook (slug) {
+  if (!isR2Enabled()) return null;
+  // Find the key from the manifest first (it encodes the correct domain subfolder)
+  const manifest = await readAgencyManifest();
+  const entry    = manifest.find(e => e.slug === slug);
+  if (!entry) return null;
+  const url = getObjectUrl(entry.key);
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiToken}` } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`R2 fetch failed for agency playbook "${slug}": ${res.status}`);
+  return res.json();
+}
+
+/**
+ * List agency playbook metadata (no content body).
+ * @param {{ access?: string, type?: string }} [filter]
+ */
+export async function listAgencyPlaybooks (filter = {}) {
+  if (!isR2Enabled()) return [];
+  const manifest = await readAgencyManifest();
+  return manifest.filter(e => {
+    if (filter.access && e.access !== filter.access) return false;
+    if (filter.type   && e.type   !== filter.type)   return false;
+    return true;
+  });
+}
+
+/**
+ * Delete an agency playbook by slug.
+ */
+export async function deleteAgencyPlaybook (slug) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  // Resolve the actual key from the manifest (handles domain subfolder correctly)
+  const manifest = await readAgencyManifest();
+  const entry    = manifest.find(e => e.slug === slug);
+  if (!entry) return { deleted: slug, note: 'not in manifest' };
+  const res = await fetch(getObjectUrl(entry.key), {
+    method: 'DELETE', headers: { 'Authorization': `Bearer ${apiToken}` },
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`R2 delete failed for "${slug}": ${res.status}`);
+  await writeAgencyManifest(manifest.filter(e => e.slug !== slug));
+  return { deleted: slug };
+}

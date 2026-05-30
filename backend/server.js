@@ -62,6 +62,10 @@ import {
   deleteLibraryFile as deleteLibraryFileR2,
   putJsonCache,
   getJsonCache,
+  saveAgencyPlaybook,
+  getAgencyPlaybook,
+  listAgencyPlaybooks,
+  deleteAgencyPlaybook,
 } from './cloudflareR2.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -906,6 +910,79 @@ ent.refundOrder(shopRefundMatch[1], body);
         : doc.format === 'pdf' ? 'application/pdf' : 'text/html');
       res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
       res.end(doc.buffer);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/synthesize-playbook ──────────────────────────
+  // Phase 1+2+3: Extract → Hybridize → Store agency IP.
+  // Body: { title, slug, domain, type, sources[], tagline, access, instruction }
+  //   sources: array of framework names e.g. ['McKinsey 7S', 'BCG DAI', 'IBM Garage']
+  //   instruction: optional extra guidance for hybridisation
+  if (req.method === 'POST' && path === '/api/agents/atlas/synthesize-playbook') {
+    try {
+      const body = await readBody(req);
+      const { title, domain = 'business_development', type = 'playbook',
+              sources = [], tagline = '', access = 'premium', instruction = '' } = body;
+      if (!title) { err(res, 'title is required', 400); return; }
+
+      // Build a URL-safe slug from title if not provided
+      const slug = (body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
+        + '-' + Date.now().toString(36);
+
+      // Compose the hybridisation instruction from the guideline's Phase 2 template
+      const hybridInstruction = [
+        instruction,
+        sources.length
+          ? `Synthesise logic from: ${sources.join(', ')}.`
+          : '',
+        `Phase 1 (Audit/Diagnostic): Extract the assessment logic.`,
+        `Phase 2 (Setup/Infrastructure): Define the technical and structural approach.`,
+        `Phase 3 (Execution): Detail the implementation and iteration process.`,
+        `Include: Actionable Checklists for each phase, a Scorecard / Maturity Matrix,`,
+        `Diagnostic Questions (5–10), Deliverables per Phase, and a Visual Structure Description.`,
+        `Write in a professional consultant-grade tone. This is proprietary DigiFusion IP.`,
+      ].filter(Boolean).join(' ');
+
+      const content = await atlas.buildFramework(title, domain, hybridInstruction);
+      if (!content) { err(res, 'Atlas returned no content', 500); return; }
+
+      const entry = await saveAgencyPlaybook({ slug, title, domain, type, content, sources, tagline, access });
+      json(res, { ok: true, entry, preview: content.slice(0, 500) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/agency-ip ────────────────────────────────────────────
+  // List all generated agency playbooks/frameworks (metadata only).
+  if (req.method === 'GET' && path === '/api/agents/agency-ip') {
+    try {
+      const access = url.searchParams.get('access') || undefined;
+      const type   = url.searchParams.get('type')   || undefined;
+      const items  = await listAgencyPlaybooks({ access, type });
+      json(res, { playbooks: items });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/agency-ip/:slug ─────────────────────────────────────
+  // Retrieve full content of one agency playbook.
+  if (req.method === 'GET' && /^\/api\/agents\/agency-ip\/[^/]+$/.test(path)) {
+    try {
+      const slug = path.split('/').pop();
+      const pb   = await getAgencyPlaybook(slug);
+      if (!pb) { err(res, 'Not found', 404); return; }
+      json(res, pb);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── DELETE /api/agents/agency-ip/:slug ───────────────────────────────────
+  if (req.method === 'DELETE' && /^\/api\/agents\/agency-ip\/[^/]+$/.test(path)) {
+    try {
+      const slug = path.split('/').pop();
+      const result = await deleteAgencyPlaybook(slug);
+      json(res, result);
     } catch (e) { err(res, e.message, 500); }
     return;
   }

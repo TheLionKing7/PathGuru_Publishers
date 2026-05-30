@@ -23,6 +23,7 @@ const MODULE_OF_TAB = {
   // Agents module
   'agents-network': 'agents', 'agents-console': 'agents',
   'agents-tasks': 'agents',   'agents-leads': 'agents',
+  'agents-ip': 'agents',
 };
 const DEFAULT_TAB_OF_MODULE = {
   publishing: 'brief',
