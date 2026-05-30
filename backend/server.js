@@ -928,15 +928,15 @@ ent.refundOrder(shopRefundMatch[1], body);
       // Total count
       const { count: total } = await db.from('knowledge_base').select('*', { count: 'exact', head: true });
 
-      // Count per domain
-      const { data: domainRows } = await db.from('knowledge_base').select('domain').order('domain');
+      // Count per domain — must set limit > 1000 to avoid Supabase default cap
+      const { data: domainRows } = await db.from('knowledge_base').select('domain').order('domain').limit(20000);
       const domainCounts = {};
       for (const row of (domainRows || [])) {
         domainCounts[row.domain] = (domainCounts[row.domain] || 0) + 1;
       }
 
-      // Unique PDFs ingested
-      const { data: sourceRows } = await db.from('knowledge_base').select('source_key').order('source_key');
+      // Unique PDFs ingested — same high limit
+      const { data: sourceRows } = await db.from('knowledge_base').select('source_key').order('source_key').limit(20000);
       const uniqueSources = [...new Set((sourceRows || []).map(r => r.source_key))];
 
       // 5 most recent entries

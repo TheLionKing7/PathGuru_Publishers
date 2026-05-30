@@ -491,9 +491,9 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
       'knowledge/business':   'business_development',
       'knowledge/automation': 'automation',
       'knowledge/media':      'digital_media',
-      'library/frameworks':   'business_development',   // source frameworks (McKinsey, BCG, etc.)
+      'library/frameworks':   'digital_media',      // marketing frameworks: AIDAS, 4Ps, STP, etc.
       'library/playbooks':    'business_development',
-      'library/research':     'business_development',
+      'library/research':     'digital_media',      // research PDFs skew toward content/marketing
       'library/case-studies': 'digital_media',
     };
 
