@@ -1306,6 +1306,34 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── POST /api/agents/atlas/client-maturity ────────────────────────────────
+  // Assess a CLIENT's own BD maturity: Ad-Hoc → Managed → Predictable Growth Engine.
+  // Body: { clientName, inputs: { q1: 3, ... } | "free text", context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/client-maturity') {
+    try {
+      const body = await readBody(req);
+      const { clientName, inputs, context = '' } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await atlas.runClientMaturityAssessment(clientName, inputs || '', context);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/atlas/dream50 ───────────────────────────────────────
+  // Build a Dream 50 target account strategy.
+  // Body: { industry, services?, geography?, dealSizeTarget?, context? }
+  if (req.method === 'POST' && path === '/api/agents/atlas/dream50') {
+    try {
+      const body = await readBody(req);
+      const { industry, services, geography, dealSizeTarget, context } = body;
+      if (!industry) { err(res, 'industry is required', 400); return; }
+      const result = await atlas.buildDream50(industry, { services, geography, dealSizeTarget, context });
+      json(res, { ok: true, dream50: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── POST /api/agents/atlas/research ──────────────────────────────────────
   // Deep market / prospect research. Body: { topic, depth?, focus?, context? }
   if (req.method === 'POST' && path === '/api/agents/atlas/research') {
@@ -1329,6 +1357,137 @@ ent.refundOrder(shopRefundMatch[1], body);
       if (!companyName) { err(res, 'companyName is required', 400); return; }
       const result = await atlas.analyseProspect(companyName, context);
       json(res, { ok: true, analysis: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NOVA — Automation Velocity Engine Routes
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /api/agents/nova/strategy-session ────────────────────────────────
+  // Conversational strategy session with Nova.
+  // Body: { message, sessionId?, sessionMeta? }
+  if (req.method === 'POST' && path === '/api/agents/nova/strategy-session') {
+    try {
+      const body = await readBody(req);
+      const { message, sessionId, sessionMeta = {} } = body;
+      if (!message) { err(res, 'message is required', 400); return; }
+      const result = await nova.strategySession(message, sessionId, sessionMeta);
+      json(res, { ok: true, ...result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/session-notes/:sessionId ─────────────────────────
+  // Get Technical Design Brief compiled from session history.
+  if (req.method === 'GET' && /^\/api\/agents\/nova\/session-notes\/[^/]+$/.test(path)) {
+    try {
+      const sessionId = path.split('/').pop();
+      const notes = await nova.getSessionNotes(sessionId);
+      json(res, { ok: true, notes });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/maturity-assessment ─────────────────────────────
+  // Run the Automation Maturity Assessment (3-tier classification).
+  // Body: { clientName, inputs, context? }
+  if (req.method === 'POST' && path === '/api/agents/nova/maturity-assessment') {
+    try {
+      const body = await readBody(req);
+      const { clientName, inputs, context = '' } = body;
+      if (!clientName || !inputs) { err(res, 'clientName and inputs are required', 400); return; }
+      const result = await nova.runAutomationMaturityAssessment(clientName, inputs, context);
+      json(res, { ok: true, assessment: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/velocity-engine ─────────────────────────────────
+  // Run the full 5-phase Automation Velocity Engine pipeline.
+  // Body: { clientName, options? }
+  if (req.method === 'POST' && path === '/api/agents/nova/velocity-engine') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runFullVelocityEngine(clientName, options);
+      json(res, { ok: true, engine: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/phase1-diagnose ─────────────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/nova/phase1-diagnose') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runPhase1Diagnose(clientName, options);
+      json(res, { ok: true, phase1: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/phase2-architect ────────────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/nova/phase2-architect') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runPhase2Architect(clientName, options);
+      json(res, { ok: true, phase2: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/phase3-build ────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/nova/phase3-build') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runPhase3Build(clientName, options);
+      json(res, { ok: true, phase3: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/phase4-deploy ───────────────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/nova/phase4-deploy') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runPhase4Deploy(clientName, options);
+      json(res, { ok: true, phase4: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/phase5-scale ────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/nova/phase5-scale') {
+    try {
+      const body = await readBody(req);
+      const { clientName, options = {} } = body;
+      if (!clientName) { err(res, 'clientName is required', 400); return; }
+      const result = await nova.runPhase5Scale(clientName, options);
+      json(res, { ok: true, phase5: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/build-framework ─────────────────────────────────
+  // Generate a bespoke automation framework for a client.
+  // Body: { frameworkName, options? }
+  if (req.method === 'POST' && path === '/api/agents/nova/build-framework') {
+    try {
+      const body = await readBody(req);
+      const { frameworkName, options = {} } = body;
+      if (!frameworkName) { err(res, 'frameworkName is required', 400); return; }
+      const result = await nova.buildAutomationFramework(frameworkName, options);
+      json(res, { ok: true, framework: result });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
