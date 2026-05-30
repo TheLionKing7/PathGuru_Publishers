@@ -1136,8 +1136,8 @@ async function synthesizePlaybook() {
   if (wrap) wrap.style.display = 'none';
 
   try {
-    const res = await _ip_apiFetch('/api/agents/atlas/synthesize-playbook', 'POST', {
-      title, type, domain, access, tagline, instruction, sources,
+    const res = await window._agentApiFetch('/api/agents/atlas/synthesize-playbook', {
+      method: 'POST', body: { title, type, domain, access, tagline, instruction, sources },
     });
 
     if (res.ok && res.entry) {
@@ -1199,7 +1199,7 @@ async function loadIPLibrary() {
   container.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading…</span></div>';
 
   try {
-    const data = await _ip_apiFetch('/api/agents/agency-ip');
+    const data = await window._agentApiFetch('/api/agents/agency-ip');
     const items = data.playbooks || [];
 
     if (!items.length) {
@@ -1254,7 +1254,7 @@ async function viewIPDoc(slug) {
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
-    const pb = await _ip_apiFetch(`/api/agents/agency-ip/${slug}`);
+    const pb = await window._agentApiFetch(`/api/agents/agency-ip/${slug}`);
     document.getElementById('ipTitle').value    = pb.title   || '';
     document.getElementById('ipTagline').value  = pb.tagline || '';
     document.getElementById('ipDomain').value   = pb.domain  || 'business_development';
@@ -1273,7 +1273,7 @@ async function deleteIPDoc(slug, btnEl) {
   if (!confirm(`Delete "${slug}"? This cannot be undone.`)) return;
   btnEl.disabled = true;
   try {
-    await _ip_apiFetch(`/api/agents/agency-ip/${slug}`, 'DELETE');
+    await window._agentApiFetch(`/api/agents/agency-ip/${slug}`, { method: 'DELETE' });
     loadIPLibrary();
   } catch (e) {
     alert('Delete failed: ' + e.message);
