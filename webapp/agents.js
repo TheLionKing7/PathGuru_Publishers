@@ -444,19 +444,36 @@
           <div class="console-two-col">
             <!-- Ingest -->
             <div class="console-card">
-              <div class="console-card-title">Ingest Document</div>
+              <div class="console-card-title">Ingest from R2</div>
               <div class="console-form-group">
-                <label class="console-label" for="synthUrlInput">Document URL (PDF, webpage, etc.)</label>
-                <input type="url" id="synthUrlInput" class="console-input" placeholder="https://…">
+                <label class="console-label" for="synthPrefixInput">R2 Prefix to scan</label>
+                <select id="synthPrefixInput" class="console-select">
+                  <option value="">All (knowledge/ + library/)</option>
+                  <option value="knowledge/">knowledge/ — all domains</option>
+                  <option value="knowledge/business/">knowledge/business/</option>
+                  <option value="knowledge/automation/">knowledge/automation/</option>
+                  <option value="knowledge/media/">knowledge/media/</option>
+                  <option value="library/">library/ — all folders</option>
+                  <option value="library/frameworks/">library/frameworks/</option>
+                  <option value="library/research/">library/research/</option>
+                  <option value="library/playbooks/">library/playbooks/</option>
+                  <option value="library/case-studies/">library/case-studies/</option>
+                </select>
               </div>
               <div class="console-form-group">
-                <label class="console-label" for="synthTagsInput">Tags (comma-separated)</label>
-                <input type="text" id="synthTagsInput" class="console-input" placeholder="research, frameworks, africa">
+                <label class="console-label" for="synthDomainInput">Domain override <span style="font-weight:400;opacity:.6">(optional — auto-detected from path)</span></label>
+                <select id="synthDomainInput" class="console-select">
+                  <option value="">Auto-detect</option>
+                  <option value="business_development">Business Development</option>
+                  <option value="automation">Automation</option>
+                  <option value="digital_media">Digital Media</option>
+                  <option value="general">General</option>
+                </select>
               </div>
               <div class="console-actions">
                 <button class="btn-console-run btn-secondary-run" id="synthIngestBtn">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                  Ingest
+                  Run Ingest
                 </button>
               </div>
             </div>
@@ -769,11 +786,14 @@
       const copyBtn   = $('synthCopyBtn');
 
       $('synthIngestBtn')?.addEventListener('click', async () => {
-        const url  = $('synthUrlInput')?.value?.trim();
-        const tags = $('synthTagsInput')?.value?.trim();
-        if (!url) { alert('Please enter a document URL.'); return; }
-        outputLbl.textContent = 'Ingest result';
-        await runTask('synthesizer', { action: 'ingest', url, tags: tags ? tags.split(',').map(t => t.trim()) : [] }, {
+        const prefix = $('synthPrefixInput')?.value?.trim() || null;
+        const domain = $('synthDomainInput')?.value?.trim() || 'general';
+        outputLbl.textContent = `Ingesting from R2: ${prefix || 'knowledge/ + library/'}`;
+        // prefix=null → ingestAll uses default ['knowledge/', 'library/']
+        const payload = prefix
+          ? { action: 'ingest_all', prefix, domain }
+          : { action: 'ingest_all', domain };
+        await runTask('synthesizer', payload, {
           statusEl, statusMsgEl: statusMsg, outputEl, outputLabelEl: outputLbl, markdownEl: mdEl, onSuccess () {},
         });
       });
@@ -1116,7 +1136,7 @@ async function synthesizePlaybook() {
   if (wrap) wrap.style.display = 'none';
 
   try {
-    const res = await apiFetch('/api/agents/atlas/synthesize-playbook', 'POST', {
+    const res = await _ip_apiFetch('/api/agents/atlas/synthesize-playbook', 'POST', {
       title, type, domain, access, tagline, instruction, sources,
     });
 
@@ -1126,7 +1146,7 @@ async function synthesizePlaybook() {
 
       // Show preview
       if (wrap && body) {
-        body.innerHTML = renderMarkdown(res.preview + '\n\n*…(full document saved to Agency IP Library)*');
+        body.innerHTML = renderAgentMarkdown(res.preview + '\n\n*…(full document saved to Agency IP Library)*');
         wrap.style.display = 'block';
       }
       // Refresh library
@@ -1179,7 +1199,7 @@ async function loadIPLibrary() {
   container.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading…</span></div>';
 
   try {
-    const data = await apiFetch('/api/agents/agency-ip');
+    const data = await _ip_apiFetch('/api/agents/agency-ip');
     const items = data.playbooks || [];
 
     if (!items.length) {
@@ -1234,13 +1254,13 @@ async function viewIPDoc(slug) {
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   try {
-    const pb = await apiFetch(`/api/agents/agency-ip/${slug}`);
+    const pb = await _ip_apiFetch(`/api/agents/agency-ip/${slug}`);
     document.getElementById('ipTitle').value    = pb.title   || '';
     document.getElementById('ipTagline').value  = pb.tagline || '';
     document.getElementById('ipDomain').value   = pb.domain  || 'business_development';
     document.getElementById('ipType').value     = pb.type    || 'playbook';
     document.getElementById('ipAccess').value   = pb.access  || 'premium';
-    body.innerHTML = renderMarkdown(pb.content || '*(no content)*');
+    body.innerHTML = renderAgentMarkdown(pb.content || '*(no content)*');
   } catch (e) {
     body.innerHTML = `<p style="color:#ef4444">Failed to load: ${e.message}</p>`;
   }
@@ -1253,10 +1273,22 @@ async function deleteIPDoc(slug, btnEl) {
   if (!confirm(`Delete "${slug}"? This cannot be undone.`)) return;
   btnEl.disabled = true;
   try {
-    await apiFetch(`/api/agents/agency-ip/${slug}`, 'DELETE');
+    await _ip_apiFetch(`/api/agents/agency-ip/${slug}`, 'DELETE');
     loadIPLibrary();
   } catch (e) {
     alert('Delete failed: ' + e.message);
     btnEl.disabled = false;
   }
+}
+function renderAgentMarkdown(md) {
+  if (!md) return '';
+  return md
+    .replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^/, '<p>').replace(/$/, '</p>');
 }
