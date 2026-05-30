@@ -19,6 +19,14 @@ import { getSupabase }  from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { isR2Enabled, getJsonCache }       from '../cloudflareR2.js';
 
+
+// ── AWS-spec URI encoder ─────────────────────────────────────────────────────
+// encodeURIComponent leaves !'()* unencoded; AWS Sig V4 requires them encoded.
+function awsEncode(str) {
+  return encodeURIComponent(str)
+    .replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
 // ── PDF text extraction (pdfjs-dist, server-safe) ────────────────────────────
 async function extractPdfText(buffer) {
   try {
@@ -63,7 +71,7 @@ async function fetchFromR2(key) {
   const dateStamp = amzDate.slice(0, 8);
   const host      = `${accountId}.r2.cloudflarestorage.com`;
   // Path: /<bucket>/<key> — each segment encoded but slashes preserved
-  const objectPath = `/${bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const objectPath = `/${awsEncode(bucket)}/${key.split('/').map(awsEncode).join('/')}`;
 
   const payloadHash = createHash('sha256').update('').digest('hex');
   const hdrs = {
@@ -158,7 +166,7 @@ async function listR2PDFsViaS3(accountId, bucket, prefix, accessKey, secretKey) 
 
   const host   = `${accountId}.r2.cloudflarestorage.com`;
   const path   = `/${bucket}`;
-  const qparams = `list-type=2&max-keys=1000&prefix=${encodeURIComponent(prefix)}`;
+  const qparams = `list-type=2&max-keys=1000&prefix=${awsEncode(prefix)}`;
   const payloadHash = await sha256hex('');
 
   const headers = {
