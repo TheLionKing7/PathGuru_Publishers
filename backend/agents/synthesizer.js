@@ -207,7 +207,14 @@ async function listR2PDFsViaS3(accountId, bucket, prefix, accessKey, secretKey) 
 
   // Parse XML response
   const xml  = await res.text();
-  const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
+  // Unescape XML entities in key names (& → &amp;, < → &lt;, etc.)
+  const unescapeXml = s => s
+    .replace(/&amp;/g,  '&')
+    .replace(/&lt;/g,   '<')
+    .replace(/&gt;/g,   '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+  const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => unescapeXml(m[1]));
   const pdfs = keys
     .filter(k => k.toLowerCase().endsWith('.pdf'))
     .map(k => ({ key: k, size: 0, uploaded: '' }));
