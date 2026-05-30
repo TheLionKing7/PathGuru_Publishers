@@ -63,21 +63,144 @@ async function fetchFromR2(key) {
 }
 
 // ── List all PDFs in R2 under a prefix ───────────────────────────────────────
+// Uses the S3-compatible ListObjectsV2 XML API (works with the S3 API token).
+// The Cloudflare REST /objects endpoint requires a *different* (dashboard) API token
+// and often returns 403 with S3 tokens — so we use the S3 endpoint instead.
 async function listR2PDFs(prefix = 'knowledge/') {
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '';
-  const bucket    = process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '';
-  const apiToken  = process.env.CLOUDFLARE_API_TOKEN  || '';
+  const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '').trim();
+  const bucket    = (process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '').trim();
+  const accessKey = (process.env.R2_ACCESS_KEY_ID      || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '').trim();
+  const secretKey = (process.env.R2_SECRET_ACCESS_KEY  || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '').trim();
 
-  if (!accountId || !bucket || !apiToken) return [];
+  if (!accountId || !bucket) {
+    console.warn('[Synthesizer] listR2PDFs: missing accountId or bucket env vars');
+    return [];
+  }
+
+  // If no S3 credentials, fall back to Cloudflare REST API (needs Workers R2 token)
+  if (!accessKey || !secretKey) {
+    return listR2PDFsViaRestAPI(accountId, bucket, prefix);
+  }
+
+  // S3-compatible listing via AWS Signature V4 signed request
+  try {
+    const pdfs = await listR2PDFsViaS3(accountId, bucket, prefix, accessKey, secretKey);
+    return pdfs;
+  } catch (e) {
+    console.error('[Synthesizer] S3 list error:', e.message);
+    return listR2PDFsViaRestAPI(accountId, bucket, prefix);
+  }
+}
+
+// ── AWS Signature V4 helpers ──────────────────────────────────────────────────
+async function hmacSha256(key, data) {
+  const { createHmac } = await import('crypto');
+  return createHmac('sha256', key).update(data).digest();
+}
+
+async function sha256hex(data) {
+  const { createHash } = await import('crypto');
+  return createHash('sha256').update(data).digest('hex');
+}
+
+async function getSigningKey(secretKey, dateStamp, region, service) {
+  const kDate    = await hmacSha256('AWS4' + secretKey, dateStamp);
+  const kRegion  = await hmacSha256(kDate, region);
+  const kService = await hmacSha256(kRegion, service);
+  const kSigning = await hmacSha256(kService, 'aws4_request');
+  return kSigning;
+}
+
+async function listR2PDFsViaS3(accountId, bucket, prefix, accessKey, secretKey) {
+  const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
+  const region   = 'auto';
+  const service  = 's3';
+  const now      = new Date();
+  const amzDate  = now.toISOString().replace(/[:-]|\.\d{3}/g, '').slice(0, 15) + 'Z';
+  const dateStamp = amzDate.slice(0, 8);
+
+  const host   = `${accountId}.r2.cloudflarestorage.com`;
+  const path   = `/${bucket}`;
+  const qparams = `list-type=2&max-keys=1000&prefix=${encodeURIComponent(prefix)}`;
+  const payloadHash = await sha256hex('');
+
+  const headers = {
+    host,
+    'x-amz-content-sha256': payloadHash,
+    'x-amz-date': amzDate,
+  };
+
+  const sortedHeaders  = Object.keys(headers).sort();
+  const canonicalHeaders = sortedHeaders.map(k => `${k}:${headers[k]}\n`).join('');
+  const signedHeaders    = sortedHeaders.join(';');
+
+  const canonicalRequest = [
+    'GET', path, qparams, canonicalHeaders, signedHeaders, payloadHash,
+  ].join('\n');
+
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256', amzDate, credentialScope, await sha256hex(canonicalRequest),
+  ].join('\n');
+
+  const signingKey = await getSigningKey(secretKey, dateStamp, region, service);
+  const { createHmac } = await import('crypto');
+  const signature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  const url = `${endpoint}${path}?${qparams}`;
+  const res = await fetch(url, {
+    headers: { ...headers, Authorization: authorization },
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.warn(`[Synthesizer] S3 list ${res.status}: ${body.slice(0, 300)}`);
+    return [];
+  }
+
+  // Parse XML response
+  const xml  = await res.text();
+  const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map(m => m[1]);
+  const pdfs = keys
+    .filter(k => k.toLowerCase().endsWith('.pdf'))
+    .map(k => ({ key: k, size: 0, uploaded: '' }));
+
+  console.log(`[Synthesizer] listR2PDFs("${prefix}") via S3 → ${pdfs.length} PDFs (${keys.length} total objects)`);
+  return pdfs;
+}
+
+// Fallback: Cloudflare REST API listing (needs CLOUDFLARE_API_TOKEN with R2:Read)
+async function listR2PDFsViaRestAPI(accountId, bucket, prefix) {
+  const apiToken = (process.env.CLOUDFLARE_API_TOKEN || '').trim();
+  if (!apiToken) {
+    console.warn('[Synthesizer] listR2PDFs: no API token for REST fallback');
+    return [];
+  }
 
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}&limit=500`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  return (data?.result?.objects || [])
-    .filter(o => o.key.toLowerCase().endsWith('.pdf'))
-    .map(o => ({ key: o.key, size: o.size, uploaded: o.uploaded }));
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn(`[Synthesizer] REST list API: ${res.status} ${res.statusText} — ${body.slice(0, 200)}`);
+      return [];
+    }
+    const data = await res.json();
+    if (!data.success) {
+      console.warn('[Synthesizer] REST list API returned success:false —', JSON.stringify(data.errors));
+      return [];
+    }
+    const pdfs = (data?.result?.objects || [])
+      .filter(o => o.key?.toLowerCase().endsWith('.pdf'))
+      .map(o => ({ key: o.key, size: o.size, uploaded: o.uploaded }));
+    console.log(`[Synthesizer] listR2PDFs("${prefix}") via REST → ${pdfs.length} PDFs`);
+    return pdfs;
+  } catch (e) {
+    console.error('[Synthesizer] REST list error:', e.message);
+    return [];
+  }
 }
 
 
@@ -365,7 +488,7 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
 
   _parseJsonArray(text) {
     try { return JSON.parse(text); } catch {}
-    const match = text.match(/\[[\s\S]*\]/);
+    const match = text.match(/[\s\S]*/);
     if (!match) return [];
     try { return JSON.parse(match[0]); } catch { return []; }
   }
