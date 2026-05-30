@@ -63,12 +63,14 @@ async function fetchFromR2(key) {
 }
 
 // ── List all PDFs in R2 under a prefix ───────────────────────────────────────
-// Uses the S3-compatible ListObjectsV2 XML API (works with the S3 API token).
-// The Cloudflare REST /objects endpoint requires a *different* (dashboard) API token
-// and often returns 403 with S3 tokens — so we use the S3 endpoint instead.
+// Strategy:
+//   1. If R2_ACCESS_KEY_ID + R2_SECRET_ACCESS_KEY are set → use S3 signed listing
+//   2. Otherwise → use Cloudflare REST API with CLOUDFLARE_API_TOKEN (Bearer)
 async function listR2PDFs(prefix = 'knowledge/') {
   const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID || '').trim();
+  // Accept CLOUDFLARE_R2_BUCKET (primary) or R2_BUCKET_NAME (legacy)
   const bucket    = (process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '').trim();
+  // S3-compatible credentials (separate from REST API token)
   const accessKey = (process.env.R2_ACCESS_KEY_ID      || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '').trim();
   const secretKey = (process.env.R2_SECRET_ACCESS_KEY  || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '').trim();
 
@@ -487,10 +489,10 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   _parseJsonArray(text) {
-    try { return JSON.parse(text); } catch {}
-    const match = text.match(/[\s\S]*/);
+    try { return JSON.parse(text); } catch (e) {}
+    const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
-    try { return JSON.parse(match[0]); } catch { return []; }
+    try { return JSON.parse(match[0]); } catch (e) { return []; }
   }
 }
 

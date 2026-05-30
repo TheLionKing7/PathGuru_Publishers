@@ -840,6 +840,45 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/agents/synthesizer/debug-r2 ────────────────────────────────
+  // Diagnostic: shows which env vars are present and attempts an R2 listing.
+  // Returns env key names (never values) + raw API response for debugging.
+  if (req.method === 'GET' && path === '/api/agents/synthesizer/debug-r2') {
+    const accountId = (process.env.CLOUDFLARE_ACCOUNT_ID || '').trim();
+    const bucket    = (process.env.CLOUDFLARE_R2_BUCKET  || process.env.R2_BUCKET_NAME || '').trim();
+    const apiToken  = (process.env.CLOUDFLARE_API_TOKEN  || '').trim();
+    const s3Key     = (process.env.R2_ACCESS_KEY_ID      || process.env.CLOUDFLARE_R2_ACCESS_KEY_ID || '').trim();
+    const s3Secret  = (process.env.R2_SECRET_ACCESS_KEY  || process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY || '').trim();
+
+    const envReport = {
+      CLOUDFLARE_ACCOUNT_ID:  accountId  ? `set (${accountId.length} chars)` : 'MISSING',
+      CLOUDFLARE_R2_BUCKET:   process.env.CLOUDFLARE_R2_BUCKET   ? `set → "${process.env.CLOUDFLARE_R2_BUCKET}"` : 'not set',
+      R2_BUCKET_NAME:         process.env.R2_BUCKET_NAME         ? `set → "${process.env.R2_BUCKET_NAME}"` : 'not set',
+      CLOUDFLARE_API_TOKEN:   apiToken   ? `set (${apiToken.length} chars)` : 'MISSING',
+      R2_ACCESS_KEY_ID:       s3Key      ? `set (${s3Key.length} chars)`    : 'not set',
+      R2_SECRET_ACCESS_KEY:   s3Secret   ? 'set' : 'not set',
+      resolvedBucket:         bucket     || 'NONE — neither CLOUDFLARE_R2_BUCKET nor R2_BUCKET_NAME is set!',
+    };
+
+    // Attempt REST API listing on 'knowledge/' prefix
+    let listTest = null;
+    if (accountId && bucket && apiToken) {
+      try {
+        const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucket)}/objects?prefix=knowledge%2F&limit=5`;
+        const r = await fetch(url, { headers: { Authorization: `Bearer ${apiToken}` } });
+        const body = await r.text();
+        listTest = { status: r.status, statusText: r.statusText, body: body.slice(0, 500) };
+      } catch (e) {
+        listTest = { error: e.message };
+      }
+    } else {
+      listTest = { skipped: 'missing accountId, bucket, or apiToken' };
+    }
+
+    json(res, { env: envReport, listTest });
+    return;
+  }
+
   // ── GET /api/agents/tasks/:taskId ───────────────────────────────────────
   // Poll a single task by its Supabase UUID — used by the frontend to track
   // long-running agent jobs (ingest, research, synthesis, etc.)
