@@ -36,7 +36,8 @@ async function uploadToR2(key, body, contentType) {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${apiToken}`,
-      "Content-Type": contentType
+      "Content-Type": contentType,
+      "x-amz-content-sha256": "UNSIGNED-PAYLOAD"
     },
     body
   });
