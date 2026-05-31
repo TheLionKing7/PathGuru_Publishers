@@ -191,7 +191,8 @@ export async function callAiProvider(provider, prompt, systemHint, options = {})
 
 /** Select the next available provider, skipping the one that just failed. */
 function _resolveFallbackProvider(excludeName) {
-  const PRIORITY = ['claude', 'gemini', 'cerebras', 'deepseek', 'perplexity'];
+  // Priority: Cerebras (ultra-fast) → Gemini → DeepSeek → Claude → Perplexity
+  const PRIORITY = ['cerebras', 'gemini', 'deepseek', 'claude', 'perplexity'];
   for (const name of PRIORITY) {
     if (name === excludeName) continue;
     const p = resolveProvider(name);
@@ -368,9 +369,8 @@ export function resolveProvider(overrideName) {
   };
 
   if (requested && providers[requested]) return providers[requested];
-  // Auto-select priority: Gemini → Claude → Cerebras → DeepSeek → Perplexity
-  // Claude is a reliable fallback for chat — Cerebras is ultra-fast for short responses
-  return providers.gemini || providers.claude || providers.cerebras || providers.deepseek || providers.perplexity || null;
+  // Auto-select priority: Cerebras (ultra-fast, low latency) → Gemini → DeepSeek → Claude → Perplexity
+  return providers.cerebras || providers.gemini || providers.deepseek || providers.claude || providers.perplexity || null;
 }
 
 /**

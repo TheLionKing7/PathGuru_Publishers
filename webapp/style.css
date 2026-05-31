@@ -233,6 +233,9 @@ body {
 }
 
 .form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 600;
@@ -4596,4 +4599,180 @@ select option { background: var(--surface-2); }
 }
 
 .agent-chat-clear:hover { color: var(--text); }
+
+
+/* ════════════════════════════════════════════════════════════════
+   PRODUCTS TAB — prod-panel-body, prod-toolbar, prod-list
+   (These class names are used in the HTML but were missing from CSS)
+════════════════════════════════════════════════════════════════ */
+
+.prod-panel-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Toolbar: search + filters row — horizontal, never wraps */
+.prod-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.prod-toolbar input[type="search"] {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  width: 200px;
+  min-width: 140px;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+.prod-toolbar input[type="search"]:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.prod-toolbar input[type="search"]::placeholder { color: var(--text-muted); }
+
+.prod-toolbar select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Product list: scrollable area below the toolbar */
+.prod-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty / loading state inside prod-list */
+.shop-empty-init {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.shop-empty-init p { font-size: 13.5px; max-width: 320px; line-height: 1.6; }
+
+/* ════════════════════════════════════════════════════════════════
+   SETTINGS TAB — card-based layout with proper breathing room
+════════════════════════════════════════════════════════════════ */
+
+/* Override generic form-section when inside the shop settings tab */
+#tab-shop-settings .shop-panel-body {
+  padding: 32px 28px;
+  gap: 0;
+  overflow-y: auto;
+}
+
+#tab-shop-settings .form-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px 28px 24px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+#tab-shop-settings .form-section:last-of-type {
+  margin-bottom: 0;
+}
+
+#tab-shop-settings .form-section-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  margin: 0 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+#tab-shop-settings .field {
+  margin-bottom: 16px;
+}
+#tab-shop-settings .field:last-of-type { margin-bottom: 20px; }
+
+#tab-shop-settings .field label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+#tab-shop-settings .field input,
+#tab-shop-settings .field select,
+#tab-shop-settings .field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+#tab-shop-settings .field textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.6;
+}
+#tab-shop-settings .field input:focus,
+#tab-shop-settings .field select:focus,
+#tab-shop-settings .field textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+#tab-shop-settings .field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+#tab-shop-settings .field-row .field {
+  margin-bottom: 0;
+}
+
+#tab-shop-settings .btn-primary {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 
