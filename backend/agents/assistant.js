@@ -1,126 +1,306 @@
 /**
  * DigiFusion Intelligence Network — Assistant
  * ==============================================
- * Customer-Facing VA & Lead Qualification Agent
+ * Customer-Facing VA, Lead Qualification & Conversational Intake Agent
  *
  * The Assistant is the first point of contact for visitors on DigiFusion.com.
- * It engages professionally, answers questions from the knowledge base,
- * qualifies leads through a structured conversation, and books strategy
- * sessions with qualified prospects via Calendly.
+ * She engages professionally, answers questions from the knowledge base,
+ * qualifies leads through a structured conversation, conducts a conversational
+ * intake questionnaire for each service track, and books strategy sessions
+ * with qualified prospects via Calendly.
  *
- * Deployed on DigiFusion (Vercel) but calls back to PathGuru (Render)
- * for knowledge base queries and lead storage.
+ * Provider auto-fallback: Gemini → Claude → Cerebras (configured in aiPipeline.js)
+ *
+ * Intake tracks handled conversationally:
+ *   — BD Intake         (Atlas will handle post-intake)
+ *   — AI Automation     (Nova will handle post-intake)
+ *   — Digital Media     (Aether will handle post-intake)
+ *
+ * Post-service evaluations are handled by the specialist agents (not this VA).
  */
 
 import { AgentBase }      from './agentBase.js';
 import { callAiProvider } from '../aiPipeline.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
+import { notion }         from '../notionClient.js';
 
-const ASSISTANT_SYSTEM = `You are the DigiFusion Assistant — the intelligent front door of DigiFusion, a global consulting firm specialising in automation, business development, and digital media.
+// ── VA system prompt ───────────────────────────────────────────────────────────
 
-Your character:
-You are professional, warm, and perceptive. You represent a premium firm and you carry yourself accordingly — never robotic, never sycophantic, never rushing the conversation. You listen carefully, ask precise questions, and respond with genuine insight rather than generic platitudes.
+const ASSISTANT_SYSTEM = `You are the DigiFusion Assistant — the intelligent front door of DigiFusion, a global consulting firm specialising in AI automation, business development, and digital media for SMBs.
 
-You are not a glorified FAQ bot. You are a skilled business development professional who happens to be always available. Your conversations are purposeful — you are here to understand what the visitor needs and determine whether DigiFusion is the right partner to help them.
+YOUR CHARACTER:
+You are professional, warm, and perceptive. You represent a premium firm and carry yourself accordingly — never robotic, never sycophantic, never rushing the conversation. You listen carefully, ask precise questions, and respond with genuine insight.
 
-Your knowledge:
-You have access to DigiFusion's full intelligence base — frameworks, methodologies, case studies, and research. When a visitor asks a substantive question, you answer it with real content from this base. You do not make things up.
+You are not a FAQ bot. You are a skilled business development professional who happens to be always available. Your conversations are purposeful — you understand what the visitor needs and determine whether DigiFusion is the right partner.
 
-Your qualification mission:
-Not every visitor is ready for or suited to a strategy session. You qualify before you offer. The qualification criteria are:
+YOUR KNOWLEDGE:
+You have access to DigiFusion's full intelligence base — the AVE framework (Nova), the Deal Engine (Atlas), the C2C Pipeline (Aether), pricing, and engagement model. You answer framework questions directly and confidently.
+
+YOUR QUALIFICATION MISSION:
+Not every visitor is ready for a strategy session. You qualify before you offer. Qualification criteria:
 — They have a real business challenge (not just curiosity)
 — They have some budget or authority to act
 — The timeline is within 6 months
 — DigiFusion's services are relevant to their need
 
-Lead scoring:
+LEAD SCORING:
 0–1 = cold (provide value, invite to follow)
-2–3 = warm (nurture with resources)
-4–5 = hot (offer strategy session)
+2–3 = warm (nurture with resources, consider starting intake)
+4–5 = hot (run intake if not started, offer strategy session)
 
-Your tone:
-Conversational but substantive. You match the visitor's register — if they're formal, you're formal. If they're relaxed, you relax slightly. You never talk down to anyone and you never oversell.
+INTAKE MODE:
+When a visitor is interested in a specific service track, you run a structured intake questionnaire CONVERSATIONALLY — one question at a time, naturally woven into conversation. You never say "Question 3 of 5". You ask questions as a curious, knowledgeable consultant would.
 
-IMPORTANT: You must never fabricate information about DigiFusion's clients, results, or pricing. If you don't know something, you say so and offer to find out.`;
+TONE:
+Conversational but substantive. Match the visitor's register. Never oversell. Never fabricate results, client counts, or pricing outside what you know.
 
-// ── Lead qualification questions (progressive disclosure) ─────────────────────
+IMPORTANT: You must never make up information about DigiFusion's clients, track record, or results. If you do not know something, say so and offer to find out.`;
+
+// ── Intake questionnaire flows (conversational, one question at a time) ────────
+
+const INTAKE_FLOWS = {
+
+  bd: {
+    trackName: 'Business Development',
+    agentOwner: 'atlas',
+    intro: "I'd love to understand your BD situation better so our team can prepare something genuinely useful for you. I'll ask a few focused questions — it won't take long.",
+    questions: [
+      {
+        key: 'strategic_priorities',
+        ask: "What are your organisation's top 2–3 strategic priorities over the next 12 to 18 months, and where does growing your pipeline rank among them?",
+        purpose: 'Corporate alignment + executive backing check',
+      },
+      {
+        key: 'decision_makers',
+        ask: "Besides yourself, who else would be involved in reviewing and ultimately signing off on a BD partnership — are there other stakeholders we should be thinking about?",
+        purpose: 'Decision-maker mapping',
+      },
+      {
+        key: 'cost_of_inaction',
+        ask: "If this pipeline or BD challenge isn't addressed in the next quarter, what's the realistic operational or financial impact on your business?",
+        purpose: 'Urgency and pain depth',
+      },
+      {
+        key: 'current_bd_tools',
+        ask: "What CRMs, outreach tools, or existing agency partners does your BD process currently run through — and what's working versus what's frustrating you about that setup?",
+        purpose: 'Ecosystem compatibility',
+      },
+      {
+        key: 'target_outcome',
+        ask: "If we could deliver one concrete outcome for your business development function in the next 90 days, what would make you say 'this was absolutely worth it'?",
+        purpose: 'Success metric alignment',
+      },
+    ],
+  },
+
+  automation: {
+    trackName: 'AI Automation & SaaS',
+    agentOwner: 'nova',
+    intro: "Let me ask you a few diagnostic questions so Nova — our automation architect — can hit the ground running when we meet. This helps us pre-build a custom ROI estimate for your situation.",
+    questions: [
+      {
+        key: 'target_workflow',
+        ask: "What's the specific, repetitive process you're looking to automate first — for example, customer onboarding, lead routing, invoice processing, or something else?",
+        purpose: 'Operational bottleneck identification',
+      },
+      {
+        key: 'volume_frequency',
+        ask: "How many times per day, week, or month does that process run — and roughly how many staff hours per week does your team spend on it manually right now?",
+        purpose: 'Volume and cost quantification',
+      },
+      {
+        key: 'tech_stack',
+        ask: "Which software tools, CRMs, or databases are currently involved in that workflow — think of everything it touches from start to finish?",
+        purpose: 'Technical ecosystem mapping',
+      },
+      {
+        key: 'api_readiness',
+        ask: "Do your current systems have API access or support third-party integrations like Zapier or Make — or is that something you're uncertain about?",
+        purpose: 'Integration feasibility',
+      },
+      {
+        key: 'success_metric',
+        ask: "What's the primary metric that would prove this automation was a success for you — cutting processing time by 70%, reducing errors, handling 5x the volume, or something else?",
+        purpose: 'Success metric + ROI anchor',
+      },
+    ],
+  },
+
+  digital_media: {
+    trackName: 'Digital Media',
+    agentOwner: 'aether',
+    intro: "A few questions before we map your digital media strategy — Aether needs this context to design something that will actually move your numbers rather than just look busy.",
+    questions: [
+      {
+        key: 'primary_objective',
+        ask: "What's the main goal for your digital media efforts right now — lead generation, e-commerce sales, brand awareness, content engagement, or a combination?",
+        purpose: 'Marketing KPI alignment',
+      },
+      {
+        key: 'target_audience',
+        ask: "Describe your ideal customer — their demographics, what keeps them up at night, and what triggers them to actually reach out to a business like yours?",
+        purpose: 'ICP definition',
+      },
+      {
+        key: 'current_channels',
+        ask: "Which channels are you currently active on or planning to prioritise — Meta ads, Google, TikTok, LinkedIn, organic SEO, or a mix?",
+        purpose: 'Channel strategy',
+      },
+      {
+        key: 'current_baselines',
+        ask: "What does your current monthly marketing budget look like, and do you have any baseline metrics from the last 30 days — cost per lead, conversion rate, monthly traffic — anything you're already tracking?",
+        purpose: 'Budget and baseline capture',
+      },
+      {
+        key: 'tracking_setup',
+        ask: "Is your tracking infrastructure in place — GA4, Meta Pixel, Google Tag Manager — or is setting that up part of what we'd need to do together?",
+        purpose: 'Technical readiness check',
+      },
+    ],
+  },
+};
+
+// ── Lead qualification questions (fallback when track not identified) ──────────
+
 const QUALIFICATION_FLOW = [
-  { stage: 'challenge',     question: "What's the main challenge you're looking to solve right now?" },
-  { stage: 'tried_before',  question: "Have you tried addressing this before? What happened?" },
-  { stage: 'company',       question: "Tell me a bit about your organisation — what do you do and roughly how large is the team?" },
-  { stage: 'timeline',      question: "If you could solve this, when would you ideally want to see results?" },
-  { stage: 'authority',     question: "Are you the one who'd be leading this kind of initiative, or would others need to be involved?" },
+  { stage: 'challenge',    question: "What's the main challenge you're looking to solve right now?" },
+  { stage: 'tried_before', question: "Have you tried addressing this before? What happened?" },
+  { stage: 'company',      question: "Tell me about your organisation — what do you do and roughly how large is the team?" },
+  { stage: 'timeline',     question: "If you could solve this, when would you ideally want to see results?" },
+  { stage: 'authority',    question: "Are you the one who'd be leading this initiative, or would others need to be involved?" },
 ];
 
+// ── Track detection keywords ───────────────────────────────────────────────────
+
+const TRACK_SIGNALS = {
+  automation: ['automat', 'workflow', 'saas', 'integrate', 'zapier', 'make.com', 'n8n', 'process', 'manual', 'repetit', 'crm', 'erp', 'data entry', 'trigger', 'pipeline automat', 'ai tool', 'no-code', 'low-code', 'nova'],
+  bd:         ['business development', 'deal', 'sales', 'pipeline', 'prospect', 'lead gen', 'outreach', 'b2b', 'revenue', 'close', 'atlas', 'deal engine', 'bd', 'client acqui'],
+  digital_media: ['content', 'seo', 'social media', 'marketing', 'blog', 'campaign', 'meta ads', 'google ads', 'tiktok', 'linkedin', 'brand', 'audience', 'organic', 'aether', 'digital media', 'c2c'],
+};
+
+function detectTrack(text) {
+  const lower = text.toLowerCase();
+  const scores = { automation: 0, bd: 0, digital_media: 0 };
+  for (const [track, signals] of Object.entries(TRACK_SIGNALS)) {
+    for (const signal of signals) {
+      if (lower.includes(signal)) scores[track]++;
+    }
+  }
+  const top = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return top[1] >= 1 ? top[0] : null;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ASSISTANT AGENT CLASS
+// ══════════════════════════════════════════════════════════════════════════════
 
 export class Assistant extends AgentBase {
   constructor() {
     super({
       id:           'assistant',
       displayName:  'Assistant',
-      role:         'Customer VA & Lead Qualification',
+      role:         'Customer VA, Lead Qualification & Intake',
       systemPrompt: ASSISTANT_SYSTEM,
       domains:      ['business_development', 'digital_media', 'automation', 'general'],
     });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // CONVERSATION HANDLER
+  // MAIN CONVERSATION HANDLER
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Handle a single turn in a conversation with a visitor.
-   * @param {object} params
-   * @param {string} params.message           — visitor's message
-   * @param {object[]} params.history         — conversation history [{role, content}]
-   * @param {object} [params.leadState]       — current lead qualification state
-   * @param {string} [params.sessionId]       — session ID for persistence
-   * @returns {object} { response, leadState, action }
+   * Handle a single conversation turn.
+   * Supports normal Q&A, progressive lead qualification, and structured intake.
    */
-  async chat({ message, history = [], leadState = {}, sessionId = null }) {
-    // Pull knowledge context for substantive questions
-    const knowledge = await synthesizer.answer(message, 'assistant', []).catch(() => '');
+  async chat({ message, history = [], leadState = {}, sessionId = null, context = '', sourcePage = '' }) {
 
-    // Determine conversation stage
-    const qualStage = this._getQualificationStage(leadState);
-    const score     = this._calculateScore(leadState);
+    // ── 1. On-demand knowledge query ────────────────────────────────────────
+    const knowledge = await this._queryKnowledge(message, context).catch(() => context || '');
 
-    // Build conversation context for LLM
-    const historyText = history.slice(-10).map(m =>
-      `${m.role === 'user' ? 'Visitor' : 'Assistant'}: ${m.content}`
-    ).join('\n');
+    // ── 2. Determine mode ───────────────────────────────────────────────────
+    const intakeState = leadState.intake || null;
+    const isInIntake  = intakeState && intakeState.active && !intakeState.complete;
 
-    const stateContext = Object.keys(leadState).length > 0
-      ? `\n\n## What I know about this visitor so far:\n${JSON.stringify(leadState, null, 2)}\nCurrent qualification score: ${score}/5`
-      : '';
+    let prompt;
+    let response;
 
-    const qualContext = qualStage
-      ? `\n\n## Qualification guidance:\nIf natural in context, weave in this question: "${qualStage.question}"\nDo not ask it robotically — integrate it naturally into your response.`
-      : score >= 4
-      ? `\n\n## Lead is qualified (score ${score}/5). If they express interest in working together or solving their challenge, offer a strategy session booking.`
-      : '';
+    if (isInIntake) {
+      // ── INTAKE MODE: ask the next intake question naturally ──────────────
+      response = await this._conductIntakeTurn(message, history, leadState, knowledge);
+    } else {
+      // ── NORMAL MODE: Q&A + qualification ────────────────────────────────
 
-    const prompt = `${knowledge ? `## Relevant knowledge from DigiFusion's intelligence base:\n${knowledge}\n\n---\n\n` : ''}
-${stateContext}${qualContext}
+      // Detect service track if not known
+      if (!leadState.track) {
+        const detectedTrack = detectTrack(message);
+        if (detectedTrack) leadState.track = detectedTrack;
+      }
+
+      const score      = this._calculateScore(leadState);
+      const qualStage  = this._getQualificationStage(leadState);
+
+      const historyText = history.slice(-12).map(m =>
+        `${m.role === 'user' ? 'Visitor' : 'Assistant'}: ${m.content}`
+      ).join('\n');
+
+      const stateCtx = Object.keys(leadState).length
+        ? `\n\n## What I know about this visitor:\n${JSON.stringify(leadState, null, 2)}\nCurrent qualification score: ${score}/5`
+        : '';
+
+      const qualCtx = qualStage
+        ? `\n\n## Qualification guidance:\nIf natural in context, weave in this question: "${qualStage.question}"\nDo not ask it robotically — integrate it naturally.`
+        : score >= 3 && leadState.track
+        ? `\n\n## Lead has expressed interest in ${INTAKE_FLOWS[leadState.track]?.trackName || leadState.track}. If they haven't started the intake, offer to ask a few diagnostic questions to prepare for the strategy session. Phrase it as "I'd love to gather a bit more context so our team can hit the ground running when we meet."`
+        : score >= 4
+        ? `\n\n## Lead is qualified (score ${score}/5). Offer a strategy session booking when appropriate.`
+        : '';
+
+      prompt = `${knowledge ? `## Relevant knowledge from DigiFusion's intelligence base:\n${knowledge}\n\n---\n\n` : ''}
+${stateCtx}${qualCtx}
 
 ## Conversation so far:
 ${historyText}
 
 Visitor: ${message}
 
-Respond as the DigiFusion Assistant. Be genuinely helpful, professional, and conversational.
-${score >= 4 && !leadState.bookingOffered ? 'If appropriate, offer a strategy session. The booking link will be inserted by the system.' : ''}`;
+Respond as the DigiFusion Assistant. Be genuine, professional, and helpful.
+${score >= 4 && !leadState.bookingOffered ? 'If appropriate, mention the strategy session. The booking link will be appended by the system.' : ''}`;
 
-    const response = await callAiProvider(this.provider, prompt, this.systemPrompt);
+      response = await callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+    }
 
-    // Extract qualification data from this message
+    // ── 3. Extract qualification data ───────────────────────────────────────
     const updatedLeadState = await this._extractQualData(message, leadState, history);
-    const newScore         = this._calculateScore(updatedLeadState);
-    const shouldOfferBooking = newScore >= 4 && !updatedLeadState.bookingOffered;
 
-    // Determine action
-    let action = 'continue';
+    // ── 4. Advance intake state ─────────────────────────────────────────────
+    if (isInIntake) {
+      updatedLeadState.intake = this._advanceIntake(message, leadState.intake);
+    } else if (!isInIntake && !intakeState) {
+      // Check if we should START intake based on score and track
+      const score = this._calculateScore(updatedLeadState);
+      if (score >= 3 && updatedLeadState.track && INTAKE_FLOWS[updatedLeadState.track]) {
+        // Only start if visitor has expressed readiness in this message
+        const readySignals = ['yes', 'sure', 'go ahead', 'ask away', 'ok', 'sounds good', 'let\'s do it', 'please', 'ready', 'let\'s go'];
+        const isReady = readySignals.some(s => message.toLowerCase().includes(s));
+        if (isReady) {
+          updatedLeadState.intake = this._initIntake(updatedLeadState.track);
+        }
+      }
+    }
+
+    // ── 5. Check if intake just completed ───────────────────────────────────
+    const intakeJustCompleted = updatedLeadState.intake?.complete && !leadState.intake?.complete;
+
+    if (intakeJustCompleted) {
+      await this._onIntakeComplete(updatedLeadState, sessionId, sourcePage, history);
+    }
+
+    // ── 6. Booking offer ────────────────────────────────────────────────────
+    const newScore           = this._calculateScore(updatedLeadState);
+    const shouldOfferBooking = (newScore >= 4 || intakeJustCompleted) && !updatedLeadState.bookingOffered;
+    let action    = 'continue';
     let bookingUrl = null;
 
     if (shouldOfferBooking) {
@@ -129,55 +309,337 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, offer a strategy se
       action = 'offer_booking';
     }
 
+    // ── 7. Detect intake start offer in response ────────────────────────────
+    const offerIntake = !isInIntake && !intakeState && newScore >= 3 && updatedLeadState.track && !updatedLeadState.intake;
+    if (offerIntake) action = 'offer_intake';
+
     return {
       response,
-      leadState:   updatedLeadState,
-      score:       newScore,
+      leadState:    updatedLeadState,
+      score:        newScore,
       action,
       bookingUrl,
+      intakeActive: updatedLeadState.intake?.active && !updatedLeadState.intake?.complete,
+      intakeProgress: updatedLeadState.intake
+        ? { step: updatedLeadState.intake.currentStep + 1, total: INTAKE_FLOWS[updatedLeadState.intake.track]?.questions.length || 5 }
+        : null,
     };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // INTAKE MANAGEMENT
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Explicitly start an intake for a given track.
+   * Called by the API when the user clicks an intake chip.
+   */
+  async startIntake({ track, leadState = {}, history = [] }) {
+    const flow = INTAKE_FLOWS[track];
+    if (!flow) return { error: `Unknown track: ${track}` };
+
+    const updatedLeadState = {
+      ...leadState,
+      track,
+      intake: this._initIntake(track),
+    };
+
+    const firstQuestion = flow.questions[0].ask;
+    const response = `${flow.intro}\n\n${firstQuestion}`;
+
+    return {
+      response,
+      leadState: updatedLeadState,
+      score: this._calculateScore(updatedLeadState),
+      action: 'intake_started',
+      intakeActive: true,
+      intakeProgress: { step: 1, total: flow.questions.length },
+    };
+  }
+
+  _initIntake(track) {
+    return {
+      track,
+      active: true,
+      complete: false,
+      currentStep: 0,
+      answers: {},        // { questionKey: answerText }
+      startedAt: new Date().toISOString(),
+    };
+  }
+
+  _advanceIntake(message, intake) {
+    const flow = INTAKE_FLOWS[intake.track];
+    if (!flow) return intake;
+
+    const currentQ = flow.questions[intake.currentStep];
+    const updated = {
+      ...intake,
+      answers: {
+        ...intake.answers,
+        [currentQ.key]: message,
+      },
+      currentStep: intake.currentStep + 1,
+    };
+
+    if (updated.currentStep >= flow.questions.length) {
+      updated.complete = true;
+      updated.active = false;
+      updated.completedAt = new Date().toISOString();
+    }
+
+    return updated;
+  }
+
+  async _conductIntakeTurn(message, history, leadState, knowledge) {
+    const intake = leadState.intake;
+    const flow   = INTAKE_FLOWS[intake.track];
+    if (!flow) return "I seem to have lost track of where we were — could you remind me what service you're most interested in?";
+
+    const nextStep = intake.currentStep + 1;
+
+    // Last answer was for currentStep — store it then ask nextStep
+    if (nextStep >= flow.questions.length) {
+      // All questions answered — wrap up
+      const prompt = `You are the DigiFusion Assistant wrapping up a client intake conversation.
+
+The client has just answered all intake questions for the ${flow.trackName} track.
+Their final answer: "${message}"
+
+Previous answers:
+${Object.entries(intake.answers || {}).map(([k, v]) => `- ${k}: ${v}`).join('\n')}
+
+Knowledge context:
+${knowledge || ''}
+
+Write a warm, professional closing message that:
+1. Acknowledges their last answer briefly
+2. Thanks them for the time and context
+3. Explains the next step (our team / ${flow.agentOwner === 'atlas' ? 'Atlas our BD Director' : flow.agentOwner === 'nova' ? 'Nova our automation architect' : 'Aether our media strategist'} will review their intake and prepare a custom roadmap)
+4. Tells them to expect an invitation for the strategy session within 24 hours
+5. Offers to answer any questions in the meantime
+
+Keep it natural and concise — 3–4 short paragraphs maximum.`;
+
+      return callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+    }
+
+    // Ask the next question, informed by their previous answer
+    const nextQuestion = flow.questions[nextStep];
+    const prevQuestion = flow.questions[intake.currentStep];
+
+    const prompt = `You are the DigiFusion Assistant conducting a structured intake conversation for the ${flow.trackName} track.
+
+The visitor just answered this question:
+"${prevQuestion.ask}"
+
+Their answer: "${message}"
+
+Knowledge to draw on if needed:
+${knowledge || ''}
+
+Now ask the next intake question in a natural, conversational way. Briefly acknowledge their answer (1 sentence max — do not over-comment), then ask:
+"${nextQuestion.ask}"
+
+Do not say "Question ${nextStep + 1} of ${flow.questions.length}". Do not add filler phrases like "That's a great question!" or "Thank you for sharing that!". Be direct and professional.
+
+If their answer reveals something significant (a constraint, an opportunity, a risk), note it briefly before moving on.`;
+
+    return callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+  }
+
+  async _onIntakeComplete(leadState, sessionId, sourceUrl, history) {
+    const intake = leadState.intake;
+    const flow   = INTAKE_FLOWS[intake?.track];
+    if (!flow || !intake?.answers) return;
+
+    // Build structured intake data for storage
+    const intakeData = {};
+    flow.questions.forEach(q => {
+      if (intake.answers[q.key]) {
+        intakeData[q.ask] = intake.answers[q.key];
+      }
+    });
+
+    const score  = this._calculateScore(leadState);
+    const status = score >= 4 ? 'qualified' : score >= 2 ? 'warm' : 'unqualified';
+
+    // ── Save to Supabase ───────────────────────────────────────────────────
+    const db = getSupabase();
+    let leadRecord = null;
+
+    if (db) {
+      const leadData = {
+        name:                leadState.name || null,
+        email:               leadState.email || null,
+        company:             leadState.company || null,
+        challenge:           leadState.challenge || intakeData[flow.questions[0]?.ask] || null,
+        track:               intake.track,
+        intake_data:         intakeData,
+        status,
+        score,
+        conversation:        history || [],
+        source_url:          sourceUrl || null,
+        updated_at:          new Date().toISOString(),
+      };
+
+      if (leadState.leadId) {
+        const { data } = await db.from('leads').update(leadData).eq('id', leadState.leadId).select().single();
+        leadRecord = data;
+      } else {
+        const { data } = await db.from('leads').insert(leadData).select().single();
+        leadRecord = data;
+        if (data?.id) leadState.leadId = data.id;
+      }
+    }
+
+    // ── Sync to Notion ──────────────────────────────────────────────────────
+    const notionLeadId = await notion.createLead({
+      name:       leadState.name,
+      email:      leadState.email,
+      company:    leadState.company,
+      track:      intake.track,
+      score,
+      status,
+      challenge:  leadState.challenge || Object.values(intake.answers)[0],
+      sourceUrl,
+      intake:     intakeData,
+      sessionId,
+    }).catch(() => null);
+
+    // Also create a client project record in Notion
+    if (score >= 3) {
+      await notion.createClientProject({
+        clientName:    leadState.name,
+        company:       leadState.company,
+        track:         intake.track,
+        intakePageId:  notionLeadId,
+        leadId:        leadRecord?.id,
+        assignedAgent: flow.agentOwner,
+        status:        'Discovery',
+      }).catch(() => null);
+    }
+
+    // ── Notify team ─────────────────────────────────────────────────────────
+    await this.notify(
+      `Intake complete — ${flow.trackName} (score ${score}/5)`,
+      `${leadState.company || leadState.name || 'Unknown'}: intake submitted, assigned to ${flow.agentOwner}. Notion synced.`,
+      score >= 4 ? 'warning' : 'info',
+      'push',
+      leadRecord?.id || null,
+    );
+
+    // ── Delegate to specialist agent ────────────────────────────────────────
+    await this.delegate({
+      toAgent:     flow.agentOwner,
+      title:       `New ${flow.trackName} intake — ${leadState.company || leadState.name || 'Lead'}`,
+      description: `Completed intake questionnaire. Score ${score}/5. Ready for strategy session preparation.`,
+      type:        'intake_review',
+      priority:    score >= 4 ? 1 : 3,
+      input:       {
+        leadId:    leadRecord?.id,
+        leadState,
+        intake:    intakeData,
+        track:     intake.track,
+        sessionId,
+        sourceUrl,
+      },
+    }).catch(() => null);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ON-DEMAND KNOWLEDGE QUERY (Synthesizer access)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Query the Synthesizer knowledge base and return relevant context.
+   * Merges injected client-side context with live KB results.
+   */
+  async queryKnowledge(query) {
+    return this._queryKnowledge(query, '');
+  }
+
+  async _queryKnowledge(message, injectedContext = '') {
+    // First check if question is about DigiFusion frameworks / known topics
+    const frameworkKeywords = ['ave', 'deal engine', 'c2c', 'nova', 'atlas', 'aether', 'framework', 'pricing', 'strategy session', 'engagement model', 'automation velocity', 'pillar', 'cluster'];
+    const lower = message.toLowerCase();
+    const isFrameworkQ = frameworkKeywords.some(k => lower.includes(k));
+
+    if (isFrameworkQ && injectedContext) {
+      // Client already injected FRAMEWORK_CONTEXT — use it directly (no backend call needed)
+      return injectedContext;
+    }
+
+    // For non-framework questions, query the live Synthesizer knowledge base
+    try {
+      const knowledge = await synthesizer.answer(message, 'assistant', []);
+      if (knowledge && knowledge.length > 50) {
+        return injectedContext ? `${injectedContext}\n\n---\n\n## Live Knowledge Base Context\n${knowledge}` : knowledge;
+      }
+    } catch {
+      // Synthesizer unavailable — fall back to injected context only
+    }
+
+    return injectedContext || '';
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // LEAD MANAGEMENT
   // ══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Save or update a lead in Supabase.
-   */
   async saveLead({ leadState, conversation, sessionId, sourceUrl }) {
     const db = getSupabase();
     if (!db) return null;
 
-    const score = this._calculateScore(leadState);
+    const score  = this._calculateScore(leadState);
     const status = score >= 4 ? 'qualified' : score >= 2 ? 'warm' : 'unqualified';
 
     const leadData = {
-      name:                 leadState.name || null,
-      email:                leadState.email || null,
-      company:              leadState.company || null,
-      challenge:            leadState.challenge || null,
-      tried_before:         leadState.tried_before || null,
-      company_size:         leadState.company_size || null,
-      budget_range:         leadState.budget_range || null,
-      timeline:             leadState.timeline || null,
+      name:                leadState.name || null,
+      email:               leadState.email || null,
+      company:             leadState.company || null,
+      challenge:           leadState.challenge || null,
+      tried_before:        leadState.tried_before || null,
+      company_size:        leadState.company_size || null,
+      budget_range:        leadState.budget_range || null,
+      timeline:            leadState.timeline || null,
+      track:               leadState.track || null,
+      intake_data:         leadState.intake?.answers || null,
       status,
       score,
-      qualification_notes:  leadState.qualificationNotes || null,
-      conversation:         conversation || [],
-      source_url:           sourceUrl || null,
-      updated_at:           new Date().toISOString(),
+      qualification_notes: leadState.qualificationNotes || null,
+      conversation:        conversation || [],
+      source_url:          sourceUrl || null,
+      updated_at:          new Date().toISOString(),
     };
 
-    // Upsert by session
+    let data;
+
     if (leadState.leadId) {
-      const { data, error } = await db.from('leads').update(leadData).eq('id', leadState.leadId).select().single();
-      if (error) console.error('[Assistant] Lead update error:', error.message);
-      return data;
+      const res = await db.from('leads').update(leadData).eq('id', leadState.leadId).select().single();
+      if (res.error) console.error('[Assistant] Lead update error:', res.error.message);
+      data = res.data;
+    } else {
+      const res = await db.from('leads').insert(leadData).select().single();
+      if (res.error) console.error('[Assistant] Lead insert error:', res.error.message);
+      data = res.data;
     }
 
-    const { data, error } = await db.from('leads').insert(leadData).select().single();
-    if (error) console.error('[Assistant] Lead insert error:', error.message);
+    // Sync warm+ leads to Notion too
+    if (data && score >= 2) {
+      notion.createLead({
+        name:      leadState.name,
+        email:     leadState.email,
+        company:   leadState.company,
+        track:     leadState.track,
+        score,
+        status,
+        challenge: leadState.challenge,
+        sourceUrl,
+        intake:    leadState.intake?.answers || {},
+        sessionId,
+      }).catch(() => null);
+    }
 
     // Notify team of qualified leads
     if (data && score >= 4) {
@@ -198,10 +660,11 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, offer a strategy se
   // ══════════════════════════════════════════════════════════════════════════
 
   _getQualificationStage(leadState) {
+    if (leadState.intake?.active) return null; // intake is running — skip generic qual
     for (const stage of QUALIFICATION_FLOW) {
       if (!leadState[stage.stage]) return stage;
     }
-    return null; // all stages complete
+    return null;
   }
 
   _calculateScore(leadState) {
@@ -212,19 +675,23 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, offer a strategy se
     if (leadState.timeline && leadState.timeline.match(/month|week|quarter|soon|urgent/i)) score += 1;
     if (leadState.authority && leadState.authority.match(/me|i am|i will|decision|lead/i)) score += 1;
     if (leadState.budget_range && !leadState.budget_range.match(/no budget|none|zero/i)) score += 1;
+    if (leadState.intake?.complete) score = Math.max(score, 4); // completed intake = hot
     return Math.min(5, Math.round(score));
   }
 
   async _extractQualData(message, currentState, history) {
-    if (Object.keys(currentState).length >= 5) return currentState; // already have enough
+    // Don't over-extract if we already have enough
+    const filled = ['name', 'email', 'company', 'challenge', 'timeline', 'authority', 'budget_range']
+      .filter(k => currentState[k]).length;
+    if (filled >= 5) return currentState;
 
-    const extractPrompt = `Extract any qualification information from this visitor message.
+    const extractPrompt = `Extract qualification information from this visitor message.
 
 Visitor message: "${message}"
 
 Conversation context: ${history.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
 
-Return a JSON object with any of these fields that can be inferred from the message:
+Return a JSON object with any of these fields that can be clearly inferred:
 {
   "name": "visitor's name if mentioned",
   "email": "email if mentioned",
@@ -237,11 +704,11 @@ Return a JSON object with any of these fields that can be inferred from the mess
   "authority": "their decision-making role"
 }
 
-Only include fields where information was clearly provided. Return {} if nothing was extractable.
+Only include fields where information was clearly provided. Return {} if nothing extractable.
 Return ONLY the JSON object.`;
 
     try {
-      const raw  = await callAiProvider(this.provider, extractPrompt);
+      const raw  = await callAiProvider(this.provider, extractPrompt, null, { json: true });
       const data = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}');
       return { ...currentState, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v)) };
     } catch {
@@ -250,26 +717,31 @@ Return ONLY the JSON object.`;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // EXECUTE
+  // EXECUTE (AgentBase interface)
   // ══════════════════════════════════════════════════════════════════════════
 
   async execute(task) {
-    const { action, message, history, leadState, sessionId, period } = task;
-
+    const { action } = task;
     switch (action) {
       case 'chat':
-        return this.chat({ message, history, leadState, sessionId });
+        return this.chat(task);
+
+      case 'start_intake':
+        return this.startIntake(task);
+
+      case 'query_knowledge':
+        return { knowledge: await this.queryKnowledge(task.query || task.message || '') };
 
       case 'save_lead':
         return this.saveLead({
-          leadState: task.leadState || {},
+          leadState:    task.leadState || {},
           conversation: task.conversation || [],
           sessionId:    task.sessionId,
           sourceUrl:    task.sourceUrl,
         });
 
       default:
-        return { error: 'Unknown action for Assistant' };
+        return { error: `Unknown action for Assistant: ${action}` };
     }
   }
 }

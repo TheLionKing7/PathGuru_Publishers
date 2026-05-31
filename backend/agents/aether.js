@@ -822,6 +822,90 @@ Produce:
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // INTAKE & EVALUATION LIFECYCLE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _onIntakeReceived({ leadState = {}, intake = {}, leadId }) {
+    const intakeSummary = Object.entries(intake).map(([q, a]) => `Q: ${q}\nA: ${a}`).join('\n\n');
+
+    const prompt = `You are Aether, DigiFusion's Digital Media Strategist. A new client intake has arrived.
+
+CLIENT INTAKE:
+${intakeSummary}
+
+Company: ${leadState.company || 'Unknown'} | Challenge: ${leadState.challenge || 'Not specified'}
+
+Using the C2C Pipeline framework, produce:
+1. ICP Search Journey Map — where the client's audience is currently stuck (SEE / THINK / DO / CARE)
+2. Preliminary Topic Authority Gap — what pillar topics does the brand own vs. rent?
+3. Channel fit assessment based on their budget and objectives
+4. Quick wins in the first 30 days
+5. Three strategy session questions to ask
+6. Suggested 30-minute agenda
+
+Return as structured team briefing text.`;
+
+    const brief = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'C2C Pipeline ICP digital media strategy' });
+    await this.notify(`Digital Media Intake — ${leadState.company || 'New Lead'}`, 'Aether has prepared a C2C Pipeline brief and session agenda.', 'info', 'dashboard', leadId);
+    return { brief, leadId, status: 'brief_prepared' };
+  }
+
+  async triggerEvaluation({ clientName, clientEmail, leadId, campaignPeriod }) {
+    const EVALUATION_QUESTIONS = {
+      'KPI Alignment': 'Did the campaign achieve or exceed the target metrics outlined in your intake (CPA, ROAS, lead volume)? (Exceeded / Met / Missed)',
+      'Lead Quality': 'How would you rate the quality of traffic or leads generated? (High quality / Moderate / Low/Unqualified)',
+      'Data Accuracy': 'Are the numbers in our dashboards matching your internal CRM or sales data? (Yes / No — please note discrepancies)',
+      'Creative Relevance': 'How well did the ad creatives and copywriting resonate with your target market based on audience response?',
+      'Budget Management': 'Were you satisfied with how budgets were scaled and distributed across channels? (Satisfied / Neutral / Unsatisfied)',
+      'Market Adaptability': 'How effectively did our team pivot or optimise when data patterns changed or ad fatigue set in?',
+      'Reporting Clarity': 'On a scale of 1–10, how clear and actionable were our performance reports and dashboards?',
+      'Next Campaign Priority': 'What is the next biggest marketing challenge or opportunity you want to address?',
+      'NPS': 'On a scale of 0–10, how likely are you to recommend DigiFusion\'s digital media services to a peer?',
+      'Case Study Permission': 'Are you open to letting us use anonymised campaign metrics as a success story?',
+    };
+
+    const db = getSupabase();
+    if (db && leadId) {
+      await db.from('tasks').insert({
+        title:       `Digital Media Evaluation — ${clientName}`,
+        description: 'Post-campaign evaluation triggered at campaign cycle end',
+        agent_id:    'aether',
+        created_by:  'aether',
+        status:      'pending',
+        priority:    2,
+        type:        'evaluation',
+        input:       { clientName, clientEmail, leadId, questions: EVALUATION_QUESTIONS, campaignPeriod },
+      }).catch(() => {});
+    }
+
+    await this.notify(`Digital Media Evaluation Ready — ${clientName}`, `Campaign cycle complete. Evaluation ready for ${clientEmail || 'client'}.`, 'info', 'dashboard', leadId);
+    return { status: 'evaluation_triggered', clientName, questions: EVALUATION_QUESTIONS };
+  }
+
+  async processEvaluation({ clientName, leadId, responses = {}, nps }) {
+    const prompt = `You are Aether processing a post-campaign evaluation.
+
+Client: ${clientName} | NPS: ${nps}/10
+
+Evaluation Responses:
+${Object.entries(responses).map(([q, a]) => `${q}: ${a}`).join('\n')}
+
+Provide:
+1. Campaign ROI summary
+2. Data/attribution discrepancies to flag
+3. Creative and channel performance diagnosis
+4. Next campaign priority (from their response)
+5. Renewal talking points
+
+Keep it sharp — team briefing format.`;
+
+    const analysis = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'digital media campaign ROI evaluation' });
+    await this.syncToNotion('evaluation', { clientName, track: 'digital_media', responses, nps, nextBottleneck: responses['Next Campaign Priority'] || '', caseStudyPermission: String(responses['Case Study Permission'] || '').toLowerCase().includes('yes') });
+    await this.notify(`Digital Media Evaluation Processed — ${clientName}`, `NPS ${nps}/10. Campaign renewal opportunity assessed.`, nps >= 8 ? 'info' : 'warning', 'dashboard', leadId);
+    return { analysis, nps, status: 'evaluation_processed' };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // EXECUTE — Task dispatcher
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -879,6 +963,18 @@ Produce:
 
       case 'repurposing_plan':
         result = { result: await this.repurposingPlan(pillarContent || task.description, channels || []) };
+        break;
+
+      case 'intake_review':
+        result = await this._onIntakeReceived(task);
+        break;
+
+      case 'trigger_evaluation':
+        result = await this.triggerEvaluation(task);
+        break;
+
+      case 'process_evaluation':
+        result = await this.processEvaluation(task);
         break;
 
       default:

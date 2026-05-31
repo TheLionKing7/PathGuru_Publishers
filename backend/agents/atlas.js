@@ -1118,6 +1118,143 @@ Rules: phases = 3, dimensions = 5 (weights sum to 100), diagnostic_questions = 8
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // INTAKE & EVALUATION LIFECYCLE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Called when VA completes a BD intake and delegates to Atlas.
+   * Atlas reviews the intake, prepares a custom deal brief, and schedules follow-up.
+   */
+  async _onIntakeReceived({ leadState = {}, intake = {}, leadId, sourceUrl }) {
+    const intakeSummary = Object.entries(intake).map(([q, a]) => `Q: ${q}\nA: ${a}`).join('\n\n');
+
+    const prompt = `You are Atlas, DigiFusion's BD Director. A new client intake has just come in.
+
+CLIENT INTAKE DATA:
+${intakeSummary}
+
+CLIENT PROFILE:
+Company: ${leadState.company || 'Unknown'}
+Name: ${leadState.name || 'Unknown'}
+Email: ${leadState.email || 'Unknown'}
+Challenge: ${leadState.challenge || 'Not specified'}
+
+Using the Deal Engine framework, produce:
+1. A Decision Unit map (who are the likely Buying Influences)
+2. A preliminary Red Flag assessment (what risks do you see)
+3. A recommended Phase 1–2 strategy for the first session
+4. Three tailored questions to ask in the strategy session
+5. A suggested meeting agenda (30 minutes)
+
+Return as structured text — not JSON. This will be used to brief the team before the call.`;
+
+    const brief = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'Deal Engine BD strategy session' });
+
+    // Notify the team
+    await this.notify(
+      `BD Intake Review — ${leadState.company || 'New Lead'}`,
+      `Atlas has prepared a deal brief and meeting agenda. Ready for strategy session.`,
+      'info',
+      'dashboard',
+      leadId,
+    );
+
+    return { brief, leadId, status: 'brief_prepared' };
+  }
+
+  /**
+   * Trigger the BD post-engagement evaluation questionnaire.
+   * Designed to deploy at 70% delivery milestone or at contract review.
+   *
+   * @param {object} task
+   * @param {string} task.clientName
+   * @param {string} task.clientEmail
+   * @param {string} task.leadId
+   * @param {object} task.engagementContext — what was delivered
+   */
+  async triggerEvaluation({ clientName, clientEmail, leadId, engagementContext = {} }) {
+    const EVALUATION_QUESTIONS = {
+      'Value Hardening': 'Based on our initial goals, what measurable impact — revenue growth, time savings, or deal wins — have you observed since launching our partnership?',
+      'Capability Expansion': `Now that we have stabilised the initial engagement, what other bottlenecks or systemic challenges are emerging in your broader business?`,
+      'Competitor Benchmarking': 'Compared to other strategic partners or vendors you have worked with, where did our team exceed expectations — and where did we fall short?',
+      'Referral Unlocking': 'We love working with businesses like yours. Who in your professional network or sibling organisations is currently facing a similar challenge we could help solve?',
+      'NPS': 'On a scale of 0 to 10, how likely are you to recommend DigiFusion to another founder or executive?',
+      'Case Study Permission': 'Are you open to us anonymising your results as a brief success story for our portfolio?',
+    };
+
+    // Save evaluation trigger to DB
+    const db = getSupabase();
+    if (db && leadId) {
+      await db.from('tasks').insert({
+        title:       `BD Evaluation — ${clientName}`,
+        description: 'Post-engagement evaluation triggered at 70% delivery milestone',
+        agent_id:    'atlas',
+        created_by:  'atlas',
+        status:      'pending',
+        priority:    2,
+        type:        'evaluation',
+        input:       { clientName, clientEmail, leadId, questions: EVALUATION_QUESTIONS, engagementContext },
+      }).catch(() => {});
+    }
+
+    // Notify team to send evaluation to client
+    await this.notify(
+      `BD Evaluation Ready — ${clientName}`,
+      `70% delivery milestone reached. Evaluation questionnaire ready to send to ${clientEmail || 'client'}.`,
+      'info',
+      'dashboard',
+      leadId,
+    );
+
+    return { status: 'evaluation_triggered', clientName, questions: EVALUATION_QUESTIONS };
+  }
+
+  /**
+   * Process a completed BD evaluation submission.
+   * Analyses responses, determines renewal/upsell opportunities.
+   */
+  async processEvaluation({ clientName, leadId, responses = {}, nps }) {
+    const prompt = `You are Atlas processing a completed client evaluation.
+
+Client: ${clientName}
+NPS: ${nps}/10
+
+Evaluation Responses:
+${Object.entries(responses).map(([q, a]) => `${q}:\n${a}`).join('\n\n')}
+
+Provide:
+1. Summary of client health (1 paragraph)
+2. Identified upsell/expansion opportunities
+3. Risk flags (if any)
+4. Recommended next action (renewal pitch, account review, escalation, or referral ask)
+5. Suggested talking points for the executive review meeting
+
+Keep it sharp and actionable — this brief goes to the team before the client call.`;
+
+    const analysis = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'client renewal upsell BD evaluation' });
+
+    // Save to Notion
+    await this.syncToNotion('evaluation', {
+      clientName,
+      track: 'bd',
+      responses,
+      nps,
+      nextBottleneck: responses['Capability Expansion'] || '',
+      caseStudyPermission: String(responses['Case Study Permission'] || '').toLowerCase().includes('yes'),
+    });
+
+    await this.notify(
+      `BD Evaluation Processed — ${clientName}`,
+      `NPS ${nps}/10. Analysis complete — renewal/upsell opportunities identified.`,
+      nps >= 8 ? 'info' : nps >= 5 ? 'warning' : 'critical',
+      'dashboard',
+      leadId,
+    );
+
+    return { analysis, nps, status: 'evaluation_processed' };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // EXECUTE — Task dispatcher
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1188,6 +1325,15 @@ Rules: phases = 3, dimensions = 5 (weights sum to 100), diagnostic_questions = 8
           task.industry || topic || 'general',
           { services: task.services || services, geography: task.geography, dealSizeTarget: dealSize, context }
         )};
+        break;
+
+      case 'intake_review':
+        // New client intake received from the VA — prepare for strategy session
+        result = await this._onIntakeReceived(task);
+        break;
+
+      case 'trigger_evaluation':
+        result = await this.triggerEvaluation(task);
         break;
 
       default:

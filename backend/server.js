@@ -1601,6 +1601,40 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // POST /api/agents/assistant/intake  — start or continue a structured intake conversation
+  if (req.method === 'POST' && path === '/api/agents/assistant/intake') {
+    try {
+      const body = await readBody(req);
+      if (!body.track) { err(res, 'track required (bd|automation|digital_media)', 400); return; }
+      json(res, await assistant.startIntake(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/assistant/knowledge?q=... — on-demand knowledge query
+  if (req.method === 'GET' && path === '/api/agents/assistant/knowledge') {
+    try {
+      const q = url.searchParams.get('q') || '';
+      if (!q) { err(res, 'q parameter required', 400); return; }
+      json(res, { knowledge: await assistant.queryKnowledge(q) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/:id/evaluation  — trigger or process a post-service evaluation
+  //   body: { action: 'trigger'|'process', clientName, clientEmail, leadId, responses, nps, ... }
+  if (req.method === 'POST' && path.match(/^\/api\/agents\/(atlas|nova|aether)\/evaluation$/)) {
+    const agentId = path.split('/')[3];
+    const agent = AGENTS[agentId];
+    if (!agent) { err(res, `Agent ${agentId} not found`, 404); return; }
+    try {
+      const body = await readBody(req);
+      const action = body.action === 'process' ? 'process_evaluation' : 'trigger_evaluation';
+      json(res, await agent.execute({ ...body, action }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // GET /api/agents/leads
   if (req.method === 'GET' && path === '/api/agents/leads') {
     const { getSupabase: _getDb } = await import('./supabaseClient.js');
@@ -1635,6 +1669,9 @@ server.listen(PORT, () => {
   │   POST /api/agents/:id/run                    │
   │   POST /api/agents/synthesizer/ingest         │
   │   POST /api/agents/assistant/chat             │
+  │   POST /api/agents/assistant/intake           │
+  │   GET  /api/agents/assistant/knowledge        │
+  │   POST /api/agents/:id/evaluation             │
   └────────────────────────────────────────────┘
 `);
 });

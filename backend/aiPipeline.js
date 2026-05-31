@@ -164,13 +164,43 @@ async function runEditorialAgents(input, project, research, provider) {
   };
 }
 
-export async function callAiProvider(provider, prompt, systemHint) {
-  if (provider.name === "gemini")  return callGemini(prompt, provider.model, systemHint);
-  if (provider.name === "claude")  return callClaude(provider, prompt, systemHint);
-  return callOpenAiCompatible(provider, prompt, systemHint);
+/**
+ * Call the AI provider with automatic fallback.
+ *
+ * @param {object} provider   — resolved provider config
+ * @param {string} prompt     — user/task prompt
+ * @param {string} [systemHint] — system prompt / personality
+ * @param {object} [options]
+ * @param {boolean} [options.json=true]     — force JSON output (false = conversational text)
+ * @param {boolean} [options.fallback=true] — try next provider if this one fails
+ */
+export async function callAiProvider(provider, prompt, systemHint, options = {}) {
+  const { json = true, fallback = true } = options;
+  try {
+    if (provider.name === "gemini") return await callGemini(prompt, provider.model, systemHint, json);
+    if (provider.name === "claude") return await callClaude(provider, prompt, systemHint);
+    return await callOpenAiCompatible(provider, prompt, systemHint, json);
+  } catch (err) {
+    if (!fallback) throw err;
+    const fallbackProvider = _resolveFallbackProvider(provider.name);
+    if (!fallbackProvider) throw err;
+    console.warn(`[AI] ${provider.name} failed (${err.message.slice(0, 80)}), falling back to ${fallbackProvider.name}`);
+    return callAiProvider(fallbackProvider, prompt, systemHint, { ...options, fallback: false });
+  }
 }
 
-async function callGemini(prompt, model, systemHint) {
+/** Select the next available provider, skipping the one that just failed. */
+function _resolveFallbackProvider(excludeName) {
+  const PRIORITY = ['claude', 'gemini', 'cerebras', 'deepseek', 'perplexity'];
+  for (const name of PRIORITY) {
+    if (name === excludeName) continue;
+    const p = resolveProvider(name);
+    if (p) return p;
+  }
+  return null;
+}
+
+async function callGemini(prompt, model, systemHint, json = true) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   // Gemini uses a dedicated "system_instruction" field (equivalent to Claude's system prompt).
@@ -187,13 +217,16 @@ async function callGemini(prompt, model, systemHint) {
       }
     ],
     generationConfig: {
-      temperature: 0.72,
-      responseMimeType: "application/json",
+      temperature: json ? 0.72 : 0.82,
+      // Only force JSON MIME for structured tasks (publishing pipeline, extraction).
+      // Conversational chat MUST use text/plain — otherwise Gemini wraps every
+      // response in a JSON string which the VA sends verbatim to the user.
+      ...(json ? { responseMimeType: "application/json" } : { responseMimeType: "text/plain" }),
       // Gemini 2.5 Flash supports up to 65K output tokens.
       // A full 10-chapter book at 1,800–2,500 words/chapter in JSON needs
       // ~40,000–60,000 tokens. Without this, Gemini defaults to ~8K and
       // silently truncates the response mid-JSON, causing parse failures.
-      maxOutputTokens: Number(process.env.AI_MAX_TOKENS || 65536),
+      maxOutputTokens: json ? Number(process.env.AI_MAX_TOKENS || 65536) : 1024,
     }
   };
   if (systemInstruction) body.system_instruction = systemInstruction;
@@ -250,8 +283,11 @@ async function callClaude(provider, prompt, systemHint) {
   return text;
 }
 
-async function callOpenAiCompatible(provider, prompt, systemHint) {
-  const systemMsg = systemHint || "You are a senior nonfiction editor. Return strict JSON only.";
+async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
+  const defaultSystem = json
+    ? "You are a senior nonfiction editor. Return strict JSON only."
+    : "You are a helpful, professional assistant. Respond naturally in plain text.";
+  const systemMsg = systemHint || defaultSystem;
   const response = await fetch(`${provider.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
@@ -265,10 +301,13 @@ async function callOpenAiCompatible(provider, prompt, systemHint) {
         { role: "user",   content: prompt    },
       ],
       stream: false,
-      temperature: 0.78,
+      temperature: json ? 0.78 : 0.82,
       // 5,000 tokens is less than two full chapters. Raise to allow full book output.
-      max_tokens: Number(process.env.AI_MAX_TOKENS || 32000),
-      response_format: { type: "json_object" },
+      max_tokens: json ? Number(process.env.AI_MAX_TOKENS || 32000) : 1024,
+      // Only include response_format for structured JSON tasks.
+      // Cerebras/DeepSeek with json_object on a chat prompt forces a JSON wrapper
+      // around conversational text, breaking the VA widget.
+      ...(json ? { response_format: { type: "json_object" } } : {}),
       ...(provider.name === "deepseek" ? {
         thinking: { type: process.env.DEEPSEEK_THINKING || "disabled" },
         reasoning_effort: process.env.DEEPSEEK_REASONING_EFFORT || "high"
@@ -314,7 +353,9 @@ export function resolveProvider(overrideName) {
       name:    "cerebras",
       apiKey:  process.env.CEREBRAS_API_KEY,
       baseUrl: process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
-      model:   process.env.CEREBRAS_MODEL || "gpt-oss-120b",
+      // Default: llama-4-scout-17b-16e-instruct (fast, capable, low latency)
+      // Alternatives: llama3.1-70b, llama3.1-8b
+      model:   process.env.CEREBRAS_MODEL || "llama-4-scout-17b-16e-instruct",
     } : null,
     // Perplexity — OpenAI-compatible, native web-search grounding.
     // Best used for research queries that benefit from real-time sourcing.
@@ -327,8 +368,9 @@ export function resolveProvider(overrideName) {
   };
 
   if (requested && providers[requested]) return providers[requested];
-  // Priority: Gemini → Claude → DeepSeek → Cerebras → Perplexity
-  return providers.gemini || providers.claude || providers.deepseek || providers.cerebras || providers.perplexity || null;
+  // Auto-select priority: Gemini → Claude → Cerebras → DeepSeek → Perplexity
+  // Claude is a reliable fallback for chat — Cerebras is ultra-fast for short responses
+  return providers.gemini || providers.claude || providers.cerebras || providers.deepseek || providers.perplexity || null;
 }
 
 /**

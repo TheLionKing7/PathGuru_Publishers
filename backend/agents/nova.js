@@ -928,6 +928,88 @@ You are Nova. Apply Phase 2 (Architect) of the Velocity Engine. AWS CAF 6 perspe
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // INTAKE & EVALUATION LIFECYCLE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async _onIntakeReceived({ leadState = {}, intake = {}, leadId }) {
+    const intakeSummary = Object.entries(intake).map(([q, a]) => `Q: ${q}\nA: ${a}`).join('\n\n');
+
+    const prompt = `You are Nova, DigiFusion's Automation Engineering Director. A new client intake has just come in.
+
+CLIENT INTAKE:
+${intakeSummary}
+
+Company: ${leadState.company || 'Unknown'} | Challenge: ${leadState.challenge || 'Not specified'}
+
+Using the Automation Velocity Engine, produce:
+1. Preliminary Automation Opportunity Matrix placement (which quadrant: Quick Win / Strategic Bet / Batch Job / Avoid)
+2. Estimated ROI range (time saved × hourly cost, rough calculation)
+3. Likely AVE phase to start at (Phase 1 Diagnose is default unless evidence suggests otherwise)
+4. Technical risk flags from the intake (especially around API readiness and compliance)
+5. Three targeted questions for the strategy session
+6. Suggested 30-minute agenda
+
+Return as structured text for team briefing.`;
+
+    const brief = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'automation opportunity matrix ROI' });
+    await this.notify(`Automation Intake — ${leadState.company || 'New Lead'}`, 'Nova has prepared an AVE brief and session agenda.', 'info', 'dashboard', leadId);
+    return { brief, leadId, status: 'brief_prepared' };
+  }
+
+  async triggerEvaluation({ clientName, clientEmail, leadId, deploymentDate, automatedProcess }) {
+    const EVALUATION_QUESTIONS = {
+      'System Accuracy': 'How accurately is the AI / automation processing your data and tasks compared to your initial expectations? (Exceeds / Meets / Needs improvement)',
+      'Time & Labor Savings': 'Since launching, roughly how many hours per week is your team saving on this specific workflow?',
+      'Error Reduction': 'Have you noticed a decrease in data-entry errors or processing delays? (Significant / Minor / No change)',
+      'Capacity Expansion': 'Has the system allowed your team to handle higher volume without extra headcount? (Yes significantly / Moderately / Not yet)',
+      'Team Sentiment': 'On a scale of 1–10, how enthusiastically has your staff adopted the new system into their daily routine?',
+      'Next Bottleneck': `Now that ${automatedProcess || 'this workflow'} is optimised, what is the next most time-consuming manual process slowing you down?`,
+      'NPS': 'On a scale of 0–10, how likely are you to recommend our AI/SaaS solutions to another founder or executive?',
+      'Case Study Permission': 'Are you open to letting us use anonymised efficiency metrics as a success story in our portfolio?',
+    };
+
+    const db = getSupabase();
+    if (db && leadId) {
+      await db.from('tasks').insert({
+        title:       `Automation Evaluation — ${clientName}`,
+        description: 'Post-implementation evaluation triggered at 30–45 day milestone',
+        agent_id:    'nova',
+        created_by:  'nova',
+        status:      'pending',
+        priority:    2,
+        type:        'evaluation',
+        input:       { clientName, clientEmail, leadId, questions: EVALUATION_QUESTIONS, deploymentDate },
+      }).catch(() => {});
+    }
+
+    await this.notify(`Automation Evaluation Ready — ${clientName}`, `30-day post-deployment milestone. Evaluation ready for ${clientEmail || 'client'}.`, 'info', 'dashboard', leadId);
+    return { status: 'evaluation_triggered', clientName, questions: EVALUATION_QUESTIONS };
+  }
+
+  async processEvaluation({ clientName, leadId, responses = {}, nps }) {
+    const prompt = `You are Nova processing a post-implementation evaluation.
+
+Client: ${clientName} | NPS: ${nps}/10
+
+Evaluation Responses:
+${Object.entries(responses).map(([q, a]) => `${q}: ${a}`).join('\n')}
+
+Provide:
+1. Automation ROI Summary (quantified where possible from their answers)
+2. Adoption health assessment
+3. Next bottleneck → Phase 2 scoping recommendation
+4. Upsell opportunity (feature request or next automation)
+5. Renewal talking points for the executive review
+
+Keep it sharp — this brief goes straight into the account review.`;
+
+    const analysis = await this.runLLM(prompt, { skipMemory: true, knowledgeQuery: 'automation ROI adoption evaluation' });
+    await this.syncToNotion('evaluation', { clientName, track: 'automation', responses, nps, nextBottleneck: responses['Next Bottleneck'] || '', caseStudyPermission: String(responses['Case Study Permission'] || '').toLowerCase().includes('yes') });
+    await this.notify(`Automation Evaluation Processed — ${clientName}`, `NPS ${nps}/10. Phase 2 opportunity identified.`, nps >= 8 ? 'info' : 'warning', 'dashboard', leadId);
+    return { analysis, nps, status: 'evaluation_processed' };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // EXECUTE — Task dispatcher
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -986,6 +1068,18 @@ You are Nova. Apply Phase 2 (Architect) of the Velocity Engine. AWS CAF 6 perspe
 
       case 'build_blueprint':
         result = { result: await this.buildBlueprint(systemName || task.title, requirements || task.description) };
+        break;
+
+      case 'intake_review':
+        result = await this._onIntakeReceived(task);
+        break;
+
+      case 'trigger_evaluation':
+        result = await this.triggerEvaluation(task);
+        break;
+
+      case 'process_evaluation':
+        result = await this.processEvaluation(task);
         break;
 
       default:

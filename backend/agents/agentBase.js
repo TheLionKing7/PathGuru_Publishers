@@ -17,6 +17,7 @@
 
 import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { notion }        from '../notionClient.js';
 
 // ── Default model for all agents (override per agent if needed) ──────────────
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
@@ -313,6 +314,45 @@ Return ONLY the JSON array, no other text.`;
       related_id: relatedId,
       status:     'pending',
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NOTION INTEGRATION
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Log a completed task to Notion's task audit database.
+   * Non-blocking — errors are swallowed so a Notion outage never kills a task.
+   */
+  async notionLogTask(taskTitle, taskType, outcome, notes = '') {
+    notion.logTask({
+      agentId:   this.id,
+      agentName: this.displayName,
+      taskTitle,
+      taskType,
+      outcome,
+      notes,
+    }).catch(() => { /* non-critical */ });
+  }
+
+  /**
+   * Sync any structured data object to Notion.
+   * type: 'lead' | 'evaluation' | 'client_project'
+   */
+  async syncToNotion(type, data) {
+    try {
+      switch (type) {
+        case 'lead':             return await notion.createLead(data);
+        case 'evaluation':       return await notion.createEvaluation(data);
+        case 'client_project':   return await notion.createClientProject(data);
+        default:
+          console.warn(`[${this.displayName}] syncToNotion: unknown type "${type}"`);
+          return null;
+      }
+    } catch (e) {
+      console.error(`[${this.displayName}] syncToNotion error:`, e.message);
+      return null;
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
