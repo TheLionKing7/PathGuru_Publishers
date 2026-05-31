@@ -17,23 +17,41 @@ Publishing · Agents · Research · Blog · Shop             Blog · Intelligenc
 Brief → KDP-ready PDF with full design — cover, chapter openers, interior layout, all generated from a single form. Backed by a Learning Library of reference PDFs (stored in Cloudflare R2) that teach the pipeline your house style.
 
 ### 2. DigiFusion Intelligence Network — 7-Agent System
-A coordinated network of AI agents that operate as a firm's back-office. Agents communicate through a shared Supabase task table and share knowledge via the Synthesizer.
+A coordinated network of AI agents that operate as a firm's back-office. Agents communicate through a shared Supabase task table and share knowledge via the Synthesizer. Every agent can also be messaged directly from the PathGuru console via the built-in chat interface.
 
 | Agent | Role | Key capabilities |
 |---|---|---|
 | **Synthesizer** | Knowledge engine | Ingests PDFs from R2 into structured knowledge; answers queries for other agents |
-| **Nexus** | Project manager & coordinator | Decomposes instructions into tasks, routes to agents, monitors network health |
-| **Atlas** | Research & BD intelligence | Deep market research (Tavily + Firecrawl), prospect analysis, framework development |
-| **Nova** | Automation engineering | Automation system design, technical blueprints, workflow architecture |
-| **Aether** | Content strategy | Content strategies, content production, cross-channel repurposing plans |
+| **Nexus** | Project manager & coordinator | Decomposes instructions, routes tasks, monitors network health, lifecycle sync, daily briefing, pipeline view |
+| **Atlas** | Research & BD intelligence | Deep market research (Tavily + Firecrawl), prospect analysis, framework development, post-service evaluation |
+| **Nova** | Automation engineering | Automation system design, technical blueprints, workflow architecture, post-service evaluation |
+| **Aether** | Content strategy | Content strategies, content production, cross-channel repurposing, post-service evaluation |
 | **Pulse** | Analytics & monitoring | Monitoring sweeps, analytics reports, alert dispatch (push + WhatsApp) |
-| **Assistant** | Customer VA & lead qualification | DigiFusion.com chat widget, lead scoring 0–5, Calendly booking integration |
+| **Aria** | Customer VA & lead qualification | DigiFusion.com chat widget, conversational intake, lead scoring 0–5, Calendly booking integration |
 
-### 3. Blog Pipeline
+### 3. Agent Chat
+Every agent exposes a conversational chat interface accessible directly from the PathGuru console. The shared `AgentBase.chat()` method maintains per-agent conversation history (last 20 turns), recalls episodic memory, and uses the provider fallback chain so chat never fails.
+
+### 4. Blog Pipeline
 AI-written blog posts published directly to DigiFusion via the CMS API. Four built-in personas, Tavily research integration, one-click publish/unpublish.
 
-### 4. Shop Console
+### 5. Agency Playbooks
+Nexus can synthesize client-specific playbooks (JSON + HTML) and store them in R2 under `Digifusion/Playbooks/<track>/`. Playbooks are uploaded with full AWS Signature V4 and served via the public CDN URL.
+
+### 6. Shop Console
 Operator dashboard for the DigiFusion storefront — products, orders, subscriptions, bookings, analytics, T&C, shipping.
+
+---
+
+## AI Provider Chain
+
+Providers are tried in order until one succeeds. Chat calls never force JSON mode.
+
+```
+Cerebras → Gemini → DeepSeek → Claude → Perplexity
+```
+
+Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provider name to pin that provider.
 
 ---
 
@@ -45,15 +63,24 @@ Operator dashboard for the DigiFusion storefront — products, orders, subscript
 |---|---|
 | **Agent network** | All 7 agents built and wired; agent routes live under `/api/agents/*` |
 | **Agent memory** | 4-layer memory model: working (context), episodic (Supabase), semantic (Synthesizer), procedural (system prompt) |
-| **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, Gartner, etc.) |
+| **Agent chat** | Universal `chat()` on AgentBase; per-agent history; `POST /api/agents/:id/chat`; chat panels in console UI |
+| **Nexus lifecycle** | `syncClientLifecycle()` — Notion page updates, milestone actions, pre-session brief dispatch |
+| **Nexus daily briefing** | `generateDailyBriefing()` — network status + leads + completed tasks → LLM summary → Notion |
+| **Nexus pipeline view** | `getPipelineView()` — leads grouped by status/stage |
+| **Post-service evaluation** | Atlas, Nova, Aether each trigger structured evaluation on `evaluation_triggered` milestone |
+| **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, etc.) |
 | **Synthesizer** | PDF ingestion from R2 → structured knowledge → Supabase `knowledge_base` table |
+| **Agency Playbooks** | Synthesize + upload to R2 with AWS V4 signing; manifest tracking per folder |
 | **Notifications** | OneSignal push + WhatsApp (Twilio or Meta Cloud API); dispatched by Pulse on each sweep |
 | **Learning Library** | R2-backed with manifest per folder — uploads, listing, and deletes all persist across Render restarts |
+| **R2 uploads** | Full AWS4-HMAC-SHA256 signing — compatible with Cloudflare R2's strict S3 enforcement |
 | **Vektor user cache** | R2 JSON cache replaces disk; 35s timeout handles cold-start |
 | **CMS integration** | `cmsClient.js` — all 15+ DigiFusion CMS endpoints with bearer auth and retry |
 | **Blog pipeline** | Persona injection, Tavily research, publish/unpublish to DigiFusion |
 | **Shop module** | All 6 tabs wired — products, orders, subscriptions, bookings, analytics, settings |
 | **Persona system** | 4 personas; injected into LLM prompts at generation time |
+| **Notion integration** | `notionClient.js` — leads DB, clients DB, evaluations DB, tasks DB all wired |
+| **Conversational intake** | Aria runs structured per-track intake (BD, Automation, Digital Media) — one question at a time |
 
 ### Pending / known gaps
 
@@ -71,7 +98,11 @@ Operator dashboard for the DigiFusion storefront — products, orders, subscript
 | Method | Endpoint | What it does |
 |---|---|---|
 | `POST` | `/api/agents/:agentId/run` | Dispatch a task to any agent |
-| `POST` | `/api/agents/nexus/orchestrate` | Send natural-language instruction — Nexus decomposes and routes it |
+| `POST` | `/api/agents/:agentId/chat` | Chat with any agent (body: `{ message, history }`) |
+| `POST` | `/api/agents/nexus/orchestrate` | Send natural-language instruction — Nexus decomposes and routes |
+| `POST` | `/api/agents/nexus/lifecycle` | Sync a client lifecycle milestone (body: `{ milestone, ...payload }`) |
+| `POST` | `/api/agents/nexus/daily-briefing` | Generate and log today's briefing |
+| `GET` | `/api/agents/nexus/pipeline` | Lead pipeline view grouped by status/stage |
 | `GET` | `/api/agents/status` | Live network snapshot: all agents + active tasks |
 | `GET` | `/api/agents/tasks` | Task history (`?agent=atlas&status=completed&limit=30`) |
 | `GET` | `/api/agents/report` | Nexus status report |
@@ -97,7 +128,7 @@ Run `supabase/001_agent_network.sql` in the Supabase SQL editor to create all ta
 | `tasks` | Task queue — agents read from and write to this |
 | `agent_memory` | Episodic memory — agents store and recall experience here |
 | `knowledge_base` | Synthesizer knowledge — structured extracts from PDFs |
-| `leads` | Lead pipeline from the DigiFusion Assistant VA |
+| `leads` | Lead pipeline from the DigiFusion VA (Aria) |
 | `notifications` | Alert queue — written by agents, dispatched by Pulse |
 
 If upgrading an existing deployment, also run:
@@ -133,22 +164,23 @@ Priority domains scraped first: McKinsey, BCG, Bain, KPMG, PwC, Deloitte, HBR, M
 ```
 backend/
 ├── server.js                   HTTP server — all routes
-├── aiPipeline.js               Provider router: Gemini → Claude → DeepSeek → Cerebras
-├── cloudflareR2.js             R2 storage — projects, media, library, JSON cache
+├── aiPipeline.js               Provider router: Cerebras → Gemini → DeepSeek → Claude → Perplexity
+├── cloudflareR2.js             R2 storage — projects, media, library, JSON cache (AWS V4 signed)
 ├── supabaseClient.js           Supabase singleton
+├── notionClient.js             Notion API client (leads, clients, evaluations, tasks DBs)
 ├── cmsClient.js                DigiFusion CMS API client
 ├── referenceLibrary.js         Learning Library — baked profiles + intent folders
 ├── pdfDesignExtractor.js       PDF design DNA extraction
 ├── designGuru.js               Book design package generator
 ├── agents/
-│   ├── agentBase.js            Base class — memory, tasks, LLM, delegation, notifications
+│   ├── agentBase.js            Base class — memory, tasks, LLM, delegation, notifications, chat()
 │   ├── synthesizer.js          Knowledge engine — PDF ingestion + knowledge queries
-│   ├── nexus.js                Coordinator — orchestration + network status
-│   ├── atlas.js                Research & BD — Tavily + Firecrawl deep research
-│   ├── nova.js                 Automation engineering
-│   ├── aether.js               Content strategy
+│   ├── nexus.js                Coordinator — orchestration, lifecycle sync, briefing, pipeline
+│   ├── atlas.js                Research & BD — Tavily + Firecrawl deep research + evaluation
+│   ├── nova.js                 Automation engineering + evaluation
+│   ├── aether.js               Content strategy + evaluation
 │   ├── pulse.js                Analytics & monitoring — sweeps + alert dispatch
-│   └── assistant.js            Customer VA — lead qualification + Calendly booking
+│   └── assistant.js            Aria — customer VA, conversational intake, lead scoring
 └── skills/
     ├── research.js             Two-layer research pipeline (Tavily + Firecrawl)
     ├── notifier.js             Notification dispatcher (OneSignal push + WhatsApp)
@@ -159,12 +191,13 @@ backend/
     └── formatting.js           Output formatting
 
 webapp/
-├── index.html                  Three-module shell (Publishing, Blog, Shop)
+├── index.html                  Three-module shell (Publishing, Blog, Shop + Agent Console)
 ├── app.js                      State engine + module routing
+├── agents.js                   Agent console UI — task dispatch + per-agent chat panels
 ├── blog.js                     Blog UI
 ├── shop.js                     Shop UI
 ├── digifusion-chat-widget.js   Vanilla JS embeddable chat widget (standalone alternative)
-└── style.css                   Webapp styles
+└── style.css                   Webapp styles (includes agent chat bubble UI)
 
 supabase/
 └── 001_agent_network.sql       Full schema for the agent network
@@ -181,24 +214,38 @@ GEMINI_MODEL=gemini-2.5-flash
 CLAUDE_API_KEY=...
 CLAUDE_MODEL=claude-sonnet-4-6
 DEEPSEEK_API_KEY=...
+CEREBRAS_API_KEY=...
+CEREBRAS_MODEL=...
 
-# Active provider (auto-selects first key found if blank)
-AI_PROVIDER=gemini
+# Active provider (blank = auto-select starting with Cerebras)
+AI_PROVIDER=
 AI_MAX_TOKENS=65536
 
 # Research
 TAVILY_API_KEY=...          # Layer 1 — discovery (summaries + ranked URLs)
 FIRECRAWL_API_KEY=...       # Layer 2 — full-content scraping
 
-# Storage
+# Storage — Cloudflare R2
 CLOUDFLARE_ACCOUNT_ID=...   # or R2_ACCOUNT_ID
 CLOUDFLARE_R2_BUCKET=...    # or R2_BUCKET_NAME
-CLOUDFLARE_API_TOKEN=...
-R2_PUBLIC_URL=...           # CDN prefix for public URLs
+CLOUDFLARE_API_TOKEN=...    # Cloudflare API token (used for non-upload R2 operations)
+R2_ACCESS_KEY_ID=...        # R2 S3-compatible Access Key ID  ← required for uploads
+R2_SECRET_ACCESS_KEY=...    # R2 S3-compatible Secret Access Key ← required for uploads
+R2_PUBLIC_URL=...           # CDN prefix for public URLs (e.g. https://cdn.digitafusion.com)
+
+# Generate R2 S3 credentials:
+# Cloudflare Dashboard → R2 → Manage R2 API Tokens → Create API Token (Object Read & Write)
 
 # Database
 SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
+
+# Notion (agent lifecycle + client management)
+NOTION_API_KEY=...
+NOTION_LEADS_DB_ID=...
+NOTION_CLIENTS_DB_ID=...
+NOTION_EVALUATIONS_DB_ID=...
+NOTION_TASKS_DB_ID=...
 
 # DigiFusion CMS integration
 DIGIFUSION_API_URL=https://www.digitafusion.com
@@ -234,7 +281,7 @@ PORT=8787
 
 ```bash
 npm install
-cp .env.example .env   # fill in at minimum GEMINI_API_KEY
+cp .env.example .env   # fill in at minimum GEMINI_API_KEY + R2 credentials
 node backend/server.js
 ```
 
