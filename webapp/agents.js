@@ -577,12 +577,38 @@
       </div>`;
   }
 
-  /* ── Nova / Aether / Assistant — generic for now ── */
-  function buildNovaPanel   (agent) { return buildGenericPanel(agent); }
-  function buildAetherPanel (agent) { return buildGenericPanel(agent); }
-  function buildAssistantPanel (agent) { return buildGenericPanel(agent); }
+  /* ══════════════════════════════════════════════════════════════
+     AGENT CHAT — shared chat API + state
+  ══════════════════════════════════════════════════════════════ */
 
-  function buildGenericPanel (agent) {
+  // Per-agent conversation history: { [agentId]: [{ role, content }] }
+  const _chatHistories = {};
+
+  async function sendChatMessage (agentId, message) {
+    const base = getBackendUrl();
+    if (!base) throw new Error('Backend URL not set — check Settings');
+    const history = _chatHistories[agentId] || [];
+    const res = await fetch(`${base}/api/agents/${agentId}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, history }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(e.error || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    // Persist history (keep last 20 turns)
+    _chatHistories[agentId] = [
+      ...history,
+      { role: 'user',      content: message },
+      { role: 'assistant', content: data.reply },
+    ].slice(-20);
+    return data.reply;
+  }
+
+  /* Build a chat panel. Used by Nova, Aether, Assistant + injected tab for others. */
+  function buildChatPanel (agent, extraTopHTML = '') {
     return `
       <div class="console-panel" id="console-${esc(agent.id)}">
         <div class="console-panel-inner">
@@ -592,33 +618,208 @@
             <span class="console-role-tag">${agent.role}</span>
           </div>
 
-          <div class="console-form-group">
-            <label class="console-label" for="genericTaskInput-${esc(agent.id)}">Task description</label>
-            <textarea id="genericTaskInput-${esc(agent.id)}" class="console-textarea" rows="4"
-              placeholder="Describe what you want ${esc(agent.name)} to do…"></textarea>
-          </div>
+          ${extraTopHTML}
 
-          <div class="console-actions">
-            <button class="btn-console-run" data-generic-run="${esc(agent.id)}">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run Task
-            </button>
-          </div>
-
-          <div class="console-output-area" id="genericOutput-${esc(agent.id)}" style="display:none">
-            <div class="console-output-toolbar">
-              <span class="console-output-label">Output</span>
-              <button class="btn-output-action" data-generic-copy="${esc(agent.id)}">Copy</button>
+          <div class="agent-chat-wrap" id="chatWrap-${esc(agent.id)}">
+            <div class="agent-chat-messages" id="chatMessages-${esc(agent.id)}" aria-live="polite" aria-label="${esc(agent.name)} conversation">
+              <div class="chat-bubble chat-bubble--agent">
+                <span class="chat-bubble-name">${esc(agent.name)}</span>
+                <p>Hi — I'm ${esc(agent.name)}, your ${esc(agent.role).toLowerCase()}. What can I help you with?</p>
+              </div>
             </div>
-            <div class="console-markdown-output" id="genericMarkdown-${esc(agent.id)}"></div>
-          </div>
-
-          <div class="console-task-status" id="genericStatus-${esc(agent.id)}" style="display:none">
-            <div class="console-task-spinner"></div>
-            <span id="genericStatusMsg-${esc(agent.id)}">Working…</span>
+            <div class="agent-chat-footer">
+              <textarea class="agent-chat-input" id="chatInput-${esc(agent.id)}" rows="1"
+                placeholder="Message ${esc(agent.name)}…" aria-label="Message ${esc(agent.name)}"></textarea>
+              <button class="agent-chat-send" id="chatSend-${esc(agent.id)}" title="Send (Enter)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              <button class="agent-chat-clear" id="chatClear-${esc(agent.id)}" title="Clear conversation">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>`;
+  }
+
+  /* Wire the chat panel event handlers */
+  function wireChatPanel (agentId) {
+    const messagesEl = $(`chatMessages-${agentId}`);
+    const inputEl    = $(`chatInput-${agentId}`);
+    const sendBtn    = $(`chatSend-${agentId}`);
+    const clearBtn   = $(`chatClear-${agentId}`);
+    if (!inputEl || !sendBtn || !messagesEl) return;
+
+    function appendBubble (role, text) {
+      const div = document.createElement('div');
+      div.className = `chat-bubble chat-bubble--${role === 'user' ? 'user' : 'agent'}`;
+      const agent = AGENTS.find(a => a.id === agentId);
+      if (role !== 'user') {
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'chat-bubble-name';
+        nameSpan.textContent = agent?.name || agentId;
+        div.appendChild(nameSpan);
+      }
+      const p = document.createElement('p');
+      p.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      div.appendChild(p);
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    function appendTyping () {
+      const div = document.createElement('div');
+      div.className = 'chat-bubble chat-bubble--agent chat-bubble--typing';
+      div.id = `chatTyping-${agentId}`;
+      div.innerHTML = `<span class="chat-typing-dot"></span><span class="chat-typing-dot"></span><span class="chat-typing-dot"></span>`;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    async function doSend () {
+      const msg = inputEl.value.trim();
+      if (!msg) return;
+      inputEl.value = '';
+      inputEl.style.height = '';
+      sendBtn.disabled = true;
+      appendBubble('user', msg);
+      appendTyping();
+
+      try {
+        const reply = await sendChatMessage(agentId, msg);
+        $(`chatTyping-${agentId}`)?.remove();
+        appendBubble('agent', reply);
+      } catch (e) {
+        $(`chatTyping-${agentId}`)?.remove();
+        appendBubble('agent', `⚠ ${e.message}`);
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    sendBtn.addEventListener('click', doSend);
+
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+    });
+
+    // Auto-grow textarea
+    inputEl.addEventListener('input', () => {
+      inputEl.style.height = 'auto';
+      inputEl.style.height = `${Math.min(inputEl.scrollHeight, 120)}px`;
+    });
+
+    clearBtn?.addEventListener('click', () => {
+      _chatHistories[agentId] = [];
+      messagesEl.innerHTML = `
+        <div class="chat-bubble chat-bubble--agent">
+          <span class="chat-bubble-name">${esc(AGENTS.find(a=>a.id===agentId)?.name || agentId)}</span>
+          <p>Conversation cleared. How can I help?</p>
+        </div>`;
+    });
+  }
+
+  /* ── Nova — chat + task dispatch ── */
+  function buildNovaPanel (agent) {
+    const taskSection = `
+      <div class="console-panel-section">
+        <div class="console-section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Run an automation task
+        </div>
+        <div class="console-form-group">
+          <select id="novaActionSelect" class="console-select">
+            <option value="design_workflow">Design Workflow</option>
+            <option value="build_blueprint">Build Technical Blueprint</option>
+            <option value="phase2_architect">Phase 2 — Architect</option>
+            <option value="phase3_build">Phase 3 — Build</option>
+          </select>
+        </div>
+        <div class="console-form-group">
+          <textarea id="novaTaskInput" class="console-textarea" rows="3"
+            placeholder="Describe the automation or system to design…"></textarea>
+        </div>
+        <div class="console-actions">
+          <button class="btn-console-run btn-secondary-run" id="novaRunBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Run
+          </button>
+        </div>
+        <div class="console-output-area" id="novaOutput" style="display:none">
+          <div class="console-output-toolbar">
+            <span class="console-output-label" id="novaOutputLabel">Output</span>
+            <button class="btn-output-action" id="novaCopyBtn">Copy</button>
+          </div>
+          <div class="console-markdown-output" id="novaMarkdownOutput"></div>
+        </div>
+        <div class="console-task-status" id="novaTaskStatus" style="display:none">
+          <div class="console-task-spinner"></div>
+          <span id="novaTaskStatusMsg">Working…</span>
+        </div>
+      </div>`;
+    return buildChatPanel(agent, taskSection);
+  }
+
+  /* ── Aether — chat + content task dispatch ── */
+  function buildAetherPanel (agent) {
+    const taskSection = `
+      <div class="console-panel-section">
+        <div class="console-section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Run a content task
+        </div>
+        <div class="console-form-row">
+          <div class="console-form-group">
+            <select id="aetherActionSelect" class="console-select">
+              <option value="write">Write Content</option>
+              <option value="outline">Create Outline</option>
+              <option value="content_strategy">Content Strategy</option>
+              <option value="social_calendar">Social Calendar</option>
+            </select>
+          </div>
+          <div class="console-form-group">
+            <select id="aetherFormatSelect" class="console-select">
+              <option value="blog_post">Blog Post</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="newsletter">Newsletter</option>
+              <option value="thread">Twitter/X Thread</option>
+            </select>
+          </div>
+        </div>
+        <div class="console-form-group">
+          <textarea id="aetherTaskInput" class="console-textarea" rows="3"
+            placeholder="Topic, angle, target audience…"></textarea>
+        </div>
+        <div class="console-actions">
+          <button class="btn-console-run btn-secondary-run" id="aetherRunBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Run
+          </button>
+        </div>
+        <div class="console-output-area" id="aetherOutput" style="display:none">
+          <div class="console-output-toolbar">
+            <span class="console-output-label" id="aetherOutputLabel">Output</span>
+            <button class="btn-output-action" id="aetherCopyBtn">Copy</button>
+          </div>
+          <div class="console-markdown-output" id="aetherMarkdownOutput"></div>
+        </div>
+        <div class="console-task-status" id="aetherTaskStatus" style="display:none">
+          <div class="console-task-spinner"></div>
+          <span id="aetherTaskStatusMsg">Working…</span>
+        </div>
+      </div>`;
+    return buildChatPanel(agent, taskSection);
+  }
+
+  /* ── Assistant — chat only (it IS a chat agent) ── */
+  function buildAssistantPanel (agent) {
+    return buildChatPanel(agent);
+  }
+
+  function buildGenericPanel (agent) {
+    return buildChatPanel(agent);
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -839,7 +1040,118 @@
       wirePushWidget();
     }
 
-    /* ── Generic agents ── */
+    /* ── Nova ── */
+    if (agentId === 'nova') {
+      const runBtn    = $('novaRunBtn');
+      const statusEl  = $('novaTaskStatus');
+      const statusMsg = $('novaTaskStatusMsg');
+      const outputEl  = $('novaOutput');
+      const outputLbl = $('novaOutputLabel');
+      const mdEl      = $('novaMarkdownOutput');
+      const copyBtn   = $('novaCopyBtn');
+
+      runBtn?.addEventListener('click', async () => {
+        const text   = $('novaTaskInput')?.value?.trim();
+        const action = $('novaActionSelect')?.value || 'design_workflow';
+        if (!text) { alert('Please describe the automation.'); return; }
+        runBtn.disabled = true;
+        const actionMap = {
+          'phase2_architect': 'nova/phase2-architect',
+          'phase3_build':     'nova/phase3-build',
+        };
+        const routeId = actionMap[action] ? 'nova' : 'nova';
+        await runTask(routeId, { action, description: text }, {
+          statusEl, statusMsgEl: statusMsg, outputEl, outputLabelEl: outputLbl, markdownEl: mdEl,
+          onSuccess () { runBtn.disabled = false; },
+        });
+        runBtn.disabled = false;
+      });
+      copyBtn?.addEventListener('click', () => copyText(mdEl?.innerText || ''));
+      wireChatPanel(agentId);
+    }
+
+    /* ── Aether ── */
+    if (agentId === 'aether') {
+      const runBtn    = $('aetherRunBtn');
+      const statusEl  = $('aetherTaskStatus');
+      const statusMsg = $('aetherTaskStatusMsg');
+      const outputEl  = $('aetherOutput');
+      const outputLbl = $('aetherOutputLabel');
+      const mdEl      = $('aetherMarkdownOutput');
+      const copyBtn   = $('aetherCopyBtn');
+
+      runBtn?.addEventListener('click', async () => {
+        const text   = $('aetherTaskInput')?.value?.trim();
+        const action = $('aetherActionSelect')?.value || 'write';
+        const fmt    = $('aetherFormatSelect')?.value || 'blog_post';
+        if (!text) { alert('Please describe the content task.'); return; }
+        runBtn.disabled = true;
+        await runTask('aether', { action, description: text, format: fmt }, {
+          statusEl, statusMsgEl: statusMsg, outputEl, outputLabelEl: outputLbl, markdownEl: mdEl,
+          onSuccess () { runBtn.disabled = false; },
+        });
+        runBtn.disabled = false;
+      });
+      copyBtn?.addEventListener('click', () => copyText(mdEl?.innerText || ''));
+      wireChatPanel(agentId);
+    }
+
+    /* ── Assistant ── */
+    if (agentId === 'assistant') {
+      wireChatPanel(agentId);
+    }
+
+    /* ── Chat for agents that already have their own task UI ── */
+    if (['nexus', 'atlas', 'synthesizer', 'pulse'].includes(agentId)) {
+      // Inject a collapsible chat section below the existing panel content
+      const panel = area.querySelector(`.console-panel-inner`);
+      if (panel && !panel.querySelector('.agent-chat-wrap')) {
+        const agent = AGENTS.find(a => a.id === agentId);
+        const chatEl = document.createElement('div');
+        chatEl.className = 'console-panel-section';
+        chatEl.innerHTML = `
+          <div class="console-section-header" style="cursor:pointer" id="chatToggle-${agentId}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat with ${esc(agent?.name || agentId)}
+            <span class="chat-toggle-arrow" id="chatArrow-${agentId}" style="margin-left:auto;transition:transform .2s">▾</span>
+          </div>
+          <div id="chatContainer-${agentId}" style="display:none">
+            <div class="agent-chat-wrap" id="chatWrap-${agentId}">
+              <div class="agent-chat-messages" id="chatMessages-${agentId}" aria-live="polite">
+                <div class="chat-bubble chat-bubble--agent">
+                  <span class="chat-bubble-name">${esc(agent?.name || agentId)}</span>
+                  <p>Hi — I'm ${esc(agent?.name || agentId)}. Ask me anything about my work or the network.</p>
+                </div>
+              </div>
+              <div class="agent-chat-footer">
+                <textarea class="agent-chat-input" id="chatInput-${agentId}" rows="1"
+                  placeholder="Message ${esc(agent?.name || agentId)}…"></textarea>
+                <button class="agent-chat-send" id="chatSend-${agentId}" title="Send (Enter)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                </button>
+                <button class="agent-chat-clear" id="chatClear-${agentId}" title="Clear">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>`;
+        panel.appendChild(chatEl);
+
+        // Toggle open/close
+        document.getElementById(`chatToggle-${agentId}`)?.addEventListener('click', () => {
+          const container = $(`chatContainer-${agentId}`);
+          const arrow     = $(`chatArrow-${agentId}`);
+          if (!container) return;
+          const open = container.style.display === 'none';
+          container.style.display = open ? 'block' : 'none';
+          if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+        });
+
+        wireChatPanel(agentId);
+      }
+    }
+
+    /* ── Generic agents (fallback) ── */
     area.querySelectorAll('[data-generic-run]').forEach(btn => {
       const id = btn.dataset.genericRun;
       btn.addEventListener('click', async () => {

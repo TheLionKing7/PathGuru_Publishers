@@ -386,6 +386,51 @@ Return ONLY the JSON array, no other text.`;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // CHAT — direct team conversation with this agent
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Handle a natural-language message from the internal team.
+   * Maintains conversation history via Supabase agent_memory.
+   * @param {string} message           — the team member's message
+   * @param {object[]} [history]       — prior turns [{ role, content }]
+   * @returns {string}                 — agent's reply
+   */
+  async chat(message, history = []) {
+    // Recall recent episodic context to ground the response
+    const episodic = await this.recallEpisodic(5).catch(() => '');
+
+    // Build a conversation-style prompt
+    const historyBlock = history.length
+      ? history.slice(-8).map(t => `${t.role === 'user' ? 'Team' : this.displayName}: ${t.content}`).join('\n')
+      : '';
+
+    const fullPrompt = [
+      episodic,
+      historyBlock ? `## Recent conversation\n${historyBlock}` : '',
+      `Team: ${message}`,
+    ].filter(Boolean).join('\n\n');
+
+    const reply = await callAiProvider(
+      this.provider,
+      fullPrompt,
+      this.systemPrompt,
+      { json: false }
+    );
+
+    // Log the exchange as episodic memory (low importance — conversational)
+    this.rememberEpisodic({
+      summary:    `Team chat: "${message.slice(0, 80)}"`,
+      content:    { message, reply: reply.slice(0, 500), history_length: history.length },
+      type:       'observation',
+      tags:       ['chat', 'team_interaction'],
+      importance: 2,
+    }).catch(() => {});
+
+    return reply;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // MAIN ENTRY POINT
   // ══════════════════════════════════════════════════════════════════════════
 

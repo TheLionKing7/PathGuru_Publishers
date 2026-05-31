@@ -1621,6 +1621,51 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // POST /api/agents/:id/chat  — team direct conversation with any agent
+  //   body: { message, history: [{ role, content }] }
+  //   Supports all agents: nexus, atlas, nova, aether, pulse, synthesizer, assistant
+  if (req.method === 'POST' && path.match(/^\/api\/agents\/[a-z]+\/chat$/)) {
+    const agentId = path.split('/')[3];
+    const agent = AGENTS[agentId];
+    if (!agent) { err(res, `Agent ${agentId} not found`, 404); return; }
+    try {
+      const body = await readBody(req);
+      const { message, history = [] } = body;
+      if (!message?.trim()) { err(res, 'message is required', 400); return; }
+      const reply = await agent.chat(message, history);
+      json(res, { reply, agentId, timestamp: new Date().toISOString() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/lifecycle  — sync a client milestone
+  //   body: { milestone, leadId, clientName, track, agentId, data }
+  if (req.method === 'POST' && path === '/api/agents/nexus/lifecycle') {
+    try {
+      const body = await readBody(req);
+      const { milestone, ...payload } = body;
+      if (!milestone) { err(res, 'milestone is required', 400); return; }
+      json(res, await AGENTS.nexus.syncClientLifecycle(milestone, payload));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/daily-briefing  — generate morning briefing
+  if (req.method === 'POST' && path === '/api/agents/nexus/daily-briefing') {
+    try {
+      json(res, await AGENTS.nexus.generateDailyBriefing());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/nexus/pipeline  — client pipeline view
+  if (req.method === 'GET' && path === '/api/agents/nexus/pipeline') {
+    try {
+      json(res, await AGENTS.nexus.getPipelineView());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // POST /api/agents/:id/evaluation  — trigger or process a post-service evaluation
   //   body: { action: 'trigger'|'process', clientName, clientEmail, leadId, responses, nps, ... }
   if (req.method === 'POST' && path.match(/^\/api\/agents\/(atlas|nova|aether)\/evaluation$/)) {
@@ -1664,11 +1709,14 @@ server.listen(PORT, () => {
   │   http://localhost:${PORT}                        │
   │                                              │
   │   POST /api/agents/nexus/orchestrate          │
+  │   POST /api/agents/:id/chat                   │
+  │   POST /api/agents/nexus/lifecycle            │
+  │   POST /api/agents/nexus/daily-briefing       │
+  │   GET  /api/agents/nexus/pipeline             │
   │   GET  /api/agents/status                     │
   │   GET  /api/agents/tasks                      │
   │   POST /api/agents/:id/run                    │
   │   POST /api/agents/synthesizer/ingest         │
-  │   POST /api/agents/assistant/chat             │
   │   POST /api/agents/assistant/intake           │
   │   GET  /api/agents/assistant/knowledge        │
   │   POST /api/agents/:id/evaluation             │

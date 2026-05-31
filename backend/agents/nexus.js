@@ -1,23 +1,25 @@
 /**
  * DigiFusion Intelligence Network — Nexus
  * =========================================
- * Project Manager & Task Coordinator
+ * Project Manager, Task Coordinator & Lifecycle Bridge
  *
  * Nexus is the operational backbone of the agent network.
  * It does not produce creative work — it ensures all work gets done,
  * is tracked, routed to the right agent, and delivered on time.
  *
  * Responsibilities:
- *   1. Task intake     — receives instructions from the team, decomposes them
- *   2. Routing         — assigns tasks to the right specialist agent
- *   3. Monitoring      — tracks task status across all agents
- *   4. Oversight relay — surfaces bottlenecks and completion to the team
- *   5. Dashboard       — provides the team a live view of the network
+ *   1. Task intake       — receives instructions from the team, decomposes them
+ *   2. Routing           — assigns tasks to the right specialist agent
+ *   3. Monitoring        — tracks task status across all agents
+ *   4. Lifecycle bridge  — syncs client milestones to Notion, triggers evaluations
+ *   5. Daily briefing    — morning summary of pipeline, tasks, and alerts
+ *   6. Team chat         — answers operational questions in natural language
  */
 
-import { AgentBase }   from './agentBase.js';
-import { getSupabase } from '../supabaseClient.js';
+import { AgentBase }      from './agentBase.js';
+import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider } from '../aiPipeline.js';
+import { notion }         from '../notionClient.js';
 
 const NEXUS_SYSTEM = `You are Nexus — the project manager and operational coordinator of the DigiFusion Intelligence Network.
 
@@ -38,6 +40,8 @@ When you receive an instruction from the team, you:
 4. Set clear priorities and any dependencies
 5. Monitor progress and escalate when needed
 
+You also bridge between agent operations and the Notion project management workspace. Every client milestone you witness gets synced. Every major decision gets logged.
+
 You communicate with the team in a clear, direct, professional tone. No fluff. You report on what is done, what is in progress, and what needs attention.
 
 You are the team's single point of coordination — every task in the network passes through your awareness.`;
@@ -52,6 +56,17 @@ const AGENT_CAPABILITIES = {
   assistant:   ['lead qualification', 'visitor engagement', 'booking', 'customer queries', 'knowledge base answers'],
 };
 
+// ── Client lifecycle stage sequence ──────────────────────────────────────────
+const LIFECYCLE_STAGES = [
+  'discovery',
+  'intake_complete',
+  'strategy_session_booked',
+  'active',
+  'evaluation_triggered',
+  'evaluation_complete',
+  'renewed',
+  'churned',
+];
 
 export class Nexus extends AgentBase {
   constructor() {
@@ -65,16 +80,9 @@ export class Nexus extends AgentBase {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // TASK ROUTING
+  // TASK ROUTING & ORCHESTRATION
   // ══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Decompose a high-level instruction into sub-tasks and assign to agents.
-   * @param {string} instruction  — team instruction (e.g. "Produce a BD playbook on SaaS sales")
-   * @param {object} [options]
-   * @param {number} [options.priority]
-   * @returns {object[]}  — array of created task records
-   */
   async orchestrate(instruction, options = {}) {
     const { priority = 3 } = options;
 
@@ -85,19 +93,10 @@ INSTRUCTION: "${instruction}"
 AVAILABLE AGENTS AND CAPABILITIES:
 ${Object.entries(AGENT_CAPABILITIES).map(([id, caps]) => `- ${id}: ${caps.join(', ')}`).join('\n')}
 
-Break this instruction into 2–6 well-defined tasks. For each task:
-{
-  "title": "clear task title",
-  "description": "what the agent must produce, specific and actionable",
-  "agent_id": "which agent should handle this",
-  "type": "research|content|design|analysis|general",
-  "priority": 1-5,
-  "depends_on": [],
-  "estimated_complexity": "simple|moderate|complex"
-}
+Break this instruction into 2–6 well-defined tasks. For each task return JSON with fields:
+title, description, agent_id, type (research|content|design|analysis|general), priority (1-5), depends_on (array), estimated_complexity (simple|moderate|complex)
 
-Return a JSON array of tasks ordered by execution sequence (tasks that must run first come first).
-Return ONLY the JSON array.`;
+Return a JSON array of tasks ordered by execution sequence. Return ONLY the JSON array.`;
 
     let tasks;
     try {
@@ -105,7 +104,6 @@ Return ONLY the JSON array.`;
       tasks = this._parseJsonArray(raw);
     } catch (e) {
       console.error('[Nexus] Decomposition failed:', e.message);
-      // Fallback: single task assigned to most relevant agent
       tasks = [{
         title:       instruction.slice(0, 80),
         description: instruction,
@@ -118,20 +116,18 @@ Return ONLY the JSON array.`;
     const db = getSupabase();
     const created = [];
 
-    // Create a parent task for this instruction
     const { data: parent } = db ? await db.from('tasks').insert({
-      title:      `[Nexus] ${instruction.slice(0, 100)}`,
+      title:       `[Nexus] ${instruction.slice(0, 100)}`,
       description: instruction,
-      agent_id:   'nexus',
-      created_by: 'team',
-      status:     'in_progress',
+      agent_id:    'nexus',
+      created_by:  'team',
+      status:      'in_progress',
       priority,
-      type:       'general',
+      type:        'general',
     }).select().single() : { data: null };
 
     const parentId = parent?.id;
 
-    // Create each sub-task
     for (const t of tasks) {
       if (db) {
         const { data } = await db.from('tasks').insert({
@@ -149,9 +145,8 @@ Return ONLY the JSON array.`;
       }
     }
 
-    // Write episodic memory
     await this.rememberEpisodic({
-      summary:    `Orchestrated instruction: "${instruction.slice(0, 100)}" → ${tasks.length} tasks created`,
+      summary:    `Orchestrated: "${instruction.slice(0, 100)}" → ${tasks.length} tasks`,
       content:    { instruction, tasks, parentId },
       type:       'decision',
       tags:       ['orchestration'],
@@ -159,20 +154,232 @@ Return ONLY the JSON array.`;
     });
 
     console.log(`[Nexus] Orchestrated: "${instruction.slice(0, 60)}" → ${created.length} tasks`);
-    return { parentId, tasks: created };
+    return { parentId, tasks: created, plan: tasks };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CLIENT LIFECYCLE — Notion bridge
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async syncClientLifecycle(milestone, payload = {}) {
+    const { leadId, clientName, track, agentId, data = {} } = payload;
+    console.log(`[Nexus] Lifecycle milestone: ${milestone} for ${clientName || leadId}`);
+
+    if (data.notionPageId) {
+      notion.updatePage(data.notionPageId, {
+        'Stage': { select: { name: this._stageLabel(milestone) } },
+        'Last Updated': { date: { start: new Date().toISOString() } },
+      }).catch(() => {});
+    }
+
+    notion.logTask({
+      agentId:   'nexus',
+      agentName: 'Nexus',
+      taskTitle: `Client Lifecycle: ${clientName || leadId} → ${milestone}`,
+      taskType:  'lifecycle_sync',
+      outcome:   'complete',
+      notes:     `Track: ${track || 'unknown'}. Triggered by: ${agentId || 'system'}`,
+    }).catch(() => {});
+
+    await this.notify(
+      `Client milestone: ${milestone.replace(/_/g, ' ')}`,
+      `${clientName || 'Client'} moved to ${this._stageLabel(milestone)}. Track: ${track || 'unknown'}.`,
+      'info',
+      'dashboard',
+      leadId
+    );
+
+    await this._dispatchMilestoneActions(milestone, payload);
+
+    await this.rememberEpisodic({
+      summary:    `Lifecycle sync: ${clientName || leadId} → ${milestone}`,
+      content:    payload,
+      type:       'decision',
+      tags:       ['lifecycle', 'notion', milestone],
+      importance: 4,
+    });
+
+    return { synced: true, milestone, stage: this._stageLabel(milestone) };
+  }
+
+  async _dispatchMilestoneActions(milestone, payload) {
+    const db = getSupabase();
+    if (!db) return;
+    const { leadId, clientName, track, data = {} } = payload;
+
+    switch (milestone) {
+      case 'intake_complete':
+        if (!data.notionPageId) {
+          notion.createClientProject({
+            clientName: clientName || 'New Client',
+            track,
+            stage: 'Intake Complete',
+            leadScore: data.leadScore || 4,
+            notes: `Intake completed via VA. Lead ID: ${leadId}`,
+          }).catch(() => {});
+        }
+        break;
+
+      case 'strategy_session_booked':
+        if (track === 'bd' || track === 'automation') {
+          await db.from('tasks').insert({
+            title:       `Pre-session brief: ${clientName || leadId}`,
+            description: `Prepare a 1-page prospect intelligence brief for the upcoming strategy session with ${clientName || 'client'}. Focus on their stated priorities and market context.`,
+            agent_id:    'atlas',
+            created_by:  'nexus',
+            status:      'pending',
+            priority:    5,
+            type:        'research',
+            input:       { milestone, ...payload },
+          });
+        }
+        if (track === 'digital_media') {
+          await db.from('tasks').insert({
+            title:       `Pre-session content audit: ${clientName || leadId}`,
+            description: `Prepare a brief content landscape analysis for the strategy session with ${clientName || 'client'}.`,
+            agent_id:    'aether',
+            created_by:  'nexus',
+            status:      'pending',
+            priority:    5,
+            type:        'analysis',
+            input:       { milestone, ...payload },
+          });
+        }
+        break;
+
+      case 'active':
+        notion.createClientProject({
+          clientName: clientName || 'Active Client',
+          track,
+          stage:      'Active',
+          notes:      `Project activated. Coordinated by Nexus. Lead ID: ${leadId}`,
+        }).catch(() => {});
+        break;
+    }
+  }
+
+  _stageLabel(milestone) {
+    const labels = {
+      discovery:               'Discovery',
+      intake_complete:         'Intake Complete',
+      strategy_session_booked: 'Session Booked',
+      active:                  'Active',
+      evaluation_triggered:    'Evaluation Triggered',
+      evaluation_complete:     'Evaluation Complete',
+      renewed:                 'Renewed',
+      churned:                 'Churned',
+    };
+    return labels[milestone] || milestone;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DAILY BRIEFING
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async generateDailyBriefing() {
+    const status = await this.getNetworkStatus();
+    const db = getSupabase();
+
+    let recentLeads = [];
+    if (db) {
+      const { data } = await db.from('leads')
+        .select('name, email, lead_score, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      recentLeads = data || [];
+    }
+
+    let recentCompleted = [];
+    if (db) {
+      const since = new Date(Date.now() - 86400000).toISOString();
+      const { data } = await db.from('tasks')
+        .select('title, agent_id, completed_at')
+        .eq('status', 'completed')
+        .gte('completed_at', since)
+        .order('completed_at', { ascending: false })
+        .limit(10);
+      recentCompleted = data || [];
+    }
+
+    const briefingPrompt = `You are Nexus. Generate the morning operational briefing for the DigiFusion team.
+
+TODAY: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+AGENT NETWORK STATUS:
+${status.agents.map(a => `- ${a.display_name || a.id}: ${a.status}${a.current_task_id ? ' (on task)' : ''}`).join('\n') || 'Status unavailable'}
+
+ACTIVE / PENDING TASKS (${status.activeTasks.length}):
+${status.activeTasks.slice(0, 8).map(t => `- [P${t.priority}] ${t.title} → ${t.agent_id} (${t.status})`).join('\n') || 'No active tasks'}
+
+COMPLETED IN LAST 24h (${recentCompleted.length}):
+${recentCompleted.map(t => `- ${t.title} [${t.agent_id}]`).join('\n') || 'None'}
+
+RECENT LEADS (${recentLeads.length}):
+${recentLeads.map(l => `- ${l.name || l.email}: score ${l.lead_score}, status ${l.status}`).join('\n') || 'None'}
+
+PENDING ALERTS (${status.pendingAlerts.length}):
+${status.pendingAlerts.map(a => `- [${a.severity?.toUpperCase()}] ${a.title}`).join('\n') || 'None'}
+
+Write a direct morning briefing covering: what got done, what's active, pipeline pulse, anything needing attention, and one focus line per active agent. Be direct. No fluff.`;
+
+    const briefing = await callAiProvider(this.provider, briefingPrompt, this.systemPrompt, { json: false });
+
+    notion.logTask({
+      agentId:   'nexus',
+      agentName: 'Nexus',
+      taskTitle: `Daily Briefing — ${new Date().toLocaleDateString()}`,
+      taskType:  'briefing',
+      outcome:   'complete',
+      notes:     briefing.slice(0, 500),
+    }).catch(() => {});
+
+    return { briefing, generatedAt: new Date().toISOString() };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PIPELINE VIEW
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async getPipelineView() {
+    const db = getSupabase();
+    if (!db) return { error: 'Supabase not configured' };
+
+    const { data: leads, error } = await db.from('leads')
+      .select('id, name, email, lead_score, status, track, created_at, updated_at')
+      .order('lead_score', { ascending: false })
+      .limit(50);
+
+    if (error) return { error: error.message };
+
+    const pipeline = {};
+    for (const lead of (leads || [])) {
+      const stage = lead.status || 'discovery';
+      if (!pipeline[stage]) pipeline[stage] = [];
+      pipeline[stage].push({
+        id:      lead.id,
+        name:    lead.name || lead.email,
+        score:   lead.lead_score,
+        track:   lead.track,
+        since:   lead.created_at,
+        updated: lead.updated_at,
+      });
+    }
+
+    return {
+      pipeline,
+      totalLeads: leads?.length || 0,
+      stages:     LIFECYCLE_STAGES,
+      pulledAt:   new Date().toISOString(),
+    };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // NETWORK STATUS DASHBOARD
   // ══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Return a live snapshot of the entire agent network.
-   * Used by the team oversight dashboard.
-   */
   async getNetworkStatus() {
     const db = getSupabase();
-    if (!db) return { error: 'Supabase not configured' };
+    if (!db) return { agents: [], activeTasks: [], pendingAlerts: [], snapshotAt: new Date().toISOString() };
 
     const [agentsRes, tasksRes, notifRes] = await Promise.all([
       db.from('agents').select('*').order('id'),
@@ -191,16 +398,13 @@ Return ONLY the JSON array.`;
     ]);
 
     return {
-      agents:           agentsRes.data || [],
-      activeTasks:      tasksRes.data  || [],
-      pendingAlerts:    notifRes.data  || [],
-      snapshotAt:       new Date().toISOString(),
+      agents:        agentsRes.data || [],
+      activeTasks:   tasksRes.data  || [],
+      pendingAlerts: notifRes.data  || [],
+      snapshotAt:    new Date().toISOString(),
     };
   }
 
-  /**
-   * Return task history with filters.
-   */
   async getTaskHistory({ agentId = null, status = null, limit = 30, offset = 0 } = {}) {
     const db = getSupabase();
     if (!db) return { tasks: [] };
@@ -218,10 +422,6 @@ Return ONLY the JSON array.`;
     return { tasks: data || [], total: count, limit, offset };
   }
 
-  /**
-   * Generate a natural-language status report for the team.
-   * Nexus reads the current network state and writes a concise briefing.
-   */
   async generateStatusReport() {
     const status = await this.getNetworkStatus();
 
@@ -238,7 +438,7 @@ ${status.pendingAlerts.map(a => `- [${a.severity.toUpperCase()}] ${a.title}: ${a
 
 Write a 5–10 sentence operational briefing. Be direct. Flag anything needing immediate attention.`;
 
-    return callAiProvider(this.provider, reportPrompt, this.systemPrompt);
+    return callAiProvider(this.provider, reportPrompt, this.systemPrompt, { json: false });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -246,11 +446,11 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
   // ══════════════════════════════════════════════════════════════════════════
 
   async execute(task) {
-    const { action, instruction, agentId, status, limit, offset } = task;
+    const { action, instruction, agentId, status, limit, offset, milestone, payload, message, history } = task;
 
     switch (action) {
       case 'orchestrate':
-        return this.orchestrate(instruction, { priority: task.priority });
+        return this.orchestrate(instruction || task.description, { priority: task.priority });
 
       case 'network_status':
         return this.getNetworkStatus();
@@ -261,8 +461,19 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
       case 'status_report':
         return { report: await this.generateStatusReport() };
 
+      case 'daily_briefing':
+        return this.generateDailyBriefing();
+
+      case 'pipeline_view':
+        return this.getPipelineView();
+
+      case 'lifecycle_sync':
+        return this.syncClientLifecycle(milestone, payload || task);
+
+      case 'chat':
+        return { reply: await this.chat(message || task.description, history || []) };
+
       default:
-        // Team sent a natural language instruction — orchestrate it
         if (task.description || task.instruction) {
           return this.orchestrate(task.description || task.instruction, { priority: task.priority });
         }
