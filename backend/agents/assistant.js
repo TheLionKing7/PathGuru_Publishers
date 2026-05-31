@@ -27,7 +27,7 @@ import { notion }         from '../notionClient.js';
 
 // ── VA system prompt ───────────────────────────────────────────────────────────
 
-const ASSISTANT_SYSTEM = `You are the DigiFusion Assistant — the intelligent front door of DigiFusion, a global consulting firm specialising in AI automation, business development, and digital media for SMBs.
+const ASSISTANT_SYSTEM = `You are Aria — the intelligent front door of DigiFusion, a global consulting firm specialising in AI automation, business development, and digital media for SMBs.
 
 YOUR CHARACTER:
 You are professional, warm, and perceptive. You represent a premium firm and carry yourself accordingly — never robotic, never sycophantic, never rushing the conversation. You listen carefully, ask precise questions, and respond with genuine insight.
@@ -35,7 +35,7 @@ You are professional, warm, and perceptive. You represent a premium firm and car
 You are not a FAQ bot. You are a skilled business development professional who happens to be always available. Your conversations are purposeful — you understand what the visitor needs and determine whether DigiFusion is the right partner.
 
 YOUR KNOWLEDGE:
-You have access to DigiFusion's full intelligence base — the AVE framework (Nova), the Deal Engine (Atlas), the C2C Pipeline (Aether), pricing, and engagement model. You answer framework questions directly and confidently.
+You have access to DigiFusion's full intelligence base — the Automation Velocity Engine, the Deal Engine, the Content-to-Capital Pipeline, pricing, and engagement model. You answer framework questions directly and confidently.
 
 YOUR QUALIFICATION MISSION:
 Not every visitor is ready for a strategy session. You qualify before you offer. Qualification criteria:
@@ -97,7 +97,7 @@ const INTAKE_FLOWS = {
   automation: {
     trackName: 'AI Automation & SaaS',
     agentOwner: 'nova',
-    intro: "Let me ask you a few diagnostic questions so Nova — our automation architect — can hit the ground running when we meet. This helps us pre-build a custom ROI estimate for your situation.",
+    intro: "Let me ask you a few diagnostic questions so our automation team can hit the ground running when we meet. This helps us pre-build a custom ROI estimate for your situation.",
     questions: [
       {
         key: 'target_workflow',
@@ -130,7 +130,7 @@ const INTAKE_FLOWS = {
   digital_media: {
     trackName: 'Digital Media',
     agentOwner: 'aether',
-    intro: "A few questions before we map your digital media strategy — Aether needs this context to design something that will actually move your numbers rather than just look busy.",
+    intro: "A few questions before we map your digital media strategy — our content team needs this context to design something that will actually move your numbers rather than just look busy.",
     questions: [
       {
         key: 'primary_objective',
@@ -199,7 +199,7 @@ export class Assistant extends AgentBase {
   constructor() {
     super({
       id:           'assistant',
-      displayName:  'Assistant',
+      displayName:  'Aria',
       role:         'Customer VA, Lead Qualification & Intake',
       systemPrompt: ASSISTANT_SYSTEM,
       domains:      ['business_development', 'digital_media', 'automation', 'general'],
@@ -265,7 +265,7 @@ ${historyText}
 
 Visitor: ${message}
 
-Respond as the DigiFusion Assistant. Be genuine, professional, and helpful.
+Respond as Aria. Be genuine, professional, and helpful.
 ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, mention the strategy session. The booking link will be appended by the system.' : ''}`;
 
       response = await callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
@@ -401,7 +401,7 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, mention the strateg
     // Last answer was for currentStep — store it then ask nextStep
     if (nextStep >= flow.questions.length) {
       // All questions answered — wrap up
-      const prompt = `You are the DigiFusion Assistant wrapping up a client intake conversation.
+      const prompt = `You are Aria, wrapping up a client intake conversation for DigiFusion.
 
 The client has just answered all intake questions for the ${flow.trackName} track.
 Their final answer: "${message}"
@@ -415,7 +415,7 @@ ${knowledge || ''}
 Write a warm, professional closing message that:
 1. Acknowledges their last answer briefly
 2. Thanks them for the time and context
-3. Explains the next step (our team / ${flow.agentOwner === 'atlas' ? 'Atlas our BD Director' : flow.agentOwner === 'nova' ? 'Nova our automation architect' : 'Aether our media strategist'} will review their intake and prepare a custom roadmap)
+3. Explains the next step (our ${flow.agentOwner === 'atlas' ? 'BD specialists' : flow.agentOwner === 'nova' ? 'automation team' : 'content strategists'} will review their intake and prepare a custom roadmap)
 4. Tells them to expect an invitation for the strategy session within 24 hours
 5. Offers to answer any questions in the meantime
 
@@ -428,7 +428,7 @@ Keep it natural and concise — 3–4 short paragraphs maximum.`;
     const nextQuestion = flow.questions[nextStep];
     const prevQuestion = flow.questions[intake.currentStep];
 
-    const prompt = `You are the DigiFusion Assistant conducting a structured intake conversation for the ${flow.trackName} track.
+    const prompt = `You are Aria, conducting a structured intake conversation for DigiFusion's ${flow.trackName} track.
 
 The visitor just answered this question:
 "${prevQuestion.ask}"
