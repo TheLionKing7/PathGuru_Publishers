@@ -32,12 +32,14 @@ function getObjectUrl(key) {
 
 async function uploadToR2(key, body, contentType) {
   const url = getObjectUrl(key);
+  const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z";
   const response = await fetch(url, {
     method: "PUT",
     headers: {
       "Authorization": `Bearer ${apiToken}`,
       "Content-Type": contentType,
-      "x-amz-content-sha256": "UNSIGNED-PAYLOAD"
+      "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+      "x-amz-date": amzDate
     },
     body
   });
