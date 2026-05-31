@@ -1,18 +1,109 @@
+import { createHmac, createHash } from "crypto";
+
 function envValue(name) {
   return typeof process.env[name] === "string" ? process.env[name].trim() : "";
 }
 
 // Support both naming conventions
-const accountId = envValue("CLOUDFLARE_ACCOUNT_ID") || envValue("R2_ACCOUNT_ID");
-const bucket    = envValue("CLOUDFLARE_R2_BUCKET")  || envValue("R2_BUCKET_NAME");
-const apiToken  = envValue("CLOUDFLARE_API_TOKEN");
-const publicUrl = envValue("R2_PUBLIC_URL");    // e.g. https://cdn.digitafusion.com
+const accountId     = envValue("CLOUDFLARE_ACCOUNT_ID") || envValue("R2_ACCOUNT_ID");
+const bucket        = envValue("CLOUDFLARE_R2_BUCKET")  || envValue("R2_BUCKET_NAME");
+const apiToken      = envValue("CLOUDFLARE_API_TOKEN");
+const accessKeyId   = envValue("R2_ACCESS_KEY_ID");
+const secretKey     = envValue("R2_SECRET_ACCESS_KEY");
+const publicUrl     = envValue("R2_PUBLIC_URL");    // e.g. https://cdn.digitafusion.com
 
 export const r2Config = {
   accountId,
   bucket,
   apiToken
 };
+
+// ── AWS Signature V4 helpers ──────────────────────────────────────────────────
+
+function hmac(key, data, encoding) {
+  return createHmac("sha256", key).update(data, "utf8").digest(encoding || "buffer");
+}
+
+function sha256hex(data) {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+function getSigningKey(dateStamp, region, service) {
+  const kDate    = hmac("AWS4" + secretKey, dateStamp);
+  const kRegion  = hmac(kDate, region);
+  const kService = hmac(kRegion, service);
+  return hmac(kService, "aws4_request");
+}
+
+/**
+ * Build AWS4-HMAC-SHA256 signed headers for an R2 PUT.
+ * Falls back to Bearer token if S3 credentials are absent.
+ */
+async function buildR2Headers(url, body, contentType) {
+  // Fall back to Bearer if no S3 keys configured
+  if (!accessKeyId || !secretKey) {
+    return {
+      "Authorization":        `Bearer ${apiToken}`,
+      "Content-Type":         contentType,
+      "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+      "x-amz-date":           new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z",
+    };
+  }
+
+  const region  = "auto";
+  const service = "s3";
+  const now     = new Date();
+  const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z";
+  const dateStamp = amzDate.slice(0, 8);
+
+  const parsed     = new URL(url);
+  const host       = parsed.host;
+  const path       = parsed.pathname;
+
+  // Compute payload hash
+  const bodyBuffer = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
+  const payloadHash = sha256hex(bodyBuffer);
+
+  // Canonical headers (must be sorted)
+  const canonicalHeaders =
+    `content-type:${contentType}\n` +
+    `host:${host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+
+  const signedHeaders = "content-type;host;x-amz-content-sha256;x-amz-date";
+
+  const canonicalRequest = [
+    "PUT",
+    path,
+    "",                 // query string
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join("\n");
+
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    sha256hex(canonicalRequest),
+  ].join("\n");
+
+  const signingKey = getSigningKey(dateStamp, region, service);
+  const signature  = hmac(signingKey, stringToSign, "hex");
+
+  const authHeader =
+    `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return {
+    "Authorization":        authHeader,
+    "Content-Type":         contentType,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date":           amzDate,
+  };
+}
 
 export function isR2Enabled() {
   return Boolean(accountId && bucket && apiToken);
@@ -31,18 +122,9 @@ function getObjectUrl(key) {
 }
 
 async function uploadToR2(key, body, contentType) {
-  const url = getObjectUrl(key);
-  const amzDate = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z";
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: {
-      "Authorization": `Bearer ${apiToken}`,
-      "Content-Type": contentType,
-      "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
-      "x-amz-date": amzDate
-    },
-    body
-  });
+  const url     = getObjectUrl(key);
+  const headers = await buildR2Headers(url, body, contentType);
+  const response = await fetch(url, { method: "PUT", headers, body });
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
