@@ -1561,6 +1561,61 @@
     $('tasksAgentFilter')?.addEventListener('change', loadTasks);
     $('tasksStatusFilter')?.addEventListener('change', loadTasks);
 
+    /* ── New Task modal ── */
+    const newTaskOverlay  = $('newTaskOverlay');
+    const newTaskForm     = $('newTaskForm');
+    const newTaskError    = $('newTaskError');
+    const newTaskSubmitBtn = $('newTaskSubmitBtn');
+
+    function openNewTaskModal () {
+      if (!newTaskOverlay) return;
+      newTaskForm?.reset();
+      if (newTaskError) { newTaskError.style.display = 'none'; newTaskError.textContent = ''; }
+      newTaskOverlay.style.display = 'flex';
+      setTimeout(() => $('ntTitle')?.focus(), 50);
+    }
+    function closeNewTaskModal () {
+      if (newTaskOverlay) newTaskOverlay.style.display = 'none';
+    }
+
+    $('tasksNewBtn')?.addEventListener('click', openNewTaskModal);
+    $('newTaskCloseBtn')?.addEventListener('click', closeNewTaskModal);
+    $('newTaskCancelBtn')?.addEventListener('click', closeNewTaskModal);
+    newTaskOverlay?.addEventListener('click', e => { if (e.target === newTaskOverlay) closeNewTaskModal(); });
+
+    newTaskForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const title       = $('ntTitle')?.value.trim();
+      const description = $('ntDescription')?.value.trim();
+      const agent_id    = $('ntAgent')?.value;
+      const priority    = $('ntPriority')?.value;
+      const type        = $('ntType')?.value;
+      const due_raw     = $('ntDue')?.value;
+      const due_at      = due_raw ? new Date(due_raw).toISOString() : null;
+
+      if (!title) { return; }
+      newTaskSubmitBtn.disabled = true;
+      newTaskSubmitBtn.textContent = 'Creating…';
+      if (newTaskError) newTaskError.style.display = 'none';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/agents/tasks`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ title, description, agent_id: agent_id || null, priority, type, due_at }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create task');
+        closeNewTaskModal();
+        await loadTasks();
+      } catch (ex) {
+        if (newTaskError) { newTaskError.textContent = ex.message; newTaskError.style.display = 'block'; }
+      } finally {
+        newTaskSubmitBtn.disabled = false;
+        newTaskSubmitBtn.textContent = 'Create Task';
+      }
+    });
+
     /* Refresh — Leads */
     $('leadsRefreshBtn')?.addEventListener('click', loadLeads);
     $('leadsStatusFilter')?.addEventListener('change', loadLeads);

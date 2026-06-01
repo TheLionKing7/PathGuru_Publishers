@@ -1535,6 +1535,7 @@
               <option value="failed">Failed</option>
             </select>
             <button class="btn-secondary btn-sm" id="tasksRefreshBtn">Refresh</button>
+            <button class="btn-primary btn-sm" id="tasksNewBtn">+ New Task</button>
           </div>
         </header>
         <header class="panel-header" data-for="agents-leads">
@@ -1902,5 +1903,75 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
   <script src="agents.js"></script>
+
+  <!-- ── Create Task Modal ── -->
+  <div class="modal-overlay" id="newTaskOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;">
+    <div class="modal-box" style="background:var(--surface,#1a1a2e);border:1px solid var(--border,#2a2a4a);border-radius:12px;padding:28px 32px;width:min(520px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.5);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <h2 style="margin:0;font-size:1.1rem;font-weight:700;color:var(--foreground,#fff);">New Task</h2>
+        <button id="newTaskCloseBtn" style="background:none;border:none;cursor:pointer;color:var(--muted,#888);font-size:1.4rem;line-height:1;" aria-label="Close">&times;</button>
+      </div>
+      <form id="newTaskForm" autocomplete="off">
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Title <span style="color:#e74c3c">*</span></label>
+          <input id="ntTitle" type="text" required placeholder="e.g. Research OmniCon competitor pricing"
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
+        </div>
+        <div style="margin-bottom:14px;">
+          <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Description / Instructions</label>
+          <textarea id="ntDescription" rows="3" placeholder="What should the agent do? Be specific."
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;resize:vertical;"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div>
+            <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Assign Agent</label>
+            <select id="ntAgent" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
+              <option value="">Unassigned</option>
+              <option value="nexus">Nexus</option>
+              <option value="atlas">Atlas</option>
+              <option value="nova">Nova</option>
+              <option value="aether">Aether</option>
+              <option value="researcher">Researcher</option>
+              <option value="synthesizer">Synthesizer</option>
+              <option value="pulse">Pulse</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Priority</label>
+            <select id="ntPriority" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
+              <option value="1">🔴 Critical (1)</option>
+              <option value="2">🟠 High (2)</option>
+              <option value="3" selected>🟡 Normal (3)</option>
+              <option value="4">🟢 Low (4)</option>
+              <option value="5">⚪ Minimal (5)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px;">
+          <div>
+            <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Type</label>
+            <select id="ntType" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
+              <option value="general">General</option>
+              <option value="research">Research</option>
+              <option value="content">Content</option>
+              <option value="analysis">Analysis</option>
+              <option value="design">Design</option>
+              <option value="bd">Business Dev</option>
+            </select>
+          </div>
+          <div>
+            <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Due Date (optional)</label>
+            <input id="ntDue" type="datetime-local"
+              style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" id="newTaskCancelBtn" style="padding:10px 20px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:transparent;color:var(--muted,#888);cursor:pointer;font-size:.9rem;">Cancel</button>
+          <button type="submit" id="newTaskSubmitBtn" style="padding:10px 24px;border-radius:8px;border:none;background:var(--accent,#7c5cfc);color:#fff;font-weight:600;cursor:pointer;font-size:.9rem;">Create Task</button>
+        </div>
+        <p id="newTaskError" style="display:none;color:#e74c3c;font-size:.8rem;margin-top:10px;"></p>
+      </form>
+    </div>
+  </div>
 </body>
 </html>

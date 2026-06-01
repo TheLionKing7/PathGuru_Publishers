@@ -832,6 +832,46 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── POST /api/agents/tasks ───────────────────────────────────────────────
+  // Create a manual task and optionally dispatch it to an agent immediately.
+  // Body: { title, description, agent_id, priority, type, due_at }
+  if (req.method === 'POST' && path === '/api/agents/tasks') {
+    try {
+      const body = await readBody(req);
+      const { title, description, agent_id, priority = 3, type = 'general', due_at } = body;
+      if (!title) { err(res, 'title is required', 400); return; }
+
+      const db = getSupabase();
+      const taskRow = {
+        title,
+        description:  description || null,
+        agent_id:     agent_id    || null,
+        created_by:   'team',
+        status:       'pending',
+        priority:     Math.min(5, Math.max(1, parseInt(priority, 10) || 3)),
+        type:         type || 'general',
+        due_at:       due_at || null,
+        input:        description ? { instruction: description } : null,
+      };
+      const { data, error: dbErr } = await db.from('tasks').insert(taskRow).select().single();
+      if (dbErr) { err(res, dbErr.message, 500); return; }
+
+      // If an agent is assigned, dispatch immediately via the agent's execute()
+      if (agent_id && data) {
+        const agentMap = { nexus, atlas, nova, aether, pulse, synthesizer, researcher };
+        const agent = agentMap[agent_id];
+        if (agent && typeof agent.execute === 'function') {
+          agent.execute({ ...data, instruction: description || title }).catch(e =>
+            console.warn(`[Server] Task dispatch to ${agent_id} failed:`, e.message)
+          );
+        }
+      }
+
+      json(res, { success: true, task: data });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── GET /api/agents/tasks ────────────────────────────────────────────────
   // Task history with optional ?agent=atlas&status=completed&limit=30 filters
   if (req.method === 'GET' && path === '/api/agents/tasks') {

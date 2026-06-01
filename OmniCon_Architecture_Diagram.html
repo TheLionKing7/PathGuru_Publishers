@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OmniCon System Architecture</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; font-family: Arial, sans-serif; padding: 40px 24px; }
+  .diagram { max-width: 900px; margin: 0 auto; }
+  .diagram-title { text-align: center; color: #e2e8f0; font-size: 1.2rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 4px; }
+  .diagram-sub { text-align: center; color: #64748b; font-size: .82rem; margin-bottom: 32px; }
+  .sources-row { display: flex; gap: 8px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .source-chip { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 6px 14px; font-size: .75rem; color: #94a3b8; font-weight: 600; letter-spacing: .04em; }
+  .source-chip.fed { border-color: #1e40af; color: #93c5fd; }
+  .source-chip.sled { border-color: #7c3aed; color: #c4b5fd; }
+  .arrow-down { display: flex; justify-content: center; align-items: center; height: 32px; color: #475569; font-size: .78rem; }
+  .layer { border-radius: 10px; padding: 16px 20px; margin-bottom: 8px; border-left: 4px solid transparent; }
+  .layer-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; opacity: .8; margin-bottom: 2px; }
+  .layer-name { font-size: .95rem; font-weight: 700; color: #e2e8f0; margin-bottom: 10px; }
+  .layer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { border-radius: 5px; padding: 4px 10px; font-size: .72rem; font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+  .l1 { background: #0f1f3d; border-left-color: #2563eb; } .l1 .layer-label { color: #60a5fa; } .l1 .chip { background: #1e3a6e; border-color: #2563eb; color: #93c5fd; }
+  .l2 { background: #1a0f2e; border-left-color: #7c3aed; } .l2 .layer-label { color: #a78bfa; } .l2 .chip { background: #2d1b5e; border-color: #7c3aed; color: #c4b5fd; }
+  .l3 { background: #0f2620; border-left-color: #059669; } .l3 .layer-label { color: #34d399; } .l3 .chip { background: #1a3d2e; border-color: #059669; color: #6ee7b7; }
+  .l4 { background: #1f1505; border-left-color: #d97706; } .l4 .layer-label { color: #fbbf24; } .l4 .chip { background: #3d2a0a; border-color: #d97706; color: #fde68a; }
+  .l5 { background: #1a0f14; border-left-color: #e11d48; } .l5 .layer-label { color: #fb7185; } .l5 .chip { background: #3d1520; border-color: #e11d48; color: #fda4af; }
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .output-card { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 14px 16px; }
+  .output-card h4 { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #6b7280; margin-bottom: 10px; }
+  .output-card .chip { background: #1f2937; border-color: #374151; color: #9ca3af; margin-bottom: 5px; display: inline-block; }
+  .legend { display: flex; gap: 20px; justify-content: center; margin-top: 28px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: .72rem; color: #64748b; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+  .print-note { text-align: center; color: #334155; font-size: .7rem; margin-top: 24px; }
+  @media print { body { background: #fff; padding: 20px; } .print-note { display: none; } }
+</style>
+</head>
+<body>
+<div class="diagram">
+  <div class="diagram-title">OmniCon Intelligence Platform</div>
+  <div class="diagram-sub">Distributed System Architecture &nbsp;·&nbsp; Agent-First Engineering Model &nbsp;·&nbsp; 16-Week Build &nbsp;·&nbsp; DigiFusion Advisory — Confidential</div>
+
+  <div class="sources-row">
+    <div class="source-chip fed">SAM.gov</div>
+    <div class="source-chip fed">FPDS-NG</div>
+    <div class="source-chip fed">USASpending.gov</div>
+    <div class="source-chip fed">Grants.gov</div>
+    <div class="source-chip sled">State Portals ×50</div>
+    <div class="source-chip sled">Local Boards ×1,000+</div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; Federal REST/SOAP APIs &nbsp;+&nbsp; SLED Web Scrapers</div>
+
+  <div class="layer l1">
+    <div class="layer-label">Layer 1 · Ingestion</div>
+    <div class="layer-name">Data Capture Pipeline</div>
+    <div class="layer-chips">
+      <span class="chip">Scrapy Cluster</span>
+      <span class="chip">Apache Airflow</span>
+      <span class="chip">Celery Workers</span>
+      <span class="chip">Redis Queue</span>
+      <span class="chip">Playwright / Puppeteer (Headless)</span>
+      <span class="chip">Proxy Rotation — Bright Data</span>
+      <span class="chip">Apache Kafka · topic: opportunity.raw.ingested</span>
+    </div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; Raw blobs → S3/MinIO &nbsp;|&nbsp; Kafka event dispatched</div>
+
+  <div class="layer l2">
+    <div class="layer-label">Layer 2 · Enrichment</div>
+    <div class="layer-name">Document Processing Engine</div>
+    <div class="layer-chips">
+      <span class="chip">Apache Tika</span>
+      <span class="chip">Tesseract OCR</span>
+      <span class="chip">Python ETL Microservices</span>
+      <span class="chip">ISO 8601 Date Normalisation</span>
+      <span class="chip">AI Layout Parser (LLM Vision)</span>
+      <span class="chip">Dedup — Cryptographic Hash H(x)</span>
+    </div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; Structured text → PostgreSQL + Elasticsearch + Qdrant</div>
+
+  <div class="layer l3">
+    <div class="layer-label">Layer 3 · Storage &amp; Index</div>
+    <div class="layer-name">Multi-Modal Data Store</div>
+    <div class="layer-chips">
+      <span class="chip">PostgreSQL v16 · Row-Level Security · Multi-Tenant</span>
+      <span class="chip">Elasticsearch v8 · Full-Text Search</span>
+      <span class="chip">Qdrant · Vector / Semantic k-NN</span>
+      <span class="chip">MinIO / Amazon S3 · Document Lake</span>
+      <span class="chip">AES-256 at rest · TLS 1.3 in transit</span>
+    </div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; Retrieval-Augmented Generation pipelines</div>
+
+  <div class="layer l4">
+    <div class="layer-label">Layer 4 · AI Core</div>
+    <div class="layer-name">Intelligence &amp; Reasoning Engine</div>
+    <div class="layer-chips">
+      <span class="chip">LangChain / LlamaIndex · RAG</span>
+      <span class="chip">Claude 3.5 Sonnet</span>
+      <span class="chip">GPT-4o</span>
+      <span class="chip">FastAPI · AI Microservice</span>
+      <span class="chip">MCP Server · "Let Me Help" Overlay</span>
+      <span class="chip">Token-Bucket Rate Limiter (Redis)</span>
+    </div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; NestJS REST / GraphQL &nbsp;|&nbsp; Kubernetes autoscaling</div>
+
+  <div class="layer l5">
+    <div class="layer-label">Layer 5 · Application</div>
+    <div class="layer-name">Client-Facing SaaS Platform</div>
+    <div class="layer-chips">
+      <span class="chip">NestJS REST + GraphQL</span>
+      <span class="chip">React v19 + TypeScript</span>
+      <span class="chip">TailwindCSS + shadcn/ui</span>
+      <span class="chip">Docker + Kubernetes (K8s)</span>
+      <span class="chip">RBAC · Tenant Isolation</span>
+      <span class="chip">Stripe Billing Portal</span>
+    </div>
+  </div>
+  <div class="arrow-down">↓ &nbsp; Browser &nbsp;/&nbsp; MCP Client (ChatGPT · Claude · Copilot)</div>
+
+  <div class="bottom-row">
+    <div class="output-card">
+      <h4>Core Product Modules</h4>
+      <span class="chip">🔍 Universal Intelligence Search</span><br>
+      <span class="chip">📋 Opportunity Detail Profiles</span><br>
+      <span class="chip">📊 Kanban Capture CRM Pipeline</span><br>
+      <span class="chip">🏢 Entity Profiler — Agencies / Vendors / Officers</span><br>
+      <span class="chip">🤖 AI Analyst — "Let Me Help"</span>
+    </div>
+    <div class="output-card">
+      <h4>Commercial &amp; Integration Layer</h4>
+      <span class="chip">🔗 MCP Server → External AI Agents</span><br>
+      <span class="chip">📧 Resend · Transactional Email</span><br>
+      <span class="chip">🔐 SAM.gov · Rate-Limited API Access</span><br>
+      <span class="chip">☁️ AWS / GCP · Cloud Infrastructure</span><br>
+      <span class="chip">💳 Pro $150/user/mo · Enterprise $350/user/mo</span>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div>Ingestion</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>Enrichment</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#059669"></div>Storage</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div>AI Core</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e11d48"></div>Application</div>
+  </div>
+
+  <div class="print-note">To save as image: open in browser → right-click → Print → Save as PDF &nbsp;|&nbsp; Or use browser screenshot (Ctrl+Shift+S / Cmd+Shift+4)</div>
+</div>
+</body>
+</html>
