@@ -511,3 +511,172 @@ export async function deleteAgencyPlaybook (slug) {
   await writeAgencyManifest(manifest.filter(e => e.slug !== slug));
   return { deleted: slug };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// FIRM IP STORE — proprietary blueprints, frameworks, methodologies
+//
+// Completely separate from the public Learning Library.
+// Only Synthesizer and authorised internal agents can read here.
+// Clients who purchase access get a time-limited signed URL.
+//
+// Structure:
+//   firm_ip/blueprints/<slug>.pdf     — purchased / gated PDFs
+//   firm_ip/frameworks/<slug>.pdf     — internal methodology docs
+//   firm_ip/_manifest.json            — metadata index
+//
+// Access levels:
+//   'internal'  — Synthesizer / agents only, never exposed to clients
+//   'purchasable' — requires purchase record before signed URL issued
+// ═══════════════════════════════════════════════════════════════
+
+const FIRM_IP_BASE     = 'firm_ip';
+const FIRM_IP_MANIFEST = `${FIRM_IP_BASE}/_manifest.json`;
+
+async function readFirmIpManifest () {
+  try {
+    const url = getObjectUrl(FIRM_IP_MANIFEST);
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${apiToken}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+async function writeFirmIpManifest (items) {
+  await uploadToR2(FIRM_IP_MANIFEST, JSON.stringify(items), 'application/json');
+}
+
+/**
+ * Upload a firm IP document (PDF or JSON content) to the protected firm_ip/ bucket area.
+ *
+ * @param {object} p
+ * @param {string} p.slug        - URL-safe identifier, e.g. 'sme-scale-engine-blueprint'
+ * @param {string} p.title       - Display title
+ * @param {string} p.category    - 'blueprints' | 'frameworks' | 'methodologies'
+ * @param {string} p.industry    - Sector tag, e.g. 'sme', 'pharma', 'government'
+ * @param {Buffer|Uint8Array} p.body  - Raw PDF bytes
+ * @param {'internal'|'purchasable'} [p.access] - Default 'purchasable'
+ * @param {string} [p.description] - Short marketing description
+ * @param {number} [p.priceUsd]  - Price for purchasable docs in USD
+ */
+export async function uploadFirmIpDocument (p) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  const {
+    slug, title, category = 'blueprints', industry = 'general',
+    body, access = 'purchasable', description = '', priceUsd = 0,
+  } = p;
+  if (!slug || !title || !body) throw new Error('slug, title, and body are required.');
+
+  const key    = `${FIRM_IP_BASE}/${category}/${slug}.pdf`;
+  const r2Url  = await uploadToR2(key, body, 'application/pdf');
+  const now    = new Date().toISOString();
+
+  const entry = {
+    slug, title, category, industry, access, description, priceUsd,
+    key, size: body.length ?? body.byteLength ?? 0, uploadedAt: now,
+  };
+
+  const manifest = await readFirmIpManifest();
+  const filtered = manifest.filter(e => e.slug !== slug);
+  filtered.unshift(entry);
+  await writeFirmIpManifest(filtered);
+
+  return entry;
+}
+
+/**
+ * Retrieve raw bytes of a firm IP document by slug (internal/agent use only).
+ */
+export async function getFirmIpDocumentBytes (slug) {
+  if (!isR2Enabled()) return null;
+  const manifest = await readFirmIpManifest();
+  const entry    = manifest.find(e => e.slug === slug);
+  if (!entry) return null;
+  const url = getObjectUrl(entry.key);
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiToken}` } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Firm IP fetch failed for "${slug}": ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return { entry, bytes: Buffer.from(buf) };
+}
+
+/**
+ * List firm IP documents, optionally filtered.
+ * @param {{ category?: string, industry?: string, access?: string }} [filter]
+ */
+export async function listFirmIpDocuments (filter = {}) {
+  if (!isR2Enabled()) return [];
+  const manifest = await readFirmIpManifest();
+  return manifest.filter(e => {
+    if (filter.category && e.category !== filter.category) return false;
+    if (filter.industry && e.industry !== filter.industry) return false;
+    if (filter.access   && e.access   !== filter.access)   return false;
+    return true;
+  });
+}
+
+/**
+ * Generate a time-limited pre-signed download URL for a purchasable document.
+ * NOTE: Cloudflare R2 pre-signed URLs require S3 credentials (not Bearer token).
+ * If S3 keys are not configured, falls back to a server-proxied download token approach.
+ * @param {string} slug
+ * @param {number} [ttlSeconds=3600] - Link validity in seconds
+ */
+export async function getFirmIpDownloadUrl (slug, ttlSeconds = 3600) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  const manifest = await readFirmIpManifest();
+  const entry    = manifest.find(e => e.slug === slug);
+  if (!entry) throw new Error(`Firm IP document not found: ${slug}`);
+
+  // If full S3-compatible keys available, build a pre-signed URL
+  if (accessKeyId && secretKey) {
+    const region    = 'auto';
+    const service   = 's3';
+    const now       = new Date();
+    const amzDate   = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 16) + 'Z';
+    const dateStamp = amzDate.slice(0, 8);
+    const host      = `${accountId}.r2.cloudflarestorage.com`;
+    const path      = `/${bucket}/${encodeKey(entry.key)}`;
+    const credScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const expires   = String(ttlSeconds);
+
+    const queryParams = [
+      ['X-Amz-Algorithm',  'AWS4-HMAC-SHA256'],
+      ['X-Amz-Credential', `${accessKeyId}/${credScope}`],
+      ['X-Amz-Date',       amzDate],
+      ['X-Amz-Expires',    expires],
+      ['X-Amz-SignedHeaders', 'host'],
+    ].map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+
+    const canonicalRequest = [
+      'GET', path, queryParams,
+      `host:${host}\n`, 'host',
+      'UNSIGNED-PAYLOAD',
+    ].join('\n');
+
+    const stringToSign = [
+      'AWS4-HMAC-SHA256', amzDate, credScope,
+      sha256hex(canonicalRequest),
+    ].join('\n');
+
+    const signingKey = getSigningKey(dateStamp, region, service);
+    const signature  = hmac(signingKey, stringToSign, 'hex');
+
+    return `https://${host}${path}?${queryParams}&X-Amz-Signature=${signature}`;
+  }
+
+  // Fallback: server will proxy the download via a short-lived token stored in memory
+  // The calling route (/api/blueprints/:slug/download) handles the token check
+  return null; // signals to caller to proxy the download server-side
+}
+
+/** Get manifest entry metadata only (no bytes). */
+export async function getFirmIpMeta (slug) {
+  const manifest = await readFirmIpManifest();
+  return manifest.find(e => e.slug === slug) ?? null;
+}

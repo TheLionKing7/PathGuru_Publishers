@@ -632,73 +632,125 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // EXECUTE
-  // ══════════════════════════════════════════════════════════════════════════
 
+  async getPipelineView() {
+    const db = getSupabase();
+    if (!db) return { error: 'Supabase not configured' };
+
+    const { data: leads, error } = await db.from('leads')
+      .select('id, name, email, lead_score, status, track, created_at, updated_at')
+      .order('lead_score', { ascending: false })
+      .limit(50);
+
+    if (error) return { error: error.message };
+
+    const pipeline = {};
+    for (const lead of (leads || [])) {
+      const stage = lead.status || 'discovery';
+      if (!pipeline[stage]) pipeline[stage] = [];
+      pipeline[stage].push({
+        id:      lead.id,
+        name:    lead.name || lead.email,
+        score:   lead.lead_score,
+        track:   lead.track,
+        since:   lead.created_at,
+        updated: lead.updated_at,
+      });
+    }
+
+    return {
+      pipeline,
+      totalLeads:  leads?.length || 0,
+      stageCount:  Object.fromEntries(Object.entries(pipeline).map(([s, l]) => [s, l.length])),
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  // execute() — handle direct task dispatch
   async execute(task) {
-    const { action, instruction, agentId, status, limit, offset, milestone, payload, message, history } = task;
-
+    const { action, ...payload } = task;
     switch (action) {
-      case 'orchestrate':
-        return this.orchestrate(instruction || task.description, { priority: task.priority });
-
-      case 'network_status':
-        return this.getNetworkStatus();
-
-      case 'task_history':
-        return this.getTaskHistory({ agentId, status, limit, offset });
-
-      case 'status_report':
-        return { report: await this.generateStatusReport() };
-
-      case 'daily_briefing':
-        return this.generateDailyBriefing();
-
-      case 'pipeline_view':
-        return this.getPipelineView();
-
-      case 'lifecycle_sync':
-        return this.syncClientLifecycle(milestone, payload || task);
-
       case 'dispatch_research':
-        return this.dispatchResearch({
-          topic:       task.topic || instruction || task.description,
-          forAgent:    task.forAgent || 'nexus',
-          context:     task.context,
-          focusAreas:  task.focusAreas || [],
-          depth:       task.depth || 'standard',
-        });
-
+        return this.dispatchResearch(payload);
       case 'fill_gaps':
         return this.detectAndFillGaps();
-
       case 'escalate':
-        return this.escalateToOwner({
-          subject:  task.subject || instruction,
-          body:     task.body || task.description || '',
-          severity: task.severity || 'info',
-          context:  task.context || {},
-        });
-
+        return this.escalateToOwner(payload);
       case 'check_escalations':
         return { escalations: await this.checkEscalationTriggers() };
-
-      case 'chat':
-        return { reply: await this.chat(message || task.description, history || []) };
-
+      case 'publish_sector_article':
+        return this.publishSectorArticle(payload);
+      case 'create_content_calendar':
+        return this.createContentCalendar(payload);
       default:
-        if (task.description || task.instruction) {
-          return this.orchestrate(task.description || task.instruction, { priority: task.priority });
-        }
-        return { error: 'No action specified' };
+        return this.orchestrate(JSON.stringify(task));
     }
   }
 
-  _parseJsonArray(text) {
-    try { return JSON.parse(text); } catch {}
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return [];
-    try { return JSON.parse(match[0]); } catch { return []; }
+  // Content calendar — generate and queue sector articles
+  async createContentCalendar({ sectors = ['sme', 'fintech', 'government', 'pharma', 'hospitality'], count = 5 } = {}) {
+    const { putJsonCache, getJsonCache } = await import('../cloudflareR2.js');
+    const prompt = `You are the DigiFusion content strategy director. Generate a ${count}-article content calendar targeting: ${sectors.join(', ')}.
+
+For each article provide:
+- headline: punchy, SEO-ready, under 70 chars
+- sector: target sector
+- topic: full topic description  
+- angle: unique insight or hook
+- keyword: primary SEO keyword
+- audience: target reader
+- scheduledFor: ISO date string, one per day starting tomorrow
+- rationale: why it drives DigiFusion enquiries
+
+Output ONLY a valid JSON array: [{ headline, sector, topic, angle, keyword, audience, scheduledFor, rationale }]
+
+Practitioner-grade topics only. No generic listicles.`;
+
+    const raw = await this._callWithFallback(prompt);
+    let ideas = [];
+    try {
+      const m = raw.match(/\[\s\S]*\]/);
+      ideas = JSON.parse(m?.[0] || '[]');
+    } catch {
+      ideas = [];
+    }
+
+    const existing = (await getJsonCache('cache/content-schedule.json').catch(() => null)) || [];
+    const fresh = ideas.map(a => ({ ...a, status: 'queued' }));
+    await putJsonCache('cache/content-schedule.json', [...fresh, ...existing].slice(0, 20));
+
+    return { calendar: fresh, totalQueued: fresh.length + existing.length };
+  }
+
+  // Researcher -> Aether pipeline for a single sector article
+  async publishSectorArticle({ sector, topic, angle }) {
+    if (!topic) throw new Error('topic is required');
+
+    const research = await this.dispatchResearch({
+      topic, forAgent: 'aether',
+      focusAreas: [sector].filter(Boolean),
+      depth: 'standard',
+    });
+
+    const db = getSupabase();
+    if (db) {
+      await db.from('tasks').insert({
+        title:       `Write + publish: ${topic.slice(0, 80)}`,
+        description: `Write and publish a full ${sector || 'business'} article on: "${topic}"${angle ? `. Angle: ${angle}` : ''}.`,
+        agent_id:    'aether',
+        created_by:  'nexus',
+        status:      'pending',
+        priority:    4,
+        type:        'content',
+        input:       JSON.stringify({ topic, sector, angle, researchBrief: research?.brief }),
+      }).catch(() => {});
+    }
+
+    return {
+      topic, sector,
+      researchReady: Boolean(research?.brief),
+      message: `Researcher complete. Aether briefed to write "${topic}". POST /api/content/publish to trigger immediately.`,
+    };
   }
 }
 

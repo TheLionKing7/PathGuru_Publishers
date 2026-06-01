@@ -67,7 +67,12 @@ import {
   getAgencyPlaybook,
   listAgencyPlaybooks,
   deleteAgencyPlaybook,
+  listFirmIpDocuments,
+  getFirmIpMeta,
+  getFirmIpDownloadUrl,
+  getFirmIpDocumentBytes,
 } from './cloudflareR2.js';
+import { getSupabase } from './supabaseClient.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
@@ -1785,6 +1790,301 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+
+  // ══════════════════════════════════════════════════════════════════
+  // FIRM IP & BLUEPRINT ROUTES
+  // GET  /api/blueprints              — list all purchasable blueprints
+  // GET  /api/blueprints/:slug        — get single blueprint metadata
+  // POST /api/blueprints/:slug/purchase — record a purchase
+  // GET  /api/blueprints/:slug/download — gated download (requires purchase)
+  // GET  /api/products                — alias for blueprints list
+  // ══════════════════════════════════════════════════════════════════
+
+  // GET /api/blueprints — public catalogue (metadata only, no bytes)
+  if (req.method === 'GET' && path === '/api/blueprints') {
+    try {
+      const docs = await listFirmIpDocuments({ access: 'purchasable' });
+      // Enrich with Supabase product pricing if available
+      const db = getSupabase();
+      let products = [];
+      if (db) {
+        const { data } = await db.from('products').select('*').eq('active', true);
+        products = data || [];
+      }
+      const enriched = docs.map(d => {
+        const prod = products.find(p => p.firm_ip_slug === d.slug);
+        return { ...d, priceUsd: prod?.price_usd ?? d.priceUsd, priceNgn: prod?.price_ngn, productId: prod?.id };
+      });
+      json(res, { blueprints: enriched, total: enriched.length });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/blueprints/:slug — single blueprint metadata
+  if (req.method === 'GET' && path.match(/^\/api\/blueprints\/[^/]+$/) && !path.endsWith('/download') && !path.endsWith('/purchase')) {
+    const slug = path.split('/').pop();
+    try {
+      const meta = await getFirmIpMeta(slug);
+      if (!meta) { err(res, `Blueprint not found: ${slug}`, 404); return; }
+      json(res, { blueprint: meta });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/blueprints/:slug/purchase — record a purchase (manual/webhook)
+  if (req.method === 'POST' && path.match(/^\/api\/blueprints\/[^/]+\/purchase$/)) {
+    const slug = path.split('/')[3];
+    const body = await readBody(req);
+    const { buyerEmail, buyerName, paymentRef, paymentMethod = 'manual', amountPaid, currency = 'USD' } = body;
+    if (!buyerEmail) { err(res, 'buyerEmail is required', 400); return; }
+    const db = getSupabase();
+    if (!db) { err(res, 'Database not configured', 503); return; }
+    try {
+      // Look up product
+      const { data: product } = await db.from('products').select('id').eq('firm_ip_slug', slug).single();
+      if (!product) { err(res, `Product not found for slug: ${slug}`, 404); return; }
+      const { data: purchase, error: pe } = await db.from('purchases').insert({
+        product_id: product.id, buyer_email: buyerEmail, buyer_name: buyerName,
+        amount_paid: amountPaid, currency, payment_ref: paymentRef,
+        payment_method: paymentMethod, status: paymentMethod === 'manual' ? 'completed' : 'pending',
+        expires_at: null,
+      }).select().single();
+      if (pe) throw new Error(pe.message);
+      json(res, { purchase, message: 'Purchase recorded. Use /api/blueprints/:slug/download with your email to download.' });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/blueprints/:slug/download?email=buyer@email.com — gated download
+  if (req.method === 'GET' && path.match(/^\/api\/blueprints\/[^/]+\/download$/)) {
+    const slug = path.split('/')[3];
+    const buyerEmail = url.searchParams.get('email');
+    if (!buyerEmail) { err(res, 'email query parameter required', 400); return; }
+    const db = getSupabase();
+    if (!db) { err(res, 'Database not configured', 503); return; }
+    try {
+      // Verify purchase
+      const { data: product } = await db.from('products').select('id, title').eq('firm_ip_slug', slug).single();
+      if (!product) { err(res, 'Product not found', 404); return; }
+      const { data: purchase } = await db.from('purchases')
+        .select('*').eq('product_id', product.id).eq('buyer_email', buyerEmail)
+        .eq('status', 'completed').order('created_at', { ascending: false }).limit(1).single();
+      if (!purchase) {
+        err(res, 'No valid purchase found for this email. Purchase the blueprint at digifusion.ng/intelligence', 403);
+        return;
+      }
+      if (purchase.expires_at && new Date(purchase.expires_at) < new Date()) {
+        err(res, 'Your download link has expired. Please contact support@digifusion.ng', 403); return;
+      }
+      if (purchase.download_count >= purchase.max_downloads) {
+        err(res, 'Maximum download limit reached. Contact support@digifusion.ng for assistance.', 403); return;
+      }
+      // Try to get a pre-signed URL, fall back to server proxy
+      let downloadUrl = await getFirmIpDownloadUrl(slug, 3600);
+      if (downloadUrl) {
+        // Increment download count
+        await db.from('purchases').update({ download_count: purchase.download_count + 1, updated_at: new Date().toISOString() }).eq('id', purchase.id);
+        await db.from('download_log').insert({ purchase_id: purchase.id, product_id: product.id, buyer_email: buyerEmail, ip_address: req.socket?.remoteAddress });
+        res.writeHead(302, { Location: downloadUrl });
+        res.end();
+      } else {
+        // Proxy the PDF bytes directly
+        const result = await getFirmIpDocumentBytes(slug);
+        if (!result) { err(res, 'Document not available', 404); return; }
+        await db.from('purchases').update({ download_count: purchase.download_count + 1, updated_at: new Date().toISOString() }).eq('id', purchase.id);
+        await db.from('download_log').insert({ purchase_id: purchase.id, product_id: product.id, buyer_email: buyerEmail, ip_address: req.socket?.remoteAddress });
+        const safeName = result.entry.title?.replace(/[^a-z0-9 ]/gi, '_').replace(/\s+/g, '_') || slug;
+        res.writeHead(200, {
+          'Content-Type':        'application/pdf',
+          'Content-Disposition': `attachment; filename="${safeName}.pdf"`,
+          'Content-Length':      result.bytes.length,
+          'Cache-Control':       'no-store',
+        });
+        res.end(result.bytes);
+      }
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/products — alias for blueprints catalogue (used by DigiFusion webapp)
+  if (req.method === 'GET' && path === '/api/products') {
+    try {
+      const db = getSupabase();
+      if (!db) { json(res, { products: [] }); return; }
+      const { data, error: pe } = await db.from('products').select('*').eq('active', true).order('price_usd');
+      if (pe) throw new Error(pe.message);
+      json(res, { products: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/purchases?email=x — check purchase history for an email
+  if (req.method === 'GET' && path === '/api/purchases') {
+    const email = url.searchParams.get('email');
+    if (!email) { err(res, 'email query parameter required', 400); return; }
+    const db = getSupabase();
+    if (!db) { err(res, 'Database not configured', 503); return; }
+    try {
+      const { data, error: pe } = await db.from('purchases').select('*, products(title, industry, category)')
+        .eq('buyer_email', email).eq('status', 'completed').order('created_at', { ascending: false });
+      if (pe) throw new Error(pe.message);
+      json(res, { purchases: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // CONTENT WORKFLOW ROUTES — Nexus-orchestrated content production
+  // POST /api/content/brief         — create a content brief (Nexus assigns Researcher + Aether)
+  // POST /api/content/publish       — Aether writes + publishes a blog post from a brief
+  // GET  /api/content/calendar      — upcoming scheduled content
+  // ══════════════════════════════════════════════════════════════════
+
+  // POST /api/content/brief — generate a research-backed content brief
+  if (req.method === 'POST' && path === '/api/content/brief') {
+    const body = await readBody(req);
+    const {
+      topic, sector, angle, targetAudience = 'business leaders',
+      contentType = 'article', depth = 'standard', publish = false,
+    } = body;
+    if (!topic) { err(res, 'topic is required', 400); return; }
+    try {
+      // Step 1: Researcher gathers intelligence
+      console.log(`[Content] Researching: ${topic}`);
+      const researchResult = await AGENTS.researcher.research({
+        topic, forAgent: 'aether', focusAreas: sector ? [sector] : [],
+        depth, mergeWithKB: true,
+      });
+
+      // Step 2: Aether builds the content brief
+      const briefPrompt = `You are DigiFusion's senior content strategist. Based on the research brief below, create a detailed content outline for a ${contentType} targeting ${targetAudience}.
+
+TOPIC: ${topic}
+${sector ? `SECTOR: ${sector}` : ''}
+${angle ? `ANGLE / HOOK: ${angle}` : ''}
+
+RESEARCH BRIEF:
+${researchResult.brief || JSON.stringify(researchResult).slice(0, 3000)}
+
+Produce a structured content brief with:
+1. A punchy, SEO-optimised headline (and 2 alternatives)
+2. Target keyword and 5 secondary keywords
+3. Article structure: intro hook, 4–6 main sections with sub-points, strong CTA
+4. Key statistics or data points to include
+5. DigiFusion angle: how our frameworks (Deal Engine / AVE / C2C / AVE) are relevant
+6. Recommended word count and content type
+
+Keep it sharp and actionable. This is a DigiFusion content asset.`;
+
+      const brief = await AGENTS.aether.chat(briefPrompt);
+
+      const result = {
+        topic, sector, contentType, targetAudience,
+        brief, researchSources: researchResult.sources || [],
+        generatedAt: new Date().toISOString(),
+      };
+
+      // Step 3: Auto-publish if requested
+      if (publish) {
+        console.log(`[Content] Auto-publishing: ${topic}`);
+        const publishResult = await AGENTS.aether.execute({
+          action: 'write_blog_post',
+          topic, sector, brief, researchBrief: researchResult.brief,
+        });
+        result.published = publishResult;
+      }
+
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/content/publish — Aether writes and publishes a full blog post
+  if (req.method === 'POST' && path === '/api/content/publish') {
+    const body = await readBody(req);
+    const { topic, sector, brief, researchBrief, aiProvider, tags, category } = body;
+    if (!topic) { err(res, 'topic is required', 400); return; }
+    try {
+      // Build the full article prompt for Aether
+      const writePrompt = `You are DigiFusion's senior content strategist. Write a complete, publication-ready ${sector || 'business'} article for DigiFusion's blog.
+
+TOPIC: ${topic}
+${sector ? `SECTOR FOCUS: ${sector}` : ''}
+${brief ? `CONTENT BRIEF:\n${brief}` : ''}
+${researchBrief ? `RESEARCH INSIGHTS:\n${researchBrief}` : ''}
+
+REQUIREMENTS:
+- Length: 1,200–1,800 words
+- Tone: Authoritative, insightful, practitioner-grade — not generic or fluffy
+- Structure: Strong opening hook, clear section headers (H2/H3), data-backed claims, concrete takeaways
+- DigiFusion perspective: naturally weave in our firm's viewpoint on what businesses in this sector need to do — without revealing internal methodology steps
+- Close with a clear CTA pointing to DigiFusion's strategy session or intelligence reports
+- SEO optimised: include keywords naturally throughout
+- Format: Markdown with proper heading hierarchy
+
+Write the full article now.`;
+
+      const articleContent = await AGENTS.aether.chat(writePrompt);
+
+      // Extract a title from the content
+      const titleMatch = articleContent.match(/^#\s+(.+)$/m);
+      const title = titleMatch?.[1] || topic;
+
+      // Publish via blog publisher
+      const { generateAndPublishBlogPost: publish } = await import('./blogPublisher.js');
+      const publishResult = await publish({
+        title,
+        content: articleContent,
+        sector: sector || 'business',
+        tags:   tags || [sector, 'digifusion', 'strategy'].filter(Boolean),
+        category: category || sector || 'business-intelligence',
+        aiProvider: aiProvider || null,
+        authorName: 'DigiFusion Intelligence',
+        status: 'published',
+      });
+
+      json(res, {
+        success: true,
+        title,
+        topic,
+        post: publishResult,
+        wordCount: articleContent.split(/\s+/).length,
+        publishedAt: new Date().toISOString(),
+      });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/content/schedule — queue up to 5 articles for Nexus to publish over coming days
+  if (req.method === 'POST' && path === '/api/content/schedule') {
+    const body = await readBody(req);
+    const { articles } = body; // [{ topic, sector, angle }]
+    if (!Array.isArray(articles) || articles.length === 0) {
+      err(res, 'articles array is required', 400); return;
+    }
+    try {
+      const queued = articles.slice(0, 5).map((a, i) => ({
+        ...a,
+        scheduledFor: new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'queued',
+      }));
+      // Store schedule in R2 cache for Nexus to pick up
+      const existing = (await getJsonCache('cache/content-schedule.json')) || [];
+      await putJsonCache('cache/content-schedule.json', [...queued, ...existing].slice(0, 20));
+      json(res, { scheduled: queued, message: `${queued.length} articles queued. Nexus will publish them on schedule.` });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/content/calendar — view the content schedule
+  if (req.method === 'GET' && path === '/api/content/calendar') {
+    try {
+      const schedule = (await getJsonCache('cache/content-schedule.json')) || [];
+      json(res, { calendar: schedule, total: schedule.length });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   err(res, `Not found: ${path}`, 404);
 });
 
@@ -1792,128 +2092,107 @@ prewarmFonts().catch((e) => console.warn('[fontEmbedder] prewarm failed:', e.mes
 
 server.listen(PORT, () => {
   console.log(`
-  ┌────────────────────────────────────────────┐
-  │   PathGuru Publishers v3 + Agent Network     │
-  │   http://localhost:${PORT}                        │
-  │                                              │
-  │   POST /api/agents/nexus/orchestrate          │
-  │   POST /api/agents/:id/chat                   │
-  │   POST /api/agents/nexus/lifecycle            │
-  │   POST /api/agents/nexus/daily-briefing       │
-  │   GET  /api/agents/nexus/pipeline             │
-  │   GET  /api/agents/status                     │
-  │   GET  /api/agents/tasks                      │
-  │   POST /api/agents/:id/run                    │
-  │   POST /api/agents/synthesizer/ingest         │
-  │   POST /api/agents/assistant/intake           │
-  │   GET  /api/agents/assistant/knowledge        │
-  │   POST /api/agents/:id/evaluation             │
-  └────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────┐
+  │   PathGuru Publishers v3 + DigiFusion Agent Net  │
+  │   http://localhost:${PORT}                            │
+  │                                                  │
+  │   AGENT ROUTES                                   │
+  │   POST /api/agents/nexus/orchestrate             │
+  │   POST /api/agents/:id/chat                      │
+  │   POST /api/agents/nexus/lifecycle               │
+  │   POST /api/agents/nexus/daily-briefing          │
+  │   POST /api/agents/nexus/research                │
+  │   POST /api/agents/nexus/escalate                │
+  │   GET  /api/agents/nexus/pipeline                │
+  │   GET  /api/agents/nexus/check-escalations       │
+  │   POST /api/agents/researcher/research           │
+  │   POST /api/agents/synthesizer/ingest            │
+  │   POST /api/agents/assistant/intake              │
+  │   GET  /api/agents/assistant/knowledge           │
+  │                                                  │
+  │   FIRM IP / BLUEPRINTS                           │
+  │   GET  /api/blueprints                           │
+  │   GET  /api/blueprints/:slug                     │
+  │   POST /api/blueprints/:slug/purchase            │
+  │   GET  /api/blueprints/:slug/download?email=     │
+  │   GET  /api/products                             │
+  │   GET  /api/purchases?email=                     │
+  │                                                  │
+  │   CONTENT WORKFLOW                               │
+  │   POST /api/content/brief                        │
+  │   POST /api/content/publish                      │
+  │   POST /api/content/schedule                     │
+  │   GET  /api/content/calendar                     │
+  └──────────────────────────────────────────────────┘
 `);
-});
-server.on('error', e => { console.error('[PathGuru] Server error:', e); process.exit(1); });
-
-  // POST /api/agents/nexus/fill-gaps  — fill knowledge gaps in pending tasks
-  if (req.method === 'POST' && path === '/api/agents/nexus/fill-gaps') {
-    try {
-      json(res, await AGENTS.nexus.detectAndFillGaps());
-    } catch (e) { err(res, e.message, 500); }
-    return;
-  }
-
-  // GET /api/agents/nexus/check-escalations  — run escalation trigger check
-  if (req.method === 'GET' && path === '/api/agents/nexus/check-escalations') {
-    try {
-      json(res, { escalations: await AGENTS.nexus.checkEscalationTriggers() });
-    } catch (e) { err(res, e.message, 500); }
-    return;
-  }
-
-  // POST /api/agents/researcher/research  — direct Researcher call
-  //   body: { topic, forAgent?, context?, focusAreas?, depth?, mergeWithKB? }
-  if (req.method === 'POST' && path === '/api/agents/researcher/research') {
-    try {
-      const body = await readBody(req);
-      if (!body.topic) { err(res, 'topic is required', 400); return; }
-      json(res, await AGENTS.researcher.research(body));
-    } catch (e) { err(res, e.message, 500); }
-    return;
-  }
-
-  // Fallthrough 404
-  json(res, { error: 'Not found' }, 404);
-});
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SERVER STARTUP
-// ══════════════════════════════════════════════════════════════════════════════
-
-server.listen(PORT, () => {
-  console.log(`[PathGuru] Server running on port ${PORT}`);
   startup();
 });
 
+server.on('error', e => { console.error('[PathGuru] Server error:', e); process.exit(1); });
+
 async function startup() {
-  // Pre-warm fonts for faster first PDF
   prewarmFonts().catch(() => {});
-
-  // ── Auto-sweep: Pulse monitors and dispatches notifications every 5 minutes ──
-  // This ensures Nexus escalations, lead alerts, and system warnings are
-  // dispatched to push/WhatsApp without waiting for a manual trigger.
-  const SWEEP_INTERVAL_MS = parseInt(process.env.PULSE_SWEEP_INTERVAL_MS || '300000', 10); // 5 min default
+  const PULSE_SWEEP_INTERVAL_MS = parseInt(process.env.PULSE_SWEEP_INTERVAL_MS || '300000', 10);
   setInterval(async () => {
-    try {
-      const report = await AGENTS.pulse.sweep();
-      if (report.alerts > 0) {
-        console.log(`[Pulse] Auto-sweep: ${report.alerts} alert(s), health: ${report.health}, dispatched: ${report.notifications?.dispatched ?? 0}`);
-      }
-    } catch (e) {
-      console.warn('[Pulse] Auto-sweep error:', e.message);
-    }
-  }, SWEEP_INTERVAL_MS);
-
-  // ── Daily briefing: Nexus reports to Ola every morning at 7am server time ──
+    try { await AGENTS.pulse.sweep(); } catch(e) { console.warn('[Pulse] sweep error:', e.message); }
+  }, PULSE_SWEEP_INTERVAL_MS);
   scheduleDailyBriefing();
-
-  // ── Startup escalation check — catches anything that piled up while server was down ──
+  // Check content schedule every hour
+  setInterval(async () => {
+    try { await processContentSchedule(); } catch(e) { console.warn('[Content] schedule error:', e.message); }
+  }, 60 * 60 * 1000);
   setTimeout(async () => {
-    try {
-      const escalations = await AGENTS.nexus.checkEscalationTriggers();
-      if (escalations.length) console.log(`[Nexus] Startup escalation check: ${escalations.length} trigger(s) fired`);
-    } catch (e) {
-      console.warn('[Nexus] Startup escalation check error:', e.message);
-    }
-  }, 15_000); // 15s after boot
+    try { await AGENTS.nexus.checkEscalationTriggers(); } catch(e) {}
+  }, 15_000);
 }
 
 function scheduleDailyBriefing() {
-  const runBriefing = async () => {
-    try {
-      const result = await AGENTS.nexus.generateDailyBriefing();
-      // Send the briefing as a push notification
-      const { sendImmediate } = await import('./skills/notifier.js');
-      const summary = result.briefing?.slice(0, 500) || 'Daily briefing generated.';
-      await sendImmediate('DigiFusion Daily Briefing', summary, 'push');
-      console.log('[Nexus] Daily briefing dispatched');
-    } catch (e) {
-      console.warn('[Nexus] Daily briefing error:', e.message);
-    }
-  };
-
-  // Calculate ms until next 7:00 AM
-  const msUntil7am = () => {
-    const now  = new Date();
+  function msUntil7am() {
+    const now = new Date();
     const next = new Date(now);
     next.setHours(7, 0, 0, 0);
     if (next <= now) next.setDate(next.getDate() + 1);
     return next - now;
-  };
-
-  // Schedule first run, then repeat every 24h
-  setTimeout(() => {
-    runBriefing();
-    setInterval(runBriefing, 24 * 60 * 60 * 1000);
+  }
+  setTimeout(async function run() {
+    try {
+      const briefing = await AGENTS.nexus.generateDailyBriefing();
+      const { sendImmediate } = await import('./skills/notifier.js');
+      await sendImmediate('DigiFusion Daily Briefing', briefing?.summary || 'Daily briefing ready.', 'all');
+    } catch(e) { console.warn('[Nexus] Daily briefing error:', e.message); }
+    setTimeout(run, 24 * 60 * 60 * 1000);
   }, msUntil7am());
+}
 
-  console.log(`[Nexus] Daily briefing scheduled — next run in ${Math.round(msUntil7am() / 3600000)}h`);
+async function processContentSchedule() {
+  try {
+    const schedule = (await getJsonCache('cache/content-schedule.json')) || [];
+    const now = new Date();
+    const due = schedule.filter(a => a.status === 'queued' && new Date(a.scheduledFor) <= now);
+    if (due.length === 0) return;
+    for (const article of due) {
+      console.log(`[Content] Auto-publishing scheduled article: ${article.topic}`);
+      try {
+        const researchResult = await AGENTS.researcher.research({ topic: article.topic, forAgent: 'aether', depth: 'standard', mergeWithKB: true });
+        const writePrompt = `Write a complete, publication-ready article for DigiFusion's blog on: "${article.topic}"${article.sector ? ` (sector: ${article.sector})` : ''}${article.angle ? `. Angle: ${article.angle}` : ''}.
+
+Research context: ${researchResult.brief?.slice(0, 2000) || ''}
+
+Requirements: 1,200-1,600 words, strong opening, clear H2 sections, concrete takeaways, DigiFusion perspective, CTA. Markdown format.`;
+        const content = await AGENTS.aether.chat(writePrompt);
+        const titleMatch = content.match(/^#\s+(.+)$/m);
+        const title = titleMatch?.[1] || article.topic;
+        const { generateAndPublishBlogPost: publish } = await import('./blogPublisher.js');
+        await publish({ title, content, sector: article.sector || 'business', tags: [article.sector, 'digifusion'].filter(Boolean), status: 'published', authorName: 'DigiFusion Intelligence' });
+        article.status = 'published';
+        article.publishedAt = new Date().toISOString();
+        console.log(`[Content] Published: ${title}`);
+      } catch(e) {
+        article.status = 'failed';
+        article.error = e.message;
+        console.error(`[Content] Failed to publish "${article.topic}":`, e.message);
+      }
+    }
+    await putJsonCache('cache/content-schedule.json', schedule);
+  } catch(e) { console.warn('[Content] processContentSchedule error:', e.message); }
 }

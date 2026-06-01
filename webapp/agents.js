@@ -1588,12 +1588,214 @@
         if (tab === 'agents-leads')   loadLeads();
         if (tab === 'agents-console') buildConsoleNav();
         if (tab === 'agents-ip')      loadIPLibrary();
+        if (tab === 'agents-content') { loadContentCalendar(); wireContentTab(); }
       });
     });
 
     /* Auto-load if agents is the active module on page load */
     if (document.getElementById('module-agents')?.classList.contains('active')) {
       loadNetworkStatus();
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CONTENT WORKFLOW TAB
+  ═══════════════════════════════════════════════════════════════ */
+
+  let _contentTabWired = false;
+
+  function wireContentTab () {
+    if (_contentTabWired) return;
+    _contentTabWired = true;
+
+    /* ── Generate Brief ── */
+    $('genBriefBtn')?.addEventListener('click', async () => {
+      const topic  = $('briefTopic')?.value.trim();
+      const sector = $('briefSector')?.value.trim();
+      const angle  = $('briefAngle')?.value.trim();
+      const depth  = $('briefDepth')?.value || 'standard';
+
+      if (!topic) { alert('Please enter a topic.'); return; }
+
+      const statusEl = $('briefStatus');
+      const wrapEl   = $('briefOutputWrap');
+      const labelEl  = $('briefOutputLabel');
+      const outEl    = $('briefOutput');
+
+      statusEl.textContent = '🔍 Researcher is gathering intelligence…';
+      wrapEl.style.display = 'none';
+      $('genBriefBtn').disabled = true;
+
+      try {
+        const base = getBackendUrl();
+        const res  = await fetch(`${base}/api/content/brief`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, sector, angle, depth }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+
+        statusEl.textContent = `✓ Brief ready — ${data.sources?.length || 0} sources`;
+        labelEl.textContent  = `Brief: ${topic}`;
+        renderMarkdown(outEl, data.brief || data.summary || JSON.stringify(data, null, 2));
+        wrapEl.style.display = 'block';
+
+        // Pre-fill publish fields for convenience
+        if (!$('publishTopic')?.value) $('publishTopic').value = topic;
+        if (sector && !$('publishSector')?.value) $('publishSector').value = sector;
+        if (!$('publishAngle')?.value) $('publishAngle').value = (data.brief || '').slice(0, 500);
+      } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+      } finally {
+        $('genBriefBtn').disabled = false;
+      }
+    });
+
+    /* ── Publish Article ── */
+    $('publishArticleBtn')?.addEventListener('click', async () => {
+      const topic   = $('publishTopic')?.value.trim();
+      const sector  = $('publishSector')?.value.trim();
+      const angle   = $('publishAngle')?.value.trim();
+      const publish = $('publishLive')?.checked !== false;
+
+      if (!topic) { alert('Please enter a topic or title.'); return; }
+
+      const statusEl = $('publishStatus');
+      const wrapEl   = $('publishOutputWrap');
+      const labelEl  = $('publishOutputLabel');
+      const outEl    = $('publishOutput');
+
+      statusEl.textContent = '✍ Aether is writing the article…';
+      wrapEl.style.display = 'none';
+      $('publishArticleBtn').disabled = true;
+
+      try {
+        const base = getBackendUrl();
+        const res  = await fetch(`${base}/api/content/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, sector, angle, publish }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+
+        const post = data.post || data;
+        statusEl.textContent = `✓ ${publish ? 'Published' : 'Draft saved'}: ${post.title || topic}`;
+        labelEl.textContent  = publish ? `✓ Published` : `Draft`;
+
+        let html = '';
+        if (post.slug)  html += `<p><strong>Slug:</strong> ${esc(post.slug)}</p>`;
+        if (post.url)   html += `<p><a href="${esc(post.url)}" target="_blank" rel="noopener">${esc(post.url)}</a></p>`;
+        if (post.excerpt) html += `<blockquote>${esc(post.excerpt)}</blockquote>`;
+        outEl.innerHTML = html || `<p>${esc(JSON.stringify(post))}</p>`;
+        wrapEl.style.display = 'block';
+      } catch (e) {
+        statusEl.textContent = `✗ ${e.message}`;
+      } finally {
+        $('publishArticleBtn').disabled = false;
+      }
+    });
+
+    /* ── Generate Content Calendar via Nexus ── */
+    $('genCalendarBtn')?.addEventListener('click', async () => {
+      const sectors = [
+        'Financial Institutions','Government & Ministry','Large Enterprise',
+        'SME & Scale-Ups','Pharmaceutical','Hotel & Hospitality','Commodity & Exchange',
+      ];
+      $('genCalendarBtn').disabled = true;
+      $('genCalendarBtn').textContent = 'Generating…';
+      try {
+        const base = getBackendUrl();
+        const res  = await fetch(`${base}/api/agents/nexus/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: `Create a content calendar for these sectors: ${sectors.join(', ')}. Generate 2 article ideas per sector.` }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        await loadContentCalendar();
+      } catch (e) {
+        alert(`Calendar generation failed: ${e.message}`);
+      } finally {
+        $('genCalendarBtn').disabled = false;
+        $('genCalendarBtn').innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Generate Content Calendar`;
+      }
+    });
+
+    /* ── Refresh calendar ── */
+    $('refreshCalendarBtn')?.addEventListener('click', loadContentCalendar);
+
+    /* ── Schedule single article ── */
+    $('scheduleArticleBtn')?.addEventListener('click', async () => {
+      const topic    = prompt('Article topic:');
+      if (!topic) return;
+      const sector   = prompt('Sector (optional):') || '';
+      const angle    = prompt('Angle / key points (optional):') || '';
+      const dateStr  = prompt('Publish date (YYYY-MM-DD, leave blank for tomorrow):') || '';
+
+      const publishAt = dateStr
+        ? new Date(dateStr).toISOString()
+        : new Date(Date.now() + 86400000).toISOString();
+
+      try {
+        const base = getBackendUrl();
+        const res  = await fetch(`${base}/api/content/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic, sector, angle, publishAt }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        await loadContentCalendar();
+      } catch (e) {
+        alert(`Scheduling failed: ${e.message}`);
+      }
+    });
+  }
+
+  async function loadContentCalendar () {
+    const body = $('contentCalendarBody');
+    if (!body) return;
+    body.innerHTML = '<div class="content-empty">Loading queue…</div>';
+    try {
+      const base = getBackendUrl();
+      const res  = await fetch(`${base}/api/content/calendar`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+
+      const items = Array.isArray(data) ? data : (data.items || data.articles || []);
+      if (!items.length) {
+        body.innerHTML = '<div class="content-empty">No articles queued. Use "Generate Content Calendar" or schedule one manually.</div>';
+        return;
+      }
+
+      body.innerHTML = `
+        <table class="content-table">
+          <thead>
+            <tr>
+              <th>Topic</th>
+              <th>Sector</th>
+              <th>Angle</th>
+              <th>Publish At</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(a => `
+              <tr>
+                <td>${esc(a.topic || a.title || '—')}</td>
+                <td>${esc(a.sector || '—')}</td>
+                <td class="content-table-angle">${esc((a.angle || a.description || '').slice(0, 80))}${(a.angle || '').length > 80 ? '…' : ''}</td>
+                <td>${a.publishAt ? new Date(a.publishAt).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—'}</td>
+                <td><span class="content-badge content-badge-${esc(a.status || 'queued')}">${esc(a.status || 'queued')}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      body.innerHTML = `<div class="content-empty content-empty-err">Failed to load queue: ${esc(e.message)}</div>`;
     }
   }
 

@@ -1576,6 +1576,10 @@
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Agency IP
         </button>
+        <button class="module-tab" data-subtab="agents-content" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Content
+        </button>
       </div><!-- /.module-topnav -->
 
       <div class="module-body">
@@ -1749,6 +1753,132 @@
 
           </div><!-- /.agents-ip-body -->
         </section><!-- /#tab-agents-ip -->
+
+        <!-- ── CONTENT TAB ── -->
+        <section class="tab-panel" id="tab-agents-content" aria-label="Content Workflow">
+          <div class="agents-content-body">
+
+            <!-- Header row -->
+            <div class="agents-content-header">
+              <div>
+                <h2 class="agents-content-title">Content Workflow</h2>
+                <p class="agents-content-subtitle">Researcher + Aether pipeline — generate briefs, publish articles, and schedule sector campaigns.</p>
+              </div>
+              <button class="ip-btn-primary" id="genCalendarBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Generate Content Calendar
+              </button>
+            </div>
+
+            <!-- Two-column layout: Brief form + Publish form -->
+            <div class="content-forms-row">
+
+              <!-- Brief generator -->
+              <div class="content-card">
+                <h3 class="content-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Research &amp; Brief
+                </h3>
+                <p class="content-card-desc">Researcher gathers live intelligence and returns a structured content brief for Aether.</p>
+                <div class="content-field">
+                  <label class="content-label">Topic</label>
+                  <input id="briefTopic" class="content-input" type="text" placeholder="e.g. AI adoption in Nigerian banking 2025" />
+                </div>
+                <div class="content-field">
+                  <label class="content-label">Sector</label>
+                  <select id="briefSector" class="content-select">
+                    <option value="">— select sector —</option>
+                    <option>Financial Institutions</option>
+                    <option>Government &amp; Ministry</option>
+                    <option>Large Enterprise</option>
+                    <option>SME &amp; Scale-Ups</option>
+                    <option>Pharmaceutical</option>
+                    <option>Hotel &amp; Hospitality</option>
+                    <option>Commodity &amp; Exchange</option>
+                  </select>
+                </div>
+                <div class="content-field">
+                  <label class="content-label">Angle / Thesis</label>
+                  <input id="briefAngle" class="content-input" type="text" placeholder="e.g. Why most digital projects fail at the implementation stage" />
+                </div>
+                <div class="content-field">
+                  <label class="content-label">Depth</label>
+                  <select id="briefDepth" class="content-select">
+                    <option value="standard">Standard (fast)</option>
+                    <option value="deep">Deep (thorough)</option>
+                  </select>
+                </div>
+                <button class="ip-btn-primary content-btn" id="genBriefBtn">Generate Brief</button>
+                <div class="content-status" id="briefStatus"></div>
+                <div class="content-output-wrap" id="briefOutputWrap" style="display:none">
+                  <div class="content-output-label" id="briefOutputLabel">Brief</div>
+                  <div class="content-output" id="briefOutput"></div>
+                </div>
+              </div>
+
+              <!-- Direct publish -->
+              <div class="content-card">
+                <h3 class="content-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  Publish Article
+                </h3>
+                <p class="content-card-desc">Aether writes and publishes a full article directly to the blog from your brief or instructions.</p>
+                <div class="content-field">
+                  <label class="content-label">Topic / Title</label>
+                  <input id="publishTopic" class="content-input" type="text" placeholder="e.g. The Hidden Cost of Manual Processes in African Banks" />
+                </div>
+                <div class="content-field">
+                  <label class="content-label">Sector</label>
+                  <select id="publishSector" class="content-select">
+                    <option value="">— select sector —</option>
+                    <option>Financial Institutions</option>
+                    <option>Government &amp; Ministry</option>
+                    <option>Large Enterprise</option>
+                    <option>SME &amp; Scale-Ups</option>
+                    <option>Pharmaceutical</option>
+                    <option>Hotel &amp; Hospitality</option>
+                    <option>Commodity &amp; Exchange</option>
+                  </select>
+                </div>
+                <div class="content-field">
+                  <label class="content-label">Angle / Key Points</label>
+                  <textarea id="publishAngle" class="content-textarea" rows="3" placeholder="3–5 key points or a one-paragraph brief…"></textarea>
+                </div>
+                <div class="content-field content-field-row">
+                  <label class="content-label content-check-label">
+                    <input type="checkbox" id="publishLive" checked />
+                    Publish immediately (live)
+                  </label>
+                </div>
+                <button class="ip-btn-primary content-btn" id="publishArticleBtn">Publish Article</button>
+                <div class="content-status" id="publishStatus"></div>
+                <div class="content-output-wrap" id="publishOutputWrap" style="display:none">
+                  <div class="content-output-label" id="publishOutputLabel">Published</div>
+                  <div class="content-output" id="publishOutput"></div>
+                </div>
+              </div>
+
+            </div><!-- /.content-forms-row -->
+
+            <!-- Schedule / Queue -->
+            <div class="content-card content-card-wide">
+              <div class="content-schedule-header">
+                <h3 class="content-card-title">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Content Queue
+                </h3>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <button class="ip-btn-secondary" id="refreshCalendarBtn">Refresh</button>
+                  <button class="ip-btn-primary" id="scheduleArticleBtn">+ Schedule Article</button>
+                </div>
+              </div>
+              <div id="contentCalendarBody">
+                <div class="content-empty">No articles queued. Use "Generate Content Calendar" or schedule one manually.</div>
+              </div>
+            </div>
+
+          </div><!-- /.agents-content-body -->
+        </section><!-- /#tab-agents-content -->
 
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->
