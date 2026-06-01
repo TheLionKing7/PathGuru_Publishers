@@ -334,29 +334,35 @@ async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
 export function resolveProvider(overrideName) {
   const requested = (overrideName || process.env.AI_PROVIDER || "").toLowerCase();
   const providers = {
-    gemini: process.env.GEMINI_API_KEY ? {
-      name:   "gemini",
-      apiKey: process.env.GEMINI_API_KEY,
-      model:  process.env.GEMINI_MODEL || "gemini-2.5-flash",
-    } : null,
-    claude: process.env.CLAUDE_API_KEY ? {
-      name:   "claude",
-      apiKey: (process.env.CLAUDE_API_KEY || "").trim(),
-      model:  (process.env.CLAUDE_MODEL  || "claude-sonnet-4-5").trim(),
-    } : null,
-        deepseek: process.env.DEEPSEEK_API_KEY ? {
-      name:    "deepseek",
-      apiKey:  process.env.DEEPSEEK_API_KEY,
-      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-      model:   process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+    // Groq — OpenAI-compatible, ultra-fast inference (Llama / Mixtral / Gemma).
+    // Primary fast provider. Free tier generous; production tier very affordable.
+    groq: process.env.GROQ_API_KEY ? {
+      name:    "groq",
+      apiKey:  process.env.GROQ_API_KEY,
+      baseUrl: "https://api.groq.com/openai/v1",
+      model:   process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
     } : null,
     cerebras: process.env.CEREBRAS_API_KEY ? {
       name:    "cerebras",
       apiKey:  process.env.CEREBRAS_API_KEY,
       baseUrl: process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
-      // Default: llama-4-scout-17b-16e-instruct (fast, capable, low latency)
-      // Alternatives: llama3.1-70b, llama3.1-8b
       model:   process.env.CEREBRAS_MODEL || "llama-4-scout-17b-16e-instruct",
+    } : null,
+    gemini: process.env.GEMINI_API_KEY ? {
+      name:   "gemini",
+      apiKey: process.env.GEMINI_API_KEY,
+      model:  process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    } : null,
+    deepseek: process.env.DEEPSEEK_API_KEY ? {
+      name:    "deepseek",
+      apiKey:  process.env.DEEPSEEK_API_KEY,
+      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+      model:   process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+    } : null,
+    claude: process.env.CLAUDE_API_KEY ? {
+      name:   "claude",
+      apiKey: (process.env.CLAUDE_API_KEY || "").trim(),
+      model:  (process.env.CLAUDE_MODEL  || "claude-sonnet-4-5").trim(),
     } : null,
     // Perplexity — OpenAI-compatible, native web-search grounding.
     // Best used for research queries that benefit from real-time sourcing.
@@ -369,8 +375,8 @@ export function resolveProvider(overrideName) {
   };
 
   if (requested && providers[requested]) return providers[requested];
-  // Auto-select priority: Cerebras (ultra-fast, low latency) → Gemini → DeepSeek → Claude → Perplexity
-  return providers.cerebras || providers.gemini || providers.deepseek || providers.claude || providers.perplexity || null;
+  // Auto-select priority: Groq (primary fast) → Cerebras → Gemini → DeepSeek → Claude → Perplexity
+  return providers.groq || providers.cerebras || providers.gemini || providers.deepseek || providers.claude || providers.perplexity || null;
 }
 
 /**
