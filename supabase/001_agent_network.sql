@@ -221,3 +221,8 @@ BEGIN
       FOR EACH ROW EXECUTE FUNCTION update_updated_at();
   END IF;
 END $$;
+
+-- ── Migration addendum: Add Researcher agent ──────────────────────────────────
+INSERT INTO agents (id, display_name, role) VALUES
+  ('researcher', 'Researcher', 'Web Intelligence & Research Specialist')
+ON CONFLICT (id) DO NOTHING;

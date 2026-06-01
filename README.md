@@ -209,15 +209,22 @@ supabase/
 
 ```bash
 # AI providers — at least one required
+# Priority (auto-select): Groq → Cerebras → Gemini → DeepSeek → Claude → Perplexity
+# Editorial / PDF pipeline: Claude → Groq → Gemini → DeepSeek
+# Research pipeline:        Perplexity → Groq → Cerebras → Claude → DeepSeek
+GROQ_API_KEY=...            # PRIMARY — ultra-fast, free tier, llama-3.3-70b-versatile
+GROQ_MODEL=llama-3.3-70b-versatile
+CLAUDE_API_KEY=...          # Best prose quality — primary for PDF/book generation
+CLAUDE_MODEL=claude-sonnet-4-6
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-2.5-flash
-CLAUDE_API_KEY=...
-CLAUDE_MODEL=claude-sonnet-4-6
 DEEPSEEK_API_KEY=...
 CEREBRAS_API_KEY=...
 CEREBRAS_MODEL=...
+PERPLEXITY_API_KEY=...      # Research chain — real-time web-grounded answers
+PERPLEXITY_MODEL=sonar-pro
 
-# Active provider (blank = auto-select starting with Cerebras)
+# Active provider (blank = auto-select, Groq first)
 AI_PROVIDER=
 AI_MAX_TOKENS=65536
 

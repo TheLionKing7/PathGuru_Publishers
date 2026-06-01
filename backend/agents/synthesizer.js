@@ -285,10 +285,14 @@ export class Synthesizer extends AgentBase {
       model:        process.env.SYNTHESIZER_MODEL || 'claude-sonnet-4-5',
     });
     // Build an ordered provider fallback chain.
-    // Gemini is excluded — blocked in many server regions (Render).
+    // Groq is primary (ultra-fast, reliable free tier).
+    // Gemini excluded — blocked in many server regions (Render).
+    // Perplexity placed last in general chain (web-search overhead unnecessary
+    // for synthesis tasks; it's promoted to first for research queries specifically).
     // If a provider hits a quota/token-limit error, _callWithFallback() advances
     // to the next provider in the chain automatically.
     this._providerChain = [
+      resolveProvider('groq'),
       resolveProvider('cerebras'),
       resolveProvider('claude'),
       resolveProvider('deepseek'),
@@ -321,17 +325,34 @@ export class Synthesizer extends AgentBase {
       msg.includes('rate_limit') ||
       (msg.includes('429') && !isQuotaError(msg));
 
-    for (let pi = 0; pi < this._providerChain.length; pi++) {
-      const provider = this._providerChain[pi];
+    return this._runChain(this._providerChain, prompt, systemHint);
+  }
+
+  async _runChain(chain, prompt, systemHint) {
+    const isQuotaError = msg =>
+      msg.includes('token_quota_exceeded') ||
+      msg.includes('quota_exceeded') ||
+      msg.includes('Tokens per day limit') ||
+      msg.includes('Tokens per month limit') ||
+      msg.includes('exceeded your current quota') ||
+      msg.includes('insufficient_quota');
+
+    const isRateLimit = msg =>
+      msg.includes('429') ||
+      msg.includes('too_many_requests') ||
+      msg.includes('rate_limit') ||
+      (msg.includes('429') && !isQuotaError(msg));
+
+    for (let pi = 0; pi < chain.length; pi++) {
+      const provider = chain[pi];
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
           return await callAiProvider(provider, prompt, systemHint, { json: false });
         } catch (e) {
           const msg = e.message || '';
           if (isQuotaError(msg)) {
-            // Daily/monthly quota exhausted — no point retrying this provider
             console.warn(`[Synthesizer] ${provider.name} quota exhausted, switching to next provider...`);
-            break; // advance to next provider
+            break;
           } else if (isRateLimit(msg) && attempt < 2) {
             const wait = (attempt + 1) * 8000; // 8s → 16s
             console.warn(`[Synthesizer] ${provider.name} rate-limited, retrying in ${wait / 1000}s...`);

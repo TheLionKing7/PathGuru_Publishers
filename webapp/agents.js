@@ -14,17 +14,26 @@
     {
       id: 'nexus',
       name: 'Nexus',
-      role: 'Project Intelligence',
-      desc: 'Orchestrates the network. Breaks high-level goals into sequenced tasks and coordinates specialist agents to deliver.',
+      role: 'CEO & Coordinator',
+      desc: 'Command layer of the agent network. Reports directly to Ola. Decomposes instructions, dispatches Researcher for knowledge gaps, escalates decisions, and runs daily briefings.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
       color: '#c9a84c',
       actions: ['orchestrate'],
     },
     {
+      id: 'researcher',
+      name: 'Researcher',
+      role: 'Web Intelligence',
+      desc: 'Web intelligence specialist. Crawls live data via Tavily, Firecrawl, and Perplexity — merges findings with the internal knowledge base before delivery.',
+      icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
+      color: '#38bdf8',
+      actions: ['research', 'quick_research', 'deep_research'],
+    },
+    {
       id: 'atlas',
       name: 'Atlas',
-      role: 'Research & BD',
-      desc: 'Produces consultant-grade market research, prospect intelligence, and proprietary frameworks using Tavily + Firecrawl.',
+      role: 'BD Intelligence',
+      desc: 'Senior BD director and deal architect. Runs the Deal Engine, builds prospect intelligence, Dream 50 targeting, and closes complex accounts.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
       color: '#5b8dee',
       actions: ['research', 'prospect_analysis', 'build_framework'],
@@ -289,8 +298,9 @@
 
     // Each agent gets a specialised panel
     const panels = {
-      atlas:       buildAtlasPanel,
       nexus:       buildNexusPanel,
+      researcher:  buildResearcherPanel,
+      atlas:       buildAtlasPanel,
       synthesizer: buildSynthesizerPanel,
       pulse:       buildPulsePanel,
       nova:        buildNovaPanel,
@@ -301,6 +311,82 @@
     const builder = panels[agentId] || buildGenericPanel;
     area.innerHTML = builder(agent);
     wireConsolePanelEvents(agentId, area);
+  }
+
+  /* ── Researcher ── */
+  function buildResearcherPanel (agent) {
+    return `
+      <div class="console-panel" id="console-researcher">
+        <div class="console-panel-inner">
+          <div class="console-agent-badge" style="--agent-color:${agent.color}">
+            ${agent.icon}
+          </div>
+          <h2 class="console-agent-title">${agent.name}</h2>
+          <p class="console-agent-subtitle">${agent.role}</p>
+          <p class="console-agent-desc">Web intelligence specialist. Runs live queries via Tavily, Firecrawl, and Perplexity — then merges findings with the internal knowledge base before delivering a unified research brief.</p>
+
+          <div class="console-form-group">
+            <label class="console-label">Research Topic</label>
+            <input id="researcher-topic" class="console-input" type="text" placeholder="e.g. AI automation market in West Africa 2025"/>
+          </div>
+          <div class="console-form-row">
+            <div class="console-form-group" style="flex:1">
+              <label class="console-label">Depth</label>
+              <select id="researcher-depth" class="console-input">
+                <option value="quick">Quick (2 queries, no scrape)</option>
+                <option value="standard" selected>Standard (4 queries + scrape)</option>
+                <option value="deep">Deep (6 queries + deep scrape)</option>
+              </select>
+            </div>
+            <div class="console-form-group" style="flex:1">
+              <label class="console-label">Requesting Agent</label>
+              <select id="researcher-foragent" class="console-input">
+                <option value="nexus">Nexus</option>
+                <option value="atlas">Atlas (BD)</option>
+                <option value="nova">Nova (Automation)</option>
+                <option value="aether">Aether (Content)</option>
+              </select>
+            </div>
+          </div>
+          <div class="console-form-group">
+            <label class="console-label">Focus Areas <span style="opacity:.5">(optional, comma-separated)</span></label>
+            <input id="researcher-focus" class="console-input" type="text" placeholder="e.g. market size, key players, growth drivers"/>
+          </div>
+          <div class="console-form-group">
+            <label class="console-label">Merge with Internal Knowledge Base</label>
+            <select id="researcher-merge" class="console-input">
+              <option value="yes" selected>Yes — enrich with DigiFusion KB</option>
+              <option value="no">No — web findings only</option>
+            </select>
+          </div>
+
+          <div class="console-actions">
+            <button class="btn-run" id="researcher-run">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Run Research
+            </button>
+          </div>
+
+          <div id="researcher-status" class="console-status" style="display:none"></div>
+          <div id="researcher-output" class="console-output" style="display:none">
+            <div class="console-output-header">
+              <span>Research Brief</span>
+              <div id="researcher-meta" style="font-size:11px;opacity:.6"></div>
+            </div>
+            <div id="researcher-brief" class="console-output-body"></div>
+            <div id="researcher-sources" style="margin-top:12px;font-size:12px;opacity:.7"></div>
+          </div>
+
+          <div class="console-chat-section">
+            <div class="console-chat-label">Chat with Researcher</div>
+            <div class="console-chat-history" id="researcher-chat-history"></div>
+            <div class="console-chat-input-row">
+              <input class="console-chat-input" id="researcher-chat-input" placeholder="Ask about any topic or request a quick research..." />
+              <button class="console-chat-send" id="researcher-chat-send">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }
 
   /* ── Atlas ── */
@@ -919,6 +1005,61 @@
   }
 
   function wireConsolePanelEvents (agentId, area) {
+    /* ── Researcher ── */
+    if (agentId === 'researcher') {
+      const runBtn    = $('researcher-run');
+      const statusEl  = $('researcher-status');
+      const outputEl  = $('researcher-output');
+      const briefEl   = $('researcher-brief');
+      const metaEl    = $('researcher-meta');
+      const sourcesEl = $('researcher-sources');
+
+      runBtn?.addEventListener('click', async () => {
+        const topic      = $('researcher-topic')?.value?.trim();
+        const depth      = $('researcher-depth')?.value || 'standard';
+        const forAgent   = $('researcher-foragent')?.value || 'nexus';
+        const focusRaw   = $('researcher-focus')?.value?.trim();
+        const mergeWithKB = $('researcher-merge')?.value !== 'no';
+        const focusAreas = focusRaw ? focusRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+        if (!topic) { alert('Please enter a research topic.'); return; }
+
+        runBtn.disabled = true;
+        statusEl.style.display = 'block';
+        statusEl.textContent = `🔍 Researching "${topic}" (${depth})…`;
+        outputEl.style.display = 'none';
+
+        try {
+          const base = getBackendUrl();
+          const res = await fetch(`${base}/api/agents/researcher/research`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ topic, depth, forAgent, focusAreas, mergeWithKB }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Research failed');
+
+          statusEl.style.display = 'none';
+          outputEl.style.display = 'block';
+          briefEl.innerHTML = '';
+          renderMarkdown(briefEl, data.brief || 'No brief returned.');
+          metaEl.textContent = `${data.sources?.length || 0} sources · KB merge: ${data.mergedWithKB ? 'yes' : 'no'} · ${depth}`;
+          if (data.sources?.length) {
+            sourcesEl.innerHTML = `<strong>Sources:</strong> ${data.sources.map(s =>
+              `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;margin-right:8px">${esc(s.title || s.url)}</a>`
+            ).join('')}`;
+          } else {
+            sourcesEl.innerHTML = '';
+          }
+        } catch (e) {
+          statusEl.textContent = `✗ ${e.message}`;
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+
+      wireChatPanel('researcher', 'researcher-chat-input', 'researcher-chat-send', 'researcher-chat-history');
+    }
+
     /* ── Atlas ── */
     if (agentId === 'atlas') {
       const runBtn     = $('atlasRunBtn');

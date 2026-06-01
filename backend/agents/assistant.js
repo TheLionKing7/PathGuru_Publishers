@@ -24,6 +24,7 @@ import { callAiProvider } from '../aiPipeline.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { notion }         from '../notionClient.js';
+import { sendImmediate }  from '../skills/notifier.js';
 
 // ── VA system prompt ───────────────────────────────────────────────────────────
 
@@ -529,14 +530,14 @@ If their answer reveals something significant (a constraint, an opportunity, a r
       }).catch(() => null);
     }
 
-    // ── Notify team ─────────────────────────────────────────────────────────
-    await this.notify(
-      `Intake complete — ${flow.trackName} (score ${score}/5)`,
-      `${leadState.company || leadState.name || 'Unknown'}: intake submitted, assigned to ${flow.agentOwner}. Notion synced.`,
-      score >= 4 ? 'warning' : 'info',
-      'push',
-      leadRecord?.id || null,
-    );
+    // ── Notify team — write to table + fire immediately for hot leads ───────
+    const intakeTitle = `Intake complete — ${flow.trackName} (score ${score}/5)`;
+    const intakeBody  = `${leadState.company || leadState.name || 'Unknown'}: intake submitted, assigned to ${flow.agentOwner}. Notion synced.`;
+    await this.notify(intakeTitle, intakeBody, score >= 4 ? 'warning' : 'info', 'all', leadRecord?.id || null);
+    // Hot leads (4+/5) get immediate push — don't wait for the 5-min Pulse sweep
+    if (score >= 4) {
+      sendImmediate(intakeTitle, intakeBody, 'all').catch(() => {});
+    }
 
     // ── Delegate to specialist agent ────────────────────────────────────────
     await this.delegate({
@@ -650,15 +651,14 @@ If their answer reveals something significant (a constraint, an opportunity, a r
       }).catch(() => null);
     }
 
-    // Notify team of qualified leads
-    if (data && score >= 4) {
-      await this.notify(
-        `New qualified lead (score ${score}/5)`,
-        `${leadState.company || 'Unknown company'}: "${(leadState.challenge || '').slice(0, 100)}"`,
-        'warning',
-        'push',
-        data.id,
-      );
+    // Notify team — immediate push for qualified leads (score ≥ 4)
+    if (data && score >= 3) {
+      const leadTitle = `New ${score >= 4 ? 'hot' : 'qualified'} lead (score ${score}/5)`;
+      const leadBody  = `${leadState.company || leadState.name || 'Unknown'}: "${(leadState.challenge || '').slice(0, 120)}"`;
+      await this.notify(leadTitle, leadBody, score >= 4 ? 'warning' : 'info', 'all', data.id);
+      if (score >= 4) {
+        sendImmediate(leadTitle, leadBody, 'all').catch(() => {});
+      }
     }
 
     return data;

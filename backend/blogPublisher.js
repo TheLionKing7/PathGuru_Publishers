@@ -19,7 +19,7 @@ import { buildBlogPrompt, parseBlogResponse, normalizeSection, stripHtmlTags } f
 import { searchPexels } from './pexelsAssets.js';
 import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
 import { selectPersonaForNiche } from './skills/personas.js';
-import { resolveProvider, callAiProvider } from './aiPipeline.js';
+import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiPipeline.js';
 import { synthesizer } from './agents/synthesizer.js';
 
 /* ── Build blog post HTML from sections ───────────────── */
@@ -435,7 +435,7 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
   let rawResponse;
   if (input.aetherContent) {
     // Aether already wrote the post — ask the LLM to wrap it in the required JSON structure
-    const provider = resolveProvider(input.aiProvider || null);
+    const provider = resolveProvider(input.aiProvider || null) || resolveEditorialProvider();
     if (!provider) throw new Error('No AI provider configured.');
     const wrapPrompt = `You are a JSON formatter. Take the blog post content below and return it as strict valid JSON matching the schema exactly. No markdown fences, no commentary.
 
@@ -460,11 +460,11 @@ Topic: ${input.topic}
 SEO keyword: ${input.seoKeyword || input.topic}`;
     rawResponse = await callAiProvider(provider, wrapPrompt, 'Return strict valid JSON only.');
   } else {
-    // Standard generation path
+    // Standard generation path — use editorial provider (Claude-first) for quality
     const basePrompt = buildBlogPrompt({ ...input, knowledgeContext }, research);
     const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
-    const provider = resolveProvider(input.aiProvider || null);
-    if (!provider) throw new Error('No AI provider configured. Set GEMINI_API_KEY, CLAUDE_API_KEY, or DEEPSEEK_API_KEY in .env');
+    const provider = resolveProvider(input.aiProvider || null) || resolveEditorialProvider();
+    if (!provider) throw new Error('No AI provider configured. Set CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or DEEPSEEK_API_KEY in .env');
     const blogSystemHint = 'You are an expert blog copywriter. Return strict, valid JSON only — no markdown fences, no commentary outside the JSON object.';
     rawResponse = await callAiProvider(provider, finalPrompt, blogSystemHint);
   }

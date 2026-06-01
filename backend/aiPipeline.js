@@ -5,7 +5,9 @@ import { runFormattingAgent } from './skills/formatting.js';
 import { getLibraryContext } from './referenceLibrary.js';
 
 export async function createAiPublishingPackage(input, baseProject) {
-  const provider = resolveProvider();
+  // Editorial pipeline uses Claude-first provider for maximum prose quality.
+  // Fast agents (Groq, Cerebras) are reserved for chat; PDFs deserve Claude.
+  const provider = resolveEditorialProvider();
   const hasTavily = Boolean(process.env.TAVILY_API_KEY);
 
   if (!provider) {
@@ -191,8 +193,8 @@ export async function callAiProvider(provider, prompt, systemHint, options = {})
 
 /** Select the next available provider, skipping the one that just failed. */
 function _resolveFallbackProvider(excludeName) {
-  // Priority: Cerebras (ultra-fast) → Gemini → DeepSeek → Claude → Perplexity
-  const PRIORITY = ['cerebras', 'gemini', 'deepseek', 'claude', 'perplexity'];
+  // Priority: Groq → Cerebras → Gemini → DeepSeek → Claude → Perplexity
+  const PRIORITY = ['groq', 'cerebras', 'gemini', 'deepseek', 'claude', 'perplexity'];
   for (const name of PRIORITY) {
     if (name === excludeName) continue;
     const p = resolveProvider(name);
@@ -381,17 +383,20 @@ export function resolveProvider(overrideName) {
 
 /**
  * Resolve a provider specifically for research tasks.
- * Prefers Perplexity (built-in web search) → Gemini → Claude → others.
+ * Prefers Perplexity (built-in web search) → Groq → Claude → others.
  * Falls back to the default provider if none are research-optimised.
  */
 export function resolveResearchProvider() {
-  const perplexity = process.env.PERPLEXITY_API_KEY ? {
-    name:    "perplexity",
-    apiKey:  process.env.PERPLEXITY_API_KEY,
-    baseUrl: "https://api.perplexity.ai",
-    model:   process.env.PERPLEXITY_MODEL || "sonar-pro",
-  } : null;
-  return perplexity || resolveProvider();
+  return resolveProvider('perplexity') || resolveProvider('groq') || resolveProvider();
+}
+
+/**
+ * Resolve a provider specifically for long-form editorial / PDF content generation.
+ * Prefers Claude (highest prose quality, 32K output) → Groq → Gemini → DeepSeek.
+ * Used by the book/playbook publishing pipeline where content quality is paramount.
+ */
+export function resolveEditorialProvider() {
+  return resolveProvider('claude') || resolveProvider('groq') || resolveProvider('gemini') || resolveProvider('deepseek') || resolveProvider();
 }
 
 

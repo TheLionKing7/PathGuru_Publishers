@@ -39,13 +39,14 @@ import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supaba
 // ── Agent network ──────────────────────────────────────────────────────────────
 import { synthesizer } from './agents/synthesizer.js';
 import { nexus }       from './agents/nexus.js';
+import { researcher }  from './agents/researcher.js';
 import { atlas }       from './agents/atlas.js';
 import { nova }        from './agents/nova.js';
 import { aether }      from './agents/aether.js';
 import { pulse }       from './agents/pulse.js';
 import { assistant }   from './agents/assistant.js';
 
-const AGENTS = { synthesizer, nexus, atlas, nova, aether, pulse, assistant };
+const AGENTS = { synthesizer, nexus, researcher, atlas, nova, aether, pulse, assistant };
 import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
 import {
   getLibrarySummary, ensureLibraryDir,
@@ -1704,6 +1705,55 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // POST /api/agents/nexus/research  — dispatch Researcher for a topic
+  //   body: { topic, forAgent?, context?, focusAreas?, depth? }
+  if (req.method === 'POST' && path === '/api/agents/nexus/research') {
+    try {
+      const body = await readBody(req);
+      if (!body.topic) { err(res, 'topic is required', 400); return; }
+      json(res, await AGENTS.nexus.dispatchResearch(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/escalate  — manually escalate to Ola
+  //   body: { subject, body, severity?, context? }
+  if (req.method === 'POST' && path === '/api/agents/nexus/escalate') {
+    try {
+      const body = await readBody(req);
+      if (!body.subject) { err(res, 'subject is required', 400); return; }
+      json(res, await AGENTS.nexus.escalateToOwner(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/fill-gaps  — detect and fill knowledge gaps in pending tasks
+  if (req.method === 'POST' && path === '/api/agents/nexus/fill-gaps') {
+    try {
+      json(res, await AGENTS.nexus.detectAndFillGaps());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/nexus/check-escalations  — run escalation trigger check
+  if (req.method === 'GET' && path === '/api/agents/nexus/check-escalations') {
+    try {
+      json(res, { escalations: await AGENTS.nexus.checkEscalationTriggers() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/researcher/research  — direct Researcher call
+  //   body: { topic, forAgent?, context?, focusAreas?, depth?, mergeWithKB? }
+  if (req.method === 'POST' && path === '/api/agents/researcher/research') {
+    try {
+      const body = await readBody(req);
+      if (!body.topic) { err(res, 'topic is required', 400); return; }
+      json(res, await AGENTS.researcher.research(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // POST /api/agents/:id/evaluation  — trigger or process a post-service evaluation
   //   body: { action: 'trigger'|'process', clientName, clientEmail, leadId, responses, nps, ... }
   if (req.method === 'POST' && path.match(/^\/api\/agents\/(atlas|nova|aether)\/evaluation$/)) {
@@ -1762,3 +1812,108 @@ server.listen(PORT, () => {
 `);
 });
 server.on('error', e => { console.error('[PathGuru] Server error:', e); process.exit(1); });
+
+  // POST /api/agents/nexus/fill-gaps  — fill knowledge gaps in pending tasks
+  if (req.method === 'POST' && path === '/api/agents/nexus/fill-gaps') {
+    try {
+      json(res, await AGENTS.nexus.detectAndFillGaps());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/nexus/check-escalations  — run escalation trigger check
+  if (req.method === 'GET' && path === '/api/agents/nexus/check-escalations') {
+    try {
+      json(res, { escalations: await AGENTS.nexus.checkEscalationTriggers() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/researcher/research  — direct Researcher call
+  //   body: { topic, forAgent?, context?, focusAreas?, depth?, mergeWithKB? }
+  if (req.method === 'POST' && path === '/api/agents/researcher/research') {
+    try {
+      const body = await readBody(req);
+      if (!body.topic) { err(res, 'topic is required', 400); return; }
+      json(res, await AGENTS.researcher.research(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // Fallthrough 404
+  json(res, { error: 'Not found' }, 404);
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVER STARTUP
+// ══════════════════════════════════════════════════════════════════════════════
+
+server.listen(PORT, () => {
+  console.log(`[PathGuru] Server running on port ${PORT}`);
+  startup();
+});
+
+async function startup() {
+  // Pre-warm fonts for faster first PDF
+  prewarmFonts().catch(() => {});
+
+  // ── Auto-sweep: Pulse monitors and dispatches notifications every 5 minutes ──
+  // This ensures Nexus escalations, lead alerts, and system warnings are
+  // dispatched to push/WhatsApp without waiting for a manual trigger.
+  const SWEEP_INTERVAL_MS = parseInt(process.env.PULSE_SWEEP_INTERVAL_MS || '300000', 10); // 5 min default
+  setInterval(async () => {
+    try {
+      const report = await AGENTS.pulse.sweep();
+      if (report.alerts > 0) {
+        console.log(`[Pulse] Auto-sweep: ${report.alerts} alert(s), health: ${report.health}, dispatched: ${report.notifications?.dispatched ?? 0}`);
+      }
+    } catch (e) {
+      console.warn('[Pulse] Auto-sweep error:', e.message);
+    }
+  }, SWEEP_INTERVAL_MS);
+
+  // ── Daily briefing: Nexus reports to Ola every morning at 7am server time ──
+  scheduleDailyBriefing();
+
+  // ── Startup escalation check — catches anything that piled up while server was down ──
+  setTimeout(async () => {
+    try {
+      const escalations = await AGENTS.nexus.checkEscalationTriggers();
+      if (escalations.length) console.log(`[Nexus] Startup escalation check: ${escalations.length} trigger(s) fired`);
+    } catch (e) {
+      console.warn('[Nexus] Startup escalation check error:', e.message);
+    }
+  }, 15_000); // 15s after boot
+}
+
+function scheduleDailyBriefing() {
+  const runBriefing = async () => {
+    try {
+      const result = await AGENTS.nexus.generateDailyBriefing();
+      // Send the briefing as a push notification
+      const { sendImmediate } = await import('./skills/notifier.js');
+      const summary = result.briefing?.slice(0, 500) || 'Daily briefing generated.';
+      await sendImmediate('DigiFusion Daily Briefing', summary, 'push');
+      console.log('[Nexus] Daily briefing dispatched');
+    } catch (e) {
+      console.warn('[Nexus] Daily briefing error:', e.message);
+    }
+  };
+
+  // Calculate ms until next 7:00 AM
+  const msUntil7am = () => {
+    const now  = new Date();
+    const next = new Date(now);
+    next.setHours(7, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  };
+
+  // Schedule first run, then repeat every 24h
+  setTimeout(() => {
+    runBriefing();
+    setInterval(runBriefing, 24 * 60 * 60 * 1000);
+  }, msUntil7am());
+
+  console.log(`[Nexus] Daily briefing scheduled — next run in ${Math.round(msUntil7am() / 3600000)}h`);
+}
