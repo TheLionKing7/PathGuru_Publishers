@@ -325,7 +325,7 @@ export class Synthesizer extends AgentBase {
       const provider = this._providerChain[pi];
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          return await callAiProvider(provider, prompt, systemHint);
+          return await callAiProvider(provider, prompt, systemHint, { json: false });
         } catch (e) {
           const msg = e.message || '';
           if (isQuotaError(msg)) {

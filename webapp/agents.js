@@ -792,10 +792,14 @@
           <textarea id="aetherTaskInput" class="console-textarea" rows="3"
             placeholder="Topic, angle, target audience…"></textarea>
         </div>
-        <div class="console-actions">
+        <div class="console-actions" style="gap:8px;flex-wrap:wrap">
           <button class="btn-console-run btn-secondary-run" id="aetherRunBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Run
+            Run Task
+          </button>
+          <button class="btn-console-run" id="aetherPublishBlogBtn" style="background:#00d4aa22;color:#00d4aa;border:1px solid #00d4aa40">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            Write &amp; Publish Blog
           </button>
         </div>
         <div class="console-output-area" id="aetherOutput" style="display:none">
@@ -1093,6 +1097,55 @@
         runBtn.disabled = false;
       });
       copyBtn?.addEventListener('click', () => copyText(mdEl?.innerText || ''));
+
+      // ── Write & Publish Blog via Aether pipeline ──────────────────────────
+      const publishBlogBtn = $('aetherPublishBlogBtn');
+      publishBlogBtn?.addEventListener('click', async () => {
+        const topic = $('aetherTaskInput')?.value?.trim();
+        if (!topic) { alert('Enter a topic or blog brief first.'); return; }
+        publishBlogBtn.disabled = true;
+        runBtn.disabled = true;
+        statusEl.style.display = 'flex';
+        statusMsg.textContent  = 'Aether is writing and publishing your blog post…';
+        outputEl.style.display = 'none';
+
+        try {
+          const backendUrl = localStorage.getItem('backendUrl') || 'http://localhost:8787';
+          const res = await fetch(`${backendUrl}/api/agents/aether/write-blog`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              topic,
+              audience:   'business professionals in digital transformation, automation, or media',
+              tone:       'authoritative yet accessible',
+              niche:      'digital_media',
+              ctaGoal:    'Book a free strategy session at digitafusion.com/agency/booking',
+              wordCount:  1200,
+              publish:    true,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Publish failed');
+
+          const post = data.post || {};
+          outputEl.style.display  = 'block';
+          outputLbl.textContent   = `✓ Published: ${post.title || topic}`;
+          mdEl.innerHTML = `
+            <div style="padding:12px 0">
+              <p style="font-size:13px;color:var(--color-accent);margin-bottom:6px">Blog post published to DigiFusion</p>
+              <p style="font-size:15px;font-weight:600;margin-bottom:4px">${esc(post.title || topic)}</p>
+              ${post.url ? `<a href="${post.url}" target="_blank" style="font-size:12px;color:var(--color-accent)">${post.url}</a>` : ''}
+              <p style="font-size:12px;color:var(--color-muted);margin-top:8px">${esc(post.metaDescription || '')}</p>
+            </div>`;
+        } catch (e) {
+          statusMsg.textContent = `✗ ${e.message}`;
+        } finally {
+          statusEl.style.display = 'none';
+          publishBlogBtn.disabled = false;
+          runBtn.disabled = false;
+        }
+      });
+
       wireChatPanel(agentId);
     }
 

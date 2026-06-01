@@ -1195,6 +1195,44 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── POST /api/agents/aether/write-blog ───────────────────────────────────
+  // Aether writes a full blog post using the C2C Pipeline and knowledge base,
+  // then passes it through the blog publisher (HTML build + Pexels + CMS publish).
+  // Body: { topic, audience?, tone?, wordCount?, seoKeyword?, niche?,
+  //         ctaGoal?, personaId?, publish? (default true) }
+  if (req.method === 'POST' && path === '/api/agents/aether/write-blog') {
+    try {
+      const body = await readBody(req);
+      const { topic, audience, tone, wordCount, seoKeyword, niche, ctaGoal, personaId, voiceNotes, publish = true } = body;
+      if (!topic?.trim()) { err(res, 'topic is required', 400); return; }
+
+      // Step 1 — Aether produces the raw content (knowledge-base grounded)
+      const rawContent = await aether.produceContent('blog post', topic, {
+        audience: audience || 'business professionals in digital transformation, automation, or media',
+        voiceNotes: voiceNotes || '',
+        callToAction: ctaGoal || 'Book a free strategy session at digitafusion.com/agency/booking',
+        wordCount: wordCount || 1200,
+        stdcStage: 'THINK — consideration and authority-building',
+      });
+
+      // Step 2 — Pass through the full blog publisher pipeline (HTML + image + CMS)
+      const result = await generateAndPublishBlogPost({
+        topic,
+        audience,
+        tone:           tone || 'authoritative yet accessible',
+        seoKeyword:     seoKeyword || topic,
+        niche:          niche || 'digital_media',
+        ctaGoal,
+        personaId,
+        aetherContent:  rawContent,  // pre-written content override
+        publish,
+      });
+
+      json(res, { ok: true, post: result, agent: 'aether' });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // ATLAS — Senior Research Partner & BD Director (Deal Engine)
   // ═══════════════════════════════════════════════════════════════════════════

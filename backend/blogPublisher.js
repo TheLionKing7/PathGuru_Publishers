@@ -20,6 +20,7 @@ import { searchPexels } from './pexelsAssets.js';
 import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
 import { selectPersonaForNiche } from './skills/personas.js';
 import { resolveProvider, callAiProvider } from './aiPipeline.js';
+import { synthesizer } from './agents/synthesizer.js';
 
 /* ── Build blog post HTML from sections ───────────────── */
 function buildBlogHtml(post, design = {}) {
@@ -410,21 +411,63 @@ export async function generateAndPublishBlogPost(input, aiProvider) {
     research = await runResearchAgent({ topic: input.topic, audience: input.audience }, {});
   } catch {}
 
-  // 2. Resolve persona — explicit pick > niche auto-select > null (default voice)
+  // 2. Pull relevant context from the intelligence base
+  let knowledgeContext = '';
+  try {
+    const domains = input.niche
+      ? [input.niche.toLowerCase().includes('auto') ? 'automation' : input.niche.toLowerCase().includes('media') ? 'digital_media' : 'business_development', 'general']
+      : ['general'];
+    const kb = await synthesizer.answer(
+      `blog content strategy and expert insights for: ${input.topic}`,
+      'blogPublisher',
+      domains,
+    );
+    if (kb && !kb.startsWith('No relevant')) knowledgeContext = kb;
+  } catch { /* knowledge base unavailable — proceed without */ }
+
+  // 3. Resolve persona — explicit pick > niche auto-select > null (default voice)
   const persona = resolvePersona(
     input.personaId || null,
     () => input.niche ? selectPersonaForNiche(input.niche, input.postType) : null
   );
 
-  // 3. Build prompt and inject persona voice + samples
-  const basePrompt = buildBlogPrompt(input, research);
-  const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
-  // 3b. Pick provider (per-request override → env AI_PROVIDER → first available)
-  const provider = resolveProvider(input.aiProvider || null);
-  if (!provider) throw new Error('No AI provider configured. Set GEMINI_API_KEY, CLAUDE_API_KEY, or DEEPSEEK_API_KEY in .env');
+  // 4. Generate content — use Aether's pre-written content if provided, else generate fresh
+  let rawResponse;
+  if (input.aetherContent) {
+    // Aether already wrote the post — ask the LLM to wrap it in the required JSON structure
+    const provider = resolveProvider(input.aiProvider || null);
+    if (!provider) throw new Error('No AI provider configured.');
+    const wrapPrompt = `You are a JSON formatter. Take the blog post content below and return it as strict valid JSON matching the schema exactly. No markdown fences, no commentary.
 
-  const blogSystemHint = 'You are an expert blog copywriter. Return strict, valid JSON only — no markdown fences, no commentary outside the JSON object.';
-  const rawResponse = await callAiProvider(provider, finalPrompt, blogSystemHint);
+SCHEMA:
+{
+  "title": "SEO-optimised title, 60 chars max",
+  "metaDescription": "150-155 chars, includes keyword, ends with benefit",
+  "slug": "url-friendly-slug",
+  "focusKeyword": "primary keyword phrase",
+  "excerpt": "2-sentence hook for social/preview",
+  "readingTimeMinutes": 7,
+  "sections": [{ "type": "hook|h2|h3|bulletList|numberedList|pullquote|cta|conclusion", "heading": "", "body": "PLAIN TEXT" }],
+  "tags": ["tag1","tag2"],
+  "socialCaptions": { "twitter": "...", "linkedin": "..." },
+  "featuredImageKeyword": "search keyword for hero image"
+}
+
+BLOG CONTENT:
+${input.aetherContent.slice(0, 6000)}
+
+Topic: ${input.topic}
+SEO keyword: ${input.seoKeyword || input.topic}`;
+    rawResponse = await callAiProvider(provider, wrapPrompt, 'Return strict valid JSON only.');
+  } else {
+    // Standard generation path
+    const basePrompt = buildBlogPrompt({ ...input, knowledgeContext }, research);
+    const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
+    const provider = resolveProvider(input.aiProvider || null);
+    if (!provider) throw new Error('No AI provider configured. Set GEMINI_API_KEY, CLAUDE_API_KEY, or DEEPSEEK_API_KEY in .env');
+    const blogSystemHint = 'You are an expert blog copywriter. Return strict, valid JSON only — no markdown fences, no commentary outside the JSON object.';
+    rawResponse = await callAiProvider(provider, finalPrompt, blogSystemHint);
+  }
 
   // 3. Parse response
   const post = parseBlogResponse(rawResponse);

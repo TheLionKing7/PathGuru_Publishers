@@ -320,6 +320,7 @@ BRIEF:
 
 RESEARCH:
 ${research?.summary || 'Use your expert knowledge on this topic.'}
+${input.knowledgeContext ? `\nINTELLIGENCE BASE — proprietary DigiFusion frameworks and insights relevant to this topic:\n${input.knowledgeContext}\n` : ''}
 
 OUTPUT FORMAT: STRICT JSON ONLY. No markdown. No code fences.
 
