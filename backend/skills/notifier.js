@@ -76,8 +76,16 @@ async function sendPush(title, body) {
     }
 
     const data = await res.json();
-    console.log(`[Notifier] Push sent — id: ${data.id}, recipients: ${data.recipients}`);
-    return { sent: true, id: data.id };
+    if (data.errors?.length) {
+      console.error(`[Notifier] OneSignal errors:`, JSON.stringify(data.errors));
+      return { error: `OneSignal: ${data.errors.join(', ')}` };
+    }
+    if (!data.recipients) {
+      console.warn(`[Notifier] Push delivered but 0 recipients — no subscribers have opted in, or app ID is wrong. id: ${data.id}`);
+    } else {
+      console.log(`[Notifier] Push sent — id: ${data.id}, recipients: ${data.recipients}`);
+    }
+    return { sent: true, id: data.id, recipients: data.recipients ?? 0 };
   } catch (e) {
     console.error('[Notifier] Push error:', e.message);
     return { error: e.message };

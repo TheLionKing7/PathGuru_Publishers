@@ -1609,6 +1609,184 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // SERVICE BOOKINGS
+  // ════════════════════════════════════════════════════════════════════════
+
+  // GET /api/bookings — list all bookings (Intelligence tab)
+  if (req.method === 'GET' && path === '/api/bookings') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const status = url.searchParams.get('status');
+      const limit  = parseInt(url.searchParams.get('limit') || '100', 10);
+      let q = db.from('service_bookings').select('*').order('booking_time', { ascending: false }).limit(limit);
+      if (status) q = q.eq('status', status);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      json(res, { bookings: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // PATCH /api/bookings/:id — update status (confirm, cancel, complete)
+  if (req.method === 'PATCH' && path.startsWith('/api/bookings/')) {
+    const id = path.split('/')[3];
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const body = await readBody(req);
+      const { data, error } = await db.from('service_bookings').update(body).eq('id', id).select().single();
+      if (error) throw new Error(error.message);
+      // If just confirmed, sync milestone to Nexus
+      if (body.status === 'confirmed') {
+        nexus.syncLifecycleMilestone({
+          leadId:     data.lead_id,
+          clientName: data.client_name,
+          track:      data.track,
+          milestone:  'strategy_session_booked',
+          data:       { bookingId: id, bookingTime: data.booking_time },
+        }).catch(() => {});
+      }
+      json(res, { booking: data });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/bookings/calendly-webhook — Calendly fires this when someone books
+  if (req.method === 'POST' && path === '/api/bookings/calendly-webhook') {
+    try {
+      const body = await readBody(req);
+      const db = getDb();
+      if (db && body.event === 'invitee.created') {
+        const inv = body.payload?.invitee || {};
+        const evt = body.payload?.event   || {};
+        const { data } = await db.from('service_bookings').insert({
+          client_name:      inv.name,
+          client_email:     inv.email,
+          client_phone:     inv.text_reminder_number || null,
+          booking_time:     evt.start_time,
+          source:           'calendly',
+          calendly_event_id: evt.uuid,
+          status:           'confirmed',
+          track:            (inv.questions_and_answers?.find(q => /service|track/i.test(q.question))?.answer) || null,
+          notes:            (inv.questions_and_answers?.map(q => `${q.question}: ${q.answer}`).join('\n')) || null,
+        }).select().single();
+        if (data) {
+          nexus.escalateToOwner({
+            subject:  `Calendly booking — ${inv.name}`,
+            body:     `${inv.name} (${inv.email}) booked a session for ${evt.start_time}`,
+            severity: 'warning',
+            context:  { bookingId: data.id },
+          }).catch(() => {});
+        }
+      }
+      json(res, { received: true });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // NEWSLETTER
+  // ════════════════════════════════════════════════════════════════════════
+
+  // GET /api/newsletter/campaigns — list campaigns (for approval UI)
+  if (req.method === 'GET' && path === '/api/newsletter/campaigns') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const status = url.searchParams.get('status');
+      let q = db.from('newsletter_campaigns').select('*').order('created_at', { ascending: false }).limit(20);
+      if (status) q = q.eq('status', status);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      json(res, { campaigns: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/propose — Nexus generates topic proposals
+  if (req.method === 'POST' && path === '/api/newsletter/propose') {
+    try {
+      const result = await nexus.proposeNewsletterTopics();
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/approve/:id — approve a campaign → Aether curates
+  if (req.method === 'POST' && path.startsWith('/api/newsletter/approve/')) {
+    const id = path.split('/')[4];
+    try {
+      const result = await nexus.approveNewsletter(id);
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/reject/:id — reject a proposal
+  if (req.method === 'POST' && path.startsWith('/api/newsletter/reject/')) {
+    const id = path.split('/')[4];
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const { data, error } = await db.from('newsletter_campaigns').update({ status: 'rejected' }).eq('id', id).select().single();
+      if (error) throw new Error(error.message);
+      json(res, { rejected: true, id });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/send/:id — send a ready campaign to all subscribers
+  if (req.method === 'POST' && path.startsWith('/api/newsletter/send/')) {
+    const id = path.split('/')[4];
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const { data: campaign } = await db.from('newsletter_campaigns').select('*').eq('id', id).single();
+      if (!campaign || campaign.status !== 'ready') { err(res, 'Campaign not ready', 400); return; }
+      const { data: subs } = await db.from('newsletter_subscribers').select('email,name').eq('status', 'active');
+      const { sendNewsletter } = await import('./skills/emailer.js');
+      const result = await sendNewsletter({
+        subject:     campaign.subject_line,
+        html:        campaign.html_body,
+        text:        campaign.plain_body,
+        subscribers: subs || [],
+      });
+      await db.from('newsletter_campaigns').update({
+        status:          'sent',
+        sent_at:         new Date().toISOString(),
+        recipient_count: result.sent,
+        resend_batch_id: result.batchId,
+      }).eq('id', id);
+      json(res, { sent: result.sent, failed: result.failed });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/subscribe — add a subscriber (from digifusion.com)
+  if (req.method === 'POST' && path === '/api/newsletter/subscribe') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const body = await readBody(req);
+      if (!body.email) { err(res, 'email required', 400); return; }
+      const { data, error } = await db.from('newsletter_subscribers')
+        .upsert({ email: body.email.toLowerCase().trim(), name: body.name || null, source: body.source || 'website', status: 'active' }, { onConflict: 'email' })
+        .select().single();
+      if (error) throw new Error(error.message);
+      json(res, { subscribed: true, id: data.id });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/newsletter/unsubscribe — remove a subscriber
+  if (req.method === 'POST' && path === '/api/newsletter/unsubscribe') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const body = await readBody(req);
+      const email = (body.email || url.searchParams.get('email') || '').toLowerCase().trim();
+      if (!email) { err(res, 'email required', 400); return; }
+      await db.from('newsletter_subscribers').update({ status: 'unsubscribed', unsubscribed_at: new Date().toISOString() }).eq('email', email);
+      json(res, { unsubscribed: true });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── GET /api/agents/notifications ───────────────────────────────────────
   // Fetch recent notifications for the dashboard.
   if (req.method === 'GET' && path === '/api/agents/notifications') {
@@ -2137,6 +2315,7 @@ async function startup() {
     try { await AGENTS.pulse.sweep(); } catch(e) { console.warn('[Pulse] sweep error:', e.message); }
   }, PULSE_SWEEP_INTERVAL_MS);
   scheduleDailyBriefing();
+  scheduleWeeklyNewsletterProposal();
   // Check content schedule every hour
   setInterval(async () => {
     try { await processContentSchedule(); } catch(e) { console.warn('[Content] schedule error:', e.message); }
@@ -2162,6 +2341,24 @@ function scheduleDailyBriefing() {
     } catch(e) { console.warn('[Nexus] Daily briefing error:', e.message); }
     setTimeout(run, 24 * 60 * 60 * 1000);
   }, msUntil7am());
+}
+
+function scheduleWeeklyNewsletterProposal() {
+  // Fire every Monday at 8am Lagos time (UTC+1)
+  function msUntilNextMonday8am() {
+    const now  = new Date();
+    const next = new Date(now);
+    const day  = now.getDay(); // 0=Sun … 6=Sat
+    const daysUntilMon = day === 1 ? 7 : (8 - day) % 7 || 7;
+    next.setDate(now.getDate() + daysUntilMon);
+    next.setHours(7, 0, 0, 0); // 8am Lagos = 7am UTC
+    return Math.max(next - now, 1000);
+  }
+  setTimeout(async function run() {
+    try { await nexus.proposeNewsletterTopics(); }
+    catch(e) { console.warn('[Nexus] Newsletter proposal error:', e.message); }
+    setTimeout(run, 7 * 24 * 60 * 60 * 1000); // re-schedule next Monday
+  }, msUntilNextMonday8am());
 }
 
 async function processContentSchedule() {

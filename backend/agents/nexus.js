@@ -229,12 +229,13 @@ export class Nexus extends AgentBase {
       escalations.push({ type: 'hot_lead', lead });
     }
 
-    // Trigger: tasks stuck >48h
+    // Trigger: tasks stuck >48h — alert once per task, not every sweep
     const cutoff = new Date(Date.now() - 172800000).toISOString();
     const { data: stuckTasks } = await db.from('tasks')
       .select('id, title, agent_id, created_at')
       .in('status', ['pending', 'in_progress'])
       .lt('created_at', cutoff)
+      .is('stuck_alerted_at', null)   // only alert if not already alerted
       .limit(5);
 
     if (stuckTasks?.length) {
@@ -244,6 +245,10 @@ export class Nexus extends AgentBase {
         severity: 'warning',
         context:  { stuckTasks: stuckTasks.map(t => t.id) },
       });
+      // Mark alerted so we don't re-fire this notification on every sweep
+      await db.from('tasks')
+        .update({ stuck_alerted_at: new Date().toISOString() })
+        .in('id', stuckTasks.map(t => t.id));
       escalations.push({ type: 'stuck_tasks', count: stuckTasks.length });
     }
 
@@ -752,6 +757,201 @@ Practitioner-grade topics only. No generic listicles.`;
       message: `Researcher complete. Aether briefed to write "${topic}". POST /api/content/publish to trigger immediately.`,
     };
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // NEWSLETTER — weekly topic proposal
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Propose 3 newsletter topics for the coming week.
+   * Saves them to newsletter_campaigns with status='proposed'.
+   * Called by Pulse weekly sweep (Monday morning) or manually.
+   */
+  async proposeNewsletterTopics() {
+    const db = getSupabase();
+    if (!db) return { error: 'Supabase not configured' };
+
+    // Don't propose if there are already pending proposals this week
+    const monday  = _getMondayISO();
+    const { data: existing } = await db.from('newsletter_campaigns')
+      .select('id').eq('week_of', monday).in('status', ['proposed', 'approved', 'curating', 'ready', 'sent'])
+      .limit(1);
+    if (existing?.length) {
+      return { skipped: true, reason: 'Proposals already exist for this week', weekOf: monday };
+    }
+
+    const prompt = `You are Nexus, the strategic coordinator of DigiFusion — a consulting firm specialising in AI automation, business development, and digital media for SMBs and enterprises in Africa.
+
+Propose 3 newsletter topic ideas for this week's subscriber email. Each topic should:
+- Be timely and relevant to Nigerian/African business leaders and entrepreneurs
+- Connect clearly to one of DigiFusion's three pillars: AI Automation, BD/Sales Growth, or Digital Media & Content
+- Have a strong "why now" angle (recent event, trend, or season)
+- Not overlap with generic global tech content — be specific to the African context
+
+Return JSON array only, no markdown:
+[
+  { "topic": "short compelling headline", "angle": "2-sentence explanation of the hook and why it matters now", "pillar": "automation|bd|digital_media" },
+  { "topic": "...", "angle": "...", "pillar": "..." },
+  { "topic": "...", "angle": "...", "pillar": "..." }
+]`;
+
+    let proposals;
+    try {
+      const raw = await callAiProvider(this.provider, prompt, this.systemPrompt);
+      proposals = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || raw);
+    } catch (e) {
+      console.error('[Nexus] Newsletter topic generation failed:', e.message);
+      return { error: e.message };
+    }
+
+    // Save each proposal
+    const inserted = [];
+    for (const p of (proposals || []).slice(0, 3)) {
+      const { data } = await db.from('newsletter_campaigns').insert({
+        proposed_topic: p.topic,
+        proposed_angle: p.angle,
+        proposed_by:    'nexus',
+        week_of:        monday,
+        status:         'proposed',
+      }).select().single();
+      if (data) inserted.push(data);
+    }
+
+    // Notify team
+    if (inserted.length > 0) {
+      await this.escalateToOwner({
+        subject:  `Newsletter proposals ready — ${inserted.length} topics for your approval`,
+        body:     inserted.map((p, i) => `${i + 1}. ${p.proposed_topic}\n   ${p.proposed_angle}`).join('\n\n'),
+        severity: 'info',
+        context:  { campaignIds: inserted.map(p => p.id) },
+      });
+    }
+
+    return { proposed: inserted.length, weekOf: monday, campaigns: inserted };
+  }
+
+  /**
+   * Approve a newsletter campaign and trigger Aether to curate content.
+   * Called by the PathGuru console when you click "Approve".
+   */
+  async approveNewsletter(campaignId) {
+    const db = getSupabase();
+    if (!db) return { error: 'Supabase not configured' };
+
+    const { data: campaign, error } = await db.from('newsletter_campaigns')
+      .update({ status: 'approved', approved_at: new Date().toISOString(), approved_by: 'ola' })
+      .eq('id', campaignId)
+      .select().single();
+
+    if (error || !campaign) return { error: error?.message || 'Campaign not found' };
+
+    // Queue Aether to curate the newsletter
+    await db.from('tasks').insert({
+      title:       `Write newsletter: "${campaign.proposed_topic}"`,
+      description: `Write a DigiFusion weekly newsletter on the topic: "${campaign.proposed_topic}".\n\nAngle: ${campaign.proposed_angle}\n\nThe newsletter should be 400–600 words, professional but warm, with one key insight, one practical takeaway, and a soft CTA to book a strategy session. Return JSON: { "subject_line": "...", "preview_text": "...", "html_body": "...full HTML...", "plain_body": "...plain text..." }`,
+      agent_id:    'aether',
+      created_by:  'nexus',
+      status:      'pending',
+      priority:    5,
+      type:        'newsletter',
+      input:       JSON.stringify({ campaignId, topic: campaign.proposed_topic, angle: campaign.proposed_angle }),
+    });
+
+    // Update campaign status to curating
+    await db.from('newsletter_campaigns').update({ status: 'curating' }).eq('id', campaignId);
+
+    return { approved: true, campaignId, topic: campaign.proposed_topic };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SESSION REMINDERS — WhatsApp 15 mins before
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Check for upcoming sessions and send WhatsApp reminders.
+   * Called by Pulse.sweep() every minute when server is running.
+   */
+  async sendSessionReminders() {
+    const db = getSupabase();
+    if (!db) return { checked: 0, sent: 0 };
+
+    const now       = new Date();
+    const windowEnd = new Date(now.getTime() + 20 * 60 * 1000); // next 20 mins
+    const windowStart = new Date(now.getTime() + 10 * 60 * 1000); // at least 10 mins away
+
+    const { data: upcoming } = await db.from('service_bookings')
+      .select('*')
+      .eq('status', 'confirmed')
+      .eq('reminder_sent', false)
+      .gte('booking_time', windowStart.toISOString())
+      .lte('booking_time', windowEnd.toISOString());
+
+    if (!upcoming?.length) return { checked: 0, sent: 0 };
+
+    let sent = 0;
+    for (const booking of upcoming) {
+      if (!booking.client_phone) {
+        // Mark sent anyway so we don't keep trying with no phone number
+        await db.from('service_bookings').update({ reminder_sent: true, reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
+        continue;
+      }
+
+      const timeStr = new Date(booking.booking_time).toLocaleTimeString('en-GB', {
+        hour: '2-digit', minute: '2-digit', timeZone: booking.timezone || 'Africa/Lagos'
+      });
+
+      const message = `Hi ${booking.client_name?.split(' ')[0] || 'there'}, this is a reminder that your strategy session with DigiFusion starts in about 15 minutes (${timeStr} Lagos time). We're looking forward to speaking with you.`;
+
+      const { sendImmediate: _si } = await import('../skills/notifier.js');
+      await _sendWhatsAppDirect(booking.client_phone, message);
+
+      await db.from('service_bookings').update({
+        reminder_sent:    true,
+        reminder_sent_at: new Date().toISOString(),
+      }).eq('id', booking.id);
+
+      sent++;
+      console.log(`[Nexus] Session reminder sent to ${booking.client_name} (${booking.client_phone})`);
+    }
+
+    return { checked: upcoming.length, sent };
+  }
+}
+
+// ── Standalone WhatsApp sender (used for reminders, bypasses notifier table) ──
+async function _sendWhatsAppDirect(to, message) {
+  const sid   = (process.env.TWILIO_ACCOUNT_SID  || '').trim();
+  const token = (process.env.TWILIO_AUTH_TOKEN    || '').trim();
+  const from  = (process.env.TWILIO_WHATSAPP_FROM || '').trim();
+  if (!sid || !token || !from) return;
+
+  const toWA = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
+  try {
+    const params = new URLSearchParams({ From: from, To: toWA, Body: message });
+    const res    = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/x-www-form-urlencoded',
+        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+      },
+      body:   params.toString(),
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      console.error(`[Nexus] Reminder WhatsApp error ${res.status}:`, t.slice(0, 150));
+    }
+  } catch (e) {
+    console.error('[Nexus] Reminder WhatsApp error:', e.message);
+  }
+}
+
+function _getMondayISO() {
+  const d = new Date();
+  const day = d.getDay(); // 0=Sun … 6=Sat
+  const diff = (day === 0 ? -6 : 1 - day);
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
 export const nexus = new Nexus();

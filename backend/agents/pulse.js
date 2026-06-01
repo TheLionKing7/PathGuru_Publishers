@@ -12,6 +12,7 @@ import { AgentBase }      from './agentBase.js';
 import { callAiProvider } from '../aiPipeline.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { dispatchPendingNotifications } from '../skills/notifier.js';
+import { nexus }          from './nexus.js';
 
 const PULSE_SYSTEM = `You are Pulse — the Analytics and Operations Monitoring agent for DigiFusion.
 
@@ -174,6 +175,10 @@ export class Pulse extends AgentBase {
         errors:          dispatchResult.errors,
       },
     };
+
+    // ── Session reminders (Nexus checks every sweep) ──────────────────────
+    nexus.sendSessionReminders().catch(e =>
+      console.warn('[Pulse] Session reminder error:', e.message));
 
     console.log(`[Pulse] Sweep complete — health: ${report.health}, alerts: ${alerts.length}, dispatched: ${dispatchResult.dispatched}`);
     return report;

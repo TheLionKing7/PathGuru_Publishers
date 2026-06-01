@@ -90,6 +90,17 @@ Run structured intake CONVERSATIONALLY — one question at a time, naturally wov
 INTEGRITY:
 Never fabricate client results, case studies, or pricing. If you do not know something, say so briefly and offer to connect them with the right person.`;
 
+// ── Booking collection questions (skip if already known from leadState) ─────────
+
+const BOOKING_QUESTIONS = [
+  { key: 'name',           ask: "What's your full name?" },
+  { key: 'email',          ask: "What email address should we send the calendar invite to?" },
+  { key: 'phone',          ask: "And your WhatsApp or phone number? We'll send a reminder before the session." },
+  { key: 'company',        ask: "What's the name of your business or organisation?" },
+  { key: 'preferred_time', ask: "What day and time works best for you? (We work Lagos time — feel free to say something like 'Thursday 2pm' or 'next Monday morning'.)" },
+  { key: 'notes',          ask: "Anything specific you'd like us to prepare for the session — a particular challenge, question, or goal?" },
+];
+
 // ── Intake questionnaire flows (conversational, one question at a time) ────────
 
 const INTAKE_FLOWS = {
@@ -338,21 +349,57 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the
       await this._onIntakeComplete(updatedLeadState, sessionId, sourcePage, history);
     }
 
-    // ── 6. Booking offer ────────────────────────────────────────────────────
+    // ── 6. Booking flow ──────────────────────────────────────────────────────
     const newScore           = this._calculateScore(updatedLeadState);
     const shouldOfferBooking = (newScore >= 4 || intakeJustCompleted) && !updatedLeadState.bookingOffered;
     let action    = 'continue';
     let bookingUrl = null;
 
-    if (shouldOfferBooking) {
-      bookingUrl = process.env.CALENDLY_BOOKING_URL || 'https://calendly.com/digifusion/strategy-session';
+    // Check if we are mid-booking-collection
+    const isCollectingBooking = updatedLeadState.bookingCollection?.active && !updatedLeadState.bookingCollection?.complete;
+
+    if (isCollectingBooking) {
+      // Advance the booking collection flow
+      const bcResult = await this._advanceBookingCollection(message, updatedLeadState, sessionId);
+      response = bcResult.response;
+      updatedLeadState.bookingCollection = bcResult.bookingCollection;
+      if (bcResult.bookingId) updatedLeadState.bookingId = bcResult.bookingId;
+      action = bcResult.complete ? 'booking_confirmed' : 'collecting_booking';
+    } else if (shouldOfferBooking) {
+      // Offer the two-path choice
       updatedLeadState.bookingOffered = true;
+      action = 'offer_booking_choice';
+      // Response already generated — the client widget renders two quick-reply chips:
+      // "Book with Aria" and "Send me the link"
+      // If neither was chosen yet, append a natural offer to the response
+      if (!response.toLowerCase().includes('book') && !response.toLowerCase().includes('session')) {
+        response += `\n\nWe're at a point where a strategy session would be the right next step. I can either collect your details now and confirm a time that works, or send you a link to pick your own slot — whichever you prefer.`;
+      }
+    }
+
+    // Detect if visitor just chose "book with Aria"
+    const bookWithAria = !isCollectingBooking && updatedLeadState.bookingOffered &&
+      ['book with aria', 'book with you', 'collect my details', 'you can collect', 'aria book', 'yes please aria', 'go ahead aria', 'do it', 'collect it'].some(s => message.toLowerCase().includes(s));
+
+    if (bookWithAria && !updatedLeadState.bookingCollection?.active) {
+      updatedLeadState.bookingCollection = this._initBookingCollection(updatedLeadState);
+      const firstQ = BOOKING_QUESTIONS[0];
+      response = `Perfect — let me get a few details. ${firstQ.ask}`;
+      action = 'collecting_booking';
+    }
+
+    // Detect if visitor chose "send me the link"
+    const wantsLink = !isCollectingBooking && updatedLeadState.bookingOffered &&
+      ['send.*link', 'link.*please', 'link.*send', 'own.*time', 'pick.*time', 'choose.*time', 'calendly', 'self.*service'].some(s => new RegExp(s, 'i').test(message));
+
+    if (wantsLink) {
+      bookingUrl = process.env.CALENDLY_BOOKING_URL || 'https://calendly.com/digifusion/strategy-session';
       action = 'offer_booking';
     }
 
     // ── 7. Detect intake start offer in response ────────────────────────────
-    const offerIntake = !isInIntake && !intakeState && newScore >= 3 && updatedLeadState.track && !updatedLeadState.intake;
-    if (offerIntake) action = 'offer_intake';
+    const offerIntake = !isInIntake && !intakeState && !isCollectingBooking && newScore >= 3 && updatedLeadState.track && !updatedLeadState.intake;
+    if (offerIntake && action === 'continue') action = 'offer_intake';
 
     return {
       response,
@@ -365,6 +412,110 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the
         ? { step: updatedLeadState.intake.currentStep + 1, total: INTAKE_FLOWS[updatedLeadState.intake.track]?.questions.length || 5 }
         : null,
     };
+  }
+
+  // ── Booking collection flow ───────────────────────────────────────────────
+
+  _initBookingCollection(leadState) {
+    return {
+      active:       true,
+      complete:     false,
+      currentStep:  0,
+      answers:      {
+        // Pre-populate what we already know from leadState
+        name:    leadState.name  || null,
+        email:   leadState.email || null,
+        company: leadState.company || null,
+        track:   leadState.track || null,
+      },
+    };
+  }
+
+  async _advanceBookingCollection(message, leadState, sessionId) {
+    const bc = { ...leadState.bookingCollection };
+    const step = bc.currentStep;
+
+    // Store the answer to the current question
+    const q = BOOKING_QUESTIONS[step];
+    if (q) bc.answers[q.key] = message.trim();
+
+    // Find next unanswered required question
+    let nextStep = step + 1;
+    while (nextStep < BOOKING_QUESTIONS.length) {
+      const nq = BOOKING_QUESTIONS[nextStep];
+      // Skip questions already answered from leadState
+      if (bc.answers[nq.key]) { nextStep++; continue; }
+      break;
+    }
+
+    if (nextStep >= BOOKING_QUESTIONS.length) {
+      // All answers collected — save booking
+      bc.complete = true;
+      bc.active   = false;
+      const bookingId = await this._saveBooking(bc.answers, leadState, sessionId);
+      const preferredTime = bc.answers.preferred_time || 'to be confirmed';
+      return {
+        response: `Thank you — I've logged your session request. Our team will confirm the exact time (you mentioned ${preferredTime}) and send a calendar invite to ${bc.answers.email || 'your email'}. We're looking forward to speaking with you.`,
+        bookingCollection: bc,
+        bookingId,
+        complete: true,
+      };
+    }
+
+    // Ask the next question
+    bc.currentStep = nextStep;
+    return {
+      response: BOOKING_QUESTIONS[nextStep].ask,
+      bookingCollection: bc,
+      complete: false,
+    };
+  }
+
+  async _saveBooking(answers, leadState, sessionId) {
+    const db = getSupabase();
+    if (!db) return null;
+
+    const { data, error } = await db.from('service_bookings').insert({
+      client_name:   answers.name   || leadState.name   || null,
+      client_email:  answers.email  || leadState.email  || null,
+      client_phone:  answers.phone  || null,
+      company:       answers.company || leadState.company || null,
+      track:         answers.track  || leadState.track  || null,
+      notes:         answers.notes  || null,
+      booking_time:  answers.preferred_time ? this._parsePreferredTime(answers.preferred_time) : null,
+      source:        'aria',
+      lead_id:       leadState.leadId || null,
+      status:        'pending',
+    }).select().single();
+
+    if (error) {
+      console.error('[Aria] Failed to save booking:', error.message);
+      return null;
+    }
+
+    // Notify team
+    await this.notify(
+      `New session booking — ${data.client_name || 'Unknown'}`,
+      `Track: ${data.track || 'TBD'} | Time: ${data.booking_time ? new Date(data.booking_time).toLocaleString('en-GB', { timeZone: 'Africa/Lagos' }) : 'TBD'} | Via: Aria`,
+      'warning', 'all', data.id
+    );
+    sendImmediate(
+      `New session booking — ${data.client_name || 'Unknown'}`,
+      `${data.company || ''} | ${data.track || ''} | ${answers.preferred_time || 'time TBD'}`,
+      'all'
+    ).catch(() => {});
+
+    return data.id;
+  }
+
+  _parsePreferredTime(raw) {
+    // Best-effort parse of conversational time strings like "Friday 3pm" or "next Tuesday morning"
+    // Returns ISO string or null if unparseable
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    } catch {}
+    return null; // Will be confirmed manually by team
   }
 
   // ══════════════════════════════════════════════════════════════════════════
