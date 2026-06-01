@@ -867,6 +867,17 @@ ent.refundOrder(shopRefundMatch[1], body);
         }
       }
 
+      // Nexus acknowledges task creation to owner via push + WhatsApp
+      const agentLabel  = agent_id ? agent_id.charAt(0).toUpperCase() + agent_id.slice(1) : 'Unassigned';
+      const priorityMap = { 1: 'Critical', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Minimal' };
+      const priorityLabel = priorityMap[taskRow.priority] || 'Normal';
+      nexus.escalateToOwner({
+        subject:  `Task created: ${title}`,
+        body:     `New task logged.\n• Agent: ${agentLabel}\n• Priority: ${priorityLabel}\n• Type: ${type}\n${description ? `• Brief: ${description.slice(0, 120)}` : ''}`,
+        severity: 'info',
+        context:  { taskId: data?.id, agent_id, type },
+      }).catch(e => console.warn('[Server] Nexus task-ack notification failed:', e.message));
+
       json(res, { success: true, task: data });
     } catch (e) { err(res, e.message, 500); }
     return;

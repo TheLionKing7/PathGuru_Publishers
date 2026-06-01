@@ -1599,7 +1599,7 @@
       if (newTaskError) newTaskError.style.display = 'none';
 
       try {
-        const res = await fetch(`${API_BASE}/api/agents/tasks`, {
+        const res = await fetch(`${getBackendUrl()}/api/agents/tasks`, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({ title, description, agent_id: agent_id || null, priority, type, due_at }),

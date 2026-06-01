@@ -87,6 +87,9 @@ export class Nexus extends AgentBase {
       systemPrompt: NEXUS_SYSTEM,
       domains:      ['general', 'business_development', 'automation', 'digital_media'],
     });
+    // In-memory dedup for stuck-task alerts — prevents repeat notifications
+    // even if the stuck_alerted_at DB column doesn't exist yet.
+    this._alertedTaskIds = new Set();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -231,24 +234,37 @@ export class Nexus extends AgentBase {
 
     // Trigger: tasks stuck >48h — alert once per task, not every sweep
     const cutoff = new Date(Date.now() - 172800000).toISOString();
-    const { data: stuckTasks } = await db.from('tasks')
-      .select('id, title, agent_id, created_at')
+    let stuckQuery = db.from('tasks')
+      .select('id, title, agent_id, created_at, stuck_alerted_at')
       .in('status', ['pending', 'in_progress'])
       .lt('created_at', cutoff)
-      .is('stuck_alerted_at', null)   // only alert if not already alerted
-      .limit(5);
+      .limit(10);
 
-    if (stuckTasks?.length) {
+    const { data: candidateTasks, error: stuckErr } = await stuckQuery;
+
+    // Filter: exclude tasks already alerted via DB column (if it exists)
+    // AND exclude tasks already alerted this process lifetime (in-memory Set)
+    const stuckTasks = (candidateTasks || []).filter(t => {
+      if (this._alertedTaskIds.has(t.id)) return false;       // in-memory guard
+      if (t.stuck_alerted_at) return false;                   // DB column guard
+      return true;
+    }).slice(0, 5);
+
+    if (stuckTasks.length) {
       await this.escalateToOwner({
         subject:  `${stuckTasks.length} task(s) stuck >48h`,
         body:     `Tasks requiring attention:\n${stuckTasks.map(t => `• ${t.title} → ${t.agent_id}`).join('\n')}`,
         severity: 'warning',
         context:  { stuckTasks: stuckTasks.map(t => t.id) },
       });
-      // Mark alerted so we don't re-fire this notification on every sweep
-      await db.from('tasks')
-        .update({ stuck_alerted_at: new Date().toISOString() })
-        .in('id', stuckTasks.map(t => t.id));
+      // Mark alerted in memory immediately (survives even if DB update fails)
+      stuckTasks.forEach(t => this._alertedTaskIds.add(t.id));
+      // Try to persist to DB column (requires migration 009 to be run)
+      try {
+        await db.from('tasks')
+          .update({ stuck_alerted_at: new Date().toISOString() })
+          .in('id', stuckTasks.map(t => t.id));
+      } catch (_) { /* column may not exist yet — in-memory guard handles it */ }
       escalations.push({ type: 'stuck_tasks', count: stuckTasks.length });
     }
 
