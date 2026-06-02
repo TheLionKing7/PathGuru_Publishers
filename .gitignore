@@ -12,9 +12,14 @@ node_modules/
 
 # Build outputs & temp files
 dist/
+/tmp/
+
+# Generated documents — large files, not source code
 *.pdf
 *.epub
-/tmp/
+*.docx
+*.xlsx
+*.pptx
 
 # OS files
 .DS_Store
