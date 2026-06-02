@@ -441,11 +441,9 @@ Write in clear, professional language. 600–900 words.`;
       case 'chat':
         return { reply: await this.chat(message || task.description, history || []) };
 
+    
       default:
-        if (task.description || topic) {
-          return this.research({ topic: task.description || topic, forAgent: forAgent || 'nexus', depth: depth || 'standard' });
-        }
-        return { error: 'No topic or action specified' };
+        return this.research({ topic: action || task.description || 'general research', forAgent: forAgent || 'nexus', depth: depth || 'standard', mergeWithKB: mergeWithKB ?? true });
     }
   }
 }
