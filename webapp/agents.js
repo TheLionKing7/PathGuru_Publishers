@@ -498,6 +498,9 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Orchestrate
             </button>
+            <button class="btn-output-action" id="nexusNotionPingBtn" style="margin-left:8px;padding:7px 14px;" title="Test Notion connection">
+              Test Notion
+            </button>
           </div>
 
           <div class="console-output-area" id="nexusOutput" style="display:none">
@@ -1147,6 +1150,22 @@
       const markdownEl = $('nexusMarkdownOutput');
       const copyBtn    = $('nexusCopyBtn');
 
+      // Notion ping button
+      $('nexusNotionPingBtn')?.addEventListener('click', async () => {
+        outputEl.style.display = 'flex';
+        renderMarkdown(markdownEl, '_Testing Notion connection…_');
+        try {
+          const res = await apiFetch('/api/agents/notion/ping');
+          renderMarkdown(markdownEl,
+            res.connected
+              ? `**Notion Connected** ✓\n\nWorkspace: ${res.workspace}\n\n${res.message}`
+              : `**Notion Connection Failed**\n\nError: ${res.error}`
+          );
+        } catch(e) {
+          renderMarkdown(markdownEl, `**Error:** ${esc(e.message)}`);
+        }
+      });
+
       // Store research brief in closure for Phase 2
       let _pendingBrief = null;
       let _pendingInstruction = null;
@@ -1156,13 +1175,31 @@
         runBtn.disabled = true;
         statusEl.style.display = 'flex';
         outputEl.style.display = 'none';
-        statusMsg.textContent  = 'Nexus is thinking…';
+        statusMsg.textContent  = 'Nexus is reading your instruction…';
+        // Show progressive status messages so you can see Orion working
+        const statusSteps = [
+          'Nexus is reading your instruction…',
+          'Detecting intent — checking if Orion needs to be dispatched…',
+          'Orion is generating search queries…',
+          'Orion is querying Perplexity and Tavily…',
+          'Orion is synthesizing findings…',
+          'Merging with internal knowledge base…',
+          'Almost done — preparing results…',
+        ];
+        let stepIdx = 0;
+        const stepInterval = setInterval(() => {
+          stepIdx = Math.min(stepIdx + 1, statusSteps.length - 1);
+          if (statusMsg) statusMsg.textContent = statusSteps[stepIdx];
+        }, 4000);
+        // Store interval ref so we can clear it
+        statusEl._stepInterval = stepInterval;
 
         try {
           const res = await apiFetch('/api/agents/nexus/orchestrate', {
             method: 'POST',
             body:   JSON.stringify({ instruction, priority, ...extraOpts }),
           });
+          clearInterval(statusEl._stepInterval);
           statusEl.style.display = 'none';
 
           // ── Research complete — show brief + next-step buttons ──
@@ -1239,6 +1276,7 @@
             outputEl.style.display = 'flex';
           }
         } catch (e) {
+          clearInterval(statusEl._stepInterval);
           statusEl.style.display = 'none';
           renderMarkdown(markdownEl, `**Error:** ${esc(e.message)}`);
           outputEl.style.display = 'flex';

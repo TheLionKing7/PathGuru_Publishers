@@ -81,7 +81,9 @@ async function sendWhatsAppTwilio(title, body, recipients) {
       if (!res.ok) {
         const t = await res.text().catch(() => '');
         console.error(`[Notifier] Twilio WhatsApp error ${res.status}: ${t.slice(0, 200)}`);
-        results.push({ to, error: `Twilio ${res.status}` });
+        // 429 = daily limit hit — mark as rate_limited so it is never retried
+        const code = res.status === 429 ? 'rate_limited' : `Twilio ${res.status}`;
+        results.push({ to, error: code, rateLimited: res.status === 429 });
       } else {
         const d = await res.json();
         console.log(`[Notifier] WhatsApp (Twilio) → ${to}: ${d.sid}`);
@@ -183,7 +185,8 @@ export async function dispatchPendingNotifications(limit = 50) {
   const { data: pending, error } = await db
     .from('notifications')
     .select('*')
-    .eq('status', 'pending')
+    .eq('status', 'pending')           // only undelivered
+    .neq('status', 'rate_limited')     // never retry rate-limited messages
     .order('created_at', { ascending: true })
     .limit(limit);
 
@@ -215,7 +218,12 @@ export async function dispatchPendingNotifications(limit = 50) {
 
       if (needsWA) {
         dispatch.whatsapp = await sendWhatsApp(title, body);
-        if (dispatch.whatsapp?.error) finalStatus = 'partial';
+        // 429 rate-limited — mark permanently so it is never retried
+        if (dispatch.whatsapp?.results?.some(r => r.rateLimited)) {
+          finalStatus = 'rate_limited';
+        } else if (dispatch.whatsapp?.error) {
+          finalStatus = 'partial';
+        }
       }
 
       // dashboard channel — just mark sent (frontend polls the table)

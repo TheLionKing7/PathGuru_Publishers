@@ -54,6 +54,19 @@ export class Pulse extends AgentBase {
       systemPrompt: PULSE_SYSTEM,
       domains:      ['general'],
     });
+    // Dedup: track last time each alert type was sent (in-memory, 6-hour cooldown)
+    // Prevents the same alert firing on every 5-minute sweep or Render restart
+    this._lastAlertTime = {};   // { alertKey: Date.now() }
+    this._ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+  }
+
+  _shouldAlert(key) {
+    const last = this._lastAlertTime[key] || 0;
+    return (Date.now() - last) > this._ALERT_COOLDOWN_MS;
+  }
+
+  _markAlerted(key) {
+    this._lastAlertTime[key] = Date.now();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -98,9 +111,9 @@ export class Pulse extends AgentBase {
     const failureRate  = totalRecent > 0 ? failedTasks.length / totalRecent : 0;
     const alerts       = [];
 
-    // ── Check thresholds and generate alerts ──
+    // ── Check thresholds and generate alerts (with 6-hour dedup) ──
 
-    if (failureRate > THRESHOLDS.taskFailureRate && totalRecent >= 5) {
+    if (failureRate > THRESHOLDS.taskFailureRate && totalRecent >= 5 && this._shouldAlert('failureRate')) {
       const pct = Math.round(failureRate * 100);
       alerts.push({
         title:    `High task failure rate: ${pct}%`,
@@ -108,33 +121,37 @@ export class Pulse extends AgentBase {
         severity: 'critical',
         channel:  'whatsapp',
       });
+      this._markAlerted('failureRate');
     }
 
-    if (pendingTasks.length > THRESHOLDS.pendingTasksHigh) {
+    if (pendingTasks.length > THRESHOLDS.pendingTasksHigh && this._shouldAlert('pendingHigh')) {
       alerts.push({
         title:    `${pendingTasks.length} tasks pending`,
         body:     `Task queue is building up. Top pending: ${pendingTasks.slice(0, 3).map(t => t.title).join(', ')}`,
         severity: 'warning',
-        channel:  'dashboard',
+        channel:  'dashboard',   // dashboard only — never WhatsApp for routine queue depth
       });
+      this._markAlerted('pendingHigh');
     }
 
-    if (newLeads.length > THRESHOLDS.leadQueueHigh) {
+    if (newLeads.length > THRESHOLDS.leadQueueHigh && this._shouldAlert('leadQueue')) {
       alerts.push({
         title:    `${newLeads.length} unprocessed leads`,
         body:     `Lead queue has grown to ${newLeads.length}. Review and follow up.`,
         severity: 'warning',
         channel:  'whatsapp',
       });
+      this._markAlerted('leadQueue');
     }
 
-    if (stuckCritical.length > 0) {
+    if (stuckCritical.length > 0 && this._shouldAlert('stuckCritical')) {
       alerts.push({
         title:    `${stuckCritical.length} critical task(s) stalled`,
         body:     `Priority-5 tasks running > 1 hour: ${stuckCritical.map(t => `"${t.title}" (${t.agent_id})`).join(', ')}`,
         severity: 'critical',
         channel:  'whatsapp',
       });
+      this._markAlerted('stuckCritical');
     }
 
     // ── Write alerts to notifications table ──

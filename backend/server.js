@@ -2019,6 +2019,31 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // GET /api/agents/notion/ping — test Notion connection and log a test task entry
+  if (req.method === 'GET' && path === '/api/agents/notion/ping') {
+    try {
+      const { notion } = await import('./notionClient.js');
+      const pingResult = await notion.ping();
+      // Also log a test task entry so you can see it appear in the Tasks DB
+      await notion.logTask({
+        agentId:   'nexus',
+        agentName: 'Nexus',
+        taskTitle: 'Notion connection test — PathGuru ping',
+        taskType:  'system',
+        outcome:   'success',
+        notes:     `Notion integration verified at ${new Date().toISOString()}`,
+      });
+      json(res, {
+        connected: true,
+        workspace: pingResult?.name || pingResult?.workspace_name || 'Connected',
+        message:   'Notion is connected. Check your Tasks database — a test entry was just logged.',
+      });
+    } catch (e) {
+      json(res, { connected: false, error: e.message });
+    }
+    return;
+  }
+
   // POST /api/agents/nexus/escalate  — manually escalate to Ola
   //   body: { subject, body, severity?, context? }
   if (req.method === 'POST' && path === '/api/agents/nexus/escalate') {
