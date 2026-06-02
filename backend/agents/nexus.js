@@ -760,6 +760,105 @@ Write a direct morning briefing covering: what got done, what's active, pipeline
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // CHAT — overrides agentBase.chat() to execute real actions, not just talk
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async chat(message, history = []) {
+    const lower = message.toLowerCase();
+
+    // ── ACTION: Log to Notion ──────────────────────────────────────────────
+    // Detects "log [X] to notion", "add [X] to notion", "log meeting"
+    const notionLogMatch = lower.match(/log (.+?) (?:to|into|in) notion/i) ||
+                           lower.match(/add (.+?) to notion/i) ||
+                           (lower.includes('log') && lower.includes('notion')) ||
+                           (lower.includes('meeting') && lower.includes('notion'));
+    if (notionLogMatch) {
+      try {
+        const subject = typeof notionLogMatch === 'object' && notionLogMatch[1]
+          ? notionLogMatch[1]
+          : message.replace(/log|to notion|into notion|in notion/gi, '').trim() || message;
+        await notion.logTask({
+          agentId:   'nexus',
+          agentName: 'Nexus',
+          taskTitle: subject.slice(0, 200),
+          taskType:  'manual_log',
+          outcome:   'logged',
+          notes:     `Logged via Boss chat at ${new Date().toLocaleString()}. Original message: "${message}"`,
+        });
+        return `Done, Boss. "${subject.slice(0, 80)}" is now logged in Notion.`;
+      } catch (e) {
+        return `Notion log failed — ${e.message}. Check your NOTION_TASKS_DB_ID env var on Render.`;
+      }
+    }
+
+    // ── ACTION: Task status / network status ──────────────────────────────
+    if (lower.includes('task log') || lower.includes('task status') ||
+        lower.includes('what tasks') || lower.includes('task history')) {
+      const db = getSupabase();
+      if (db) {
+        const { data } = await db.from('tasks')
+          .select('title, agent_id, status, created_at')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (data?.length) {
+          const summary = data.map(t =>
+            `• ${t.title?.slice(0, 60)} — ${t.agent_id} [${t.status}]`
+          ).join('\n');
+          return `Last 5 tasks, Boss:\n\n${summary}`;
+        }
+      }
+    }
+
+    // ── ACTION: Pipeline / leads ───────────────────────────────────────────
+    if (lower.includes('pipeline') || lower.includes('leads') || lower.includes('how many leads')) {
+      const view = await this.getPipelineView().catch(() => null);
+      if (view && !view.error) {
+        return `Pipeline: ${view.totalLeads} leads across ${Object.keys(view.pipeline).length} stages. Top stage: ${Object.entries(view.pipeline).sort((a,b) => b[1].length - a[1].length)[0]?.[0] || 'none'}.`;
+      }
+    }
+
+    // ── DEFAULT: LLM chat with grounded context ────────────────────────────
+    // Fetch live context to ground the response so Nexus doesn't hallucinate
+    const db = getSupabase();
+    let liveContext = '';
+    if (db) {
+      const [tasksRes, leadsRes] = await Promise.all([
+        db.from('tasks').select('title, agent_id, status').order('created_at', { ascending: false }).limit(5),
+        db.from('leads').select('name, status, lead_score').order('created_at', { ascending: false }).limit(3),
+      ]);
+      const tasks = tasksRes.data || [];
+      const leads = leadsRes.data || [];
+      if (tasks.length) liveContext += `\nRECENT TASKS:\n${tasks.map(t => `- ${t.title?.slice(0,60)} (${t.agent_id}, ${t.status})`).join('\n')}`;
+      if (leads.length) liveContext += `\nRECENT LEADS:\n${leads.map(l => `- ${l.name || 'Unknown'} [${l.status}, score ${l.lead_score}]`).join('\n')}`;
+    }
+
+    const episodic = await this.recallEpisodic(3).catch(() => '');
+    const historyBlock = history.slice(-6).map(t =>
+      `${t.role === 'user' ? 'Boss' : 'Nexus'}: ${t.content}`
+    ).join('\n');
+
+    const fullPrompt = [
+      liveContext ? `LIVE SYSTEM STATE:${liveContext}` : '',
+      episodic,
+      historyBlock ? `CONVERSATION:\n${historyBlock}` : '',
+      `Boss: ${message}`,
+    ].filter(Boolean).join('\n\n');
+
+    // Hard rule injected into every chat call: never claim to have done something you haven't
+    const chatSystem = this.systemPrompt + '\n\nCRITICAL: Only say you have done something if the code above actually executed it. If you cannot take a real action via code, say so directly and offer to do it now or explain why.';
+
+    const reply = await callAiProvider(this.provider, fullPrompt, chatSystem, { json: false });
+
+    this.rememberEpisodic({
+      summary:    `Boss chat: "${message.slice(0, 80)}"`,
+      content:    { message, reply: reply.slice(0, 400) },
+      type:       'observation', tags: ['chat'], importance: 2,
+    }).catch(() => {});
+
+    return reply;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // PIPELINE VIEW
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -1091,112 +1190,64 @@ Return JSON array only, no markdown:
     return { approved: true, campaignId, topic: campaign.proposed_topic };
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // SESSION REMINDERS — WhatsApp 15 mins before
-  // ══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Check for upcoming sessions and send WhatsApp reminders.
-   * Called by Pulse.sweep() every minute when server is running.
-   */
-  async sendSessionReminders() {
+  async scheduleReminders() {
     const db = getSupabase();
-    if (!db) return { checked: 0, sent: 0 };
-
-    const now       = new Date();
-    const windowEnd = new Date(now.getTime() + 20 * 60 * 1000); // next 20 mins
-    const windowStart = new Date(now.getTime() + 10 * 60 * 1000); // at least 10 mins away
-
-    const { data: upcoming } = await db.from('service_bookings')
-      .select('*')
-      .eq('status', 'confirmed')
-      .eq('reminder_sent', false)
-      .gte('booking_time', windowStart.toISOString())
-      .lte('booking_time', windowEnd.toISOString());
-
-    if (!upcoming?.length) return { checked: 0, sent: 0 };
-
-    let sent = 0;
-    for (const booking of upcoming) {
-      if (!booking.client_phone) {
-        // Mark sent anyway so we don't keep trying with no phone number
-        await db.from('service_bookings').update({ reminder_sent: true, reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
-        continue;
-      }
-
+    if (!db) return;
+    const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+    const start  = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const { data: bookings } = await db.from('service_bookings')
+      .select('*').eq('status', 'confirmed')
+      .gte('booking_time', start).lte('booking_time', cutoff);
+    for (const booking of (bookings || [])) {
+      if (booking.reminder_sent) continue;
       const timeStr = new Date(booking.booking_time).toLocaleTimeString('en-GB', {
-        hour: '2-digit', minute: '2-digit', timeZone: booking.timezone || 'Africa/Lagos'
+        hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos',
       });
-
-      const message = `Hi ${booking.client_name?.split(' ')[0] || 'there'}, this is a reminder that your strategy session with DigiFusion starts in about 15 minutes (${timeStr} Lagos time). We're looking forward to speaking with you.`;
-
-      const { sendImmediate: _si } = await import('../skills/notifier.js');
-      await _sendWhatsAppDirect(booking.client_phone, message);
-
-      await db.from('service_bookings').update({
-        reminder_sent:    true,
-        reminder_sent_at: new Date().toISOString(),
-      }).eq('id', booking.id);
-
-      sent++;
-      console.log(`[Nexus] Session reminder sent to ${booking.client_name} (${booking.client_phone})`);
+      const msg = 'Reminder: Strategy session in 15 min at ' + timeStr + ' with ' + (booking.client_name || 'a client') + '.';
+      await _sendWhatsAppDirect(process.env.OWNER_PHONE || '', msg).catch(() => {});
+      await db.from('service_bookings').update({ reminder_sent: true }).eq('id', booking.id);
     }
-
-    return { checked: upcoming.length, sent };
   }
+
 }
 
-// ── Standalone WhatsApp sender (used for reminders, bypasses notifier table) ──
+export const nexus = new Nexus();
+
 async function _sendWhatsAppDirect(to, message) {
   const sid   = (process.env.TWILIO_ACCOUNT_SID  || '').trim();
   const token = (process.env.TWILIO_AUTH_TOKEN    || '').trim();
   const from  = (process.env.TWILIO_WHATSAPP_FROM || '').trim();
-  if (!sid || !token || !from) return;
-
-  // Ensure both From and To carry the whatsapp: prefix (prevents Twilio error 21910)
-  const fromWA = from.startsWith('whatsapp:') ? from : `whatsapp:${from}`;
-  const toWA   = to.startsWith('whatsapp:')   ? to   : `whatsapp:${to}`;
+  if (!sid || !token || !from || !to) return;
+  const fromWA = from.startsWith('whatsapp:') ? from : 'whatsapp:' + from;
+  const toWA   = to.startsWith('whatsapp:')   ? to   : 'whatsapp:' + to;
   try {
     const params = new URLSearchParams({ From: fromWA, To: toWA, Body: message });
-    const res    = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method:  'POST',
+    const res = await fetch('https://api.twilio.com/2010-04-01/Accounts/' + sid + '/Messages.json', {
+      method: 'POST',
       headers: {
         'Content-Type':  'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
+        'Authorization': 'Basic ' + Buffer.from(sid + ':' + token).toString('base64'),
       },
       body: params.toString(),
     });
     const data = await res.json();
-    if (!res.ok) {
-      console.error(`[Nexus] WhatsApp error ${res.status}:`, JSON.stringify(data));
-    } else {
-      console.log(`[Nexus] WhatsApp sent → ${toWA} (sid: ${data.sid})`);
-    }
-  } catch (e) {
-    console.error('[Nexus] WhatsApp send failed:', e.message);
-  }
+    if (!res.ok) console.error('[Nexus] WhatsApp error ' + res.status, JSON.stringify(data));
+    else console.log('[Nexus] WhatsApp sent -> ' + toWA + ' sid:' + data.sid);
+  } catch (e) { console.error('[Nexus] WhatsApp send failed:', e.message); }
 }
 
-// ── Send WhatsApp to the platform owner (Ola) ──────────────────────────────
-// Uses OWNER_PHONE env var (e.g. +2348012345678)
 async function _notifyOwnerWhatsApp(message) {
   const ownerPhone = (process.env.OWNER_PHONE || '').trim();
-  if (!ownerPhone) {
-    console.warn('[Nexus] OWNER_PHONE not set — skipping WhatsApp owner notification');
-    return;
-  }
+  if (!ownerPhone) { console.warn('[Nexus] OWNER_PHONE not set'); return; }
   return _sendWhatsAppDirect(ownerPhone, message);
 }
 
-// ── Monday ISO date helper ─────────────────────────────────────────────────
 function _getMondayISO() {
   const now = new Date();
-  const day = now.getDay(); // 0=Sun,1=Mon,...
-  const diff = (day === 0 ? -6 : 1 - day);
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diff);
-  return monday.toISOString().slice(0, 10);
+  const day = now.getDay();
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(now.setDate(diff));
+  return mon.toISOString().slice(0, 10);
 }
 
-export const nexus = new Nexus();
 export { _notifyOwnerWhatsApp };
