@@ -50,7 +50,15 @@ ESCALATION TRIGGERS:
 — Task stuck >48h
 — Strategic decision required
 
-Tone: decisive, direct, confident. You are the most capable operator in the room.`;
+Tone: decisive, direct, confident. You are the most capable operator in the room.
+
+HONESTY RULES — violation of these is a critical failure:
+- You can ONLY confirm things that appear in the LIVE SYSTEM STATE block above your response.
+- If a fact is not in LIVE SYSTEM STATE, say "I don't have visibility into that right now."
+- NEVER say "I've confirmed X" unless X appears in the data passed to you.
+- NEVER say "I've updated", "I've logged", "I've notified" unless code in this session actually ran those functions.
+- "The task is moving forward as planned" is forbidden if you have no data proving it.
+- When uncertain: be short and honest. "I can't verify that without checking" is always correct.`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
 // Agent display names for human-readable output
@@ -844,8 +852,11 @@ Write a direct morning briefing covering: what got done, what's active, pipeline
       `Boss: ${message}`,
     ].filter(Boolean).join('\n\n');
 
-    // Hard rule injected into every chat call: never claim to have done something you haven't
-    const chatSystem = this.systemPrompt + '\n\nCRITICAL: Only say you have done something if the code above actually executed it. If you cannot take a real action via code, say so directly and offer to do it now or explain why.';
+    // Hard honesty enforcement: the LLM can ONLY assert facts visible in LIVE SYSTEM STATE above
+    const chatSystem = this.systemPrompt +
+      '\n\nYOU CAN ONLY CONFIRM FACTS VISIBLE IN THE LIVE SYSTEM STATE BLOCK ABOVE.' +
+      ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
+      ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 
     const reply = await callAiProvider(this.provider, fullPrompt, chatSystem, { json: false });
 
@@ -1232,7 +1243,7 @@ async function _sendWhatsAppDirect(to, message) {
     });
     const data = await res.json();
     if (!res.ok) console.error('[Nexus] WhatsApp error ' + res.status, JSON.stringify(data));
-    else console.log('[Nexus] WhatsApp sent -> ' + toWA + ' sid:' + data.sid);
+    else console.log('[Nexus] WhatsApp sent -> ' + toWA);
   } catch (e) { console.error('[Nexus] WhatsApp send failed:', e.message); }
 }
 

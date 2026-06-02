@@ -397,21 +397,40 @@ Return ONLY the JSON array, no other text.`;
    * @returns {string}                 - agent's reply
    */
   async chat(message, history = []) {
-    // Recall recent episodic context to ground the response
-    const episodic = await this.recallEpisodic(5).catch(() => '');
+    // Fetch live task state for this agent so responses are grounded in real data
+    const db = getSupabase();
+    let liveState = '';
+    if (db) {
+      const { data: myTasks } = await db.from('tasks')
+        .select('title, status, created_at')
+        .eq('agent_id', this.id)
+        .order('created_at', { ascending: false })
+        .limit(5).catch(() => ({ data: [] }));
+      if (myTasks?.length) {
+        liveState = 'LIVE SYSTEM STATE (your recent tasks):\n' +
+          myTasks.map(t => '- ' + (t.title || '').slice(0, 60) + ' [' + t.status + ']').join('\n');
+      }
+    }
 
-    // Build a conversation-style prompt
+    const episodic = await this.recallEpisodic(5).catch(() => '');
     const historyBlock = history.length
       ? history.slice(-8).map(t => `${t.role === 'user' ? 'Team' : this.displayName}: ${t.content}`).join('\n')
       : '';
 
     const fullPrompt = [
+      liveState,
       episodic,
       historyBlock ? `## Recent conversation\n${historyBlock}` : '',
       `Team: ${message}`,
     ].filter(Boolean).join('\n\n');
 
-        const guardrailedSystem = this.systemPrompt + ' CRITICAL: Only say you completed an action if code actually ran it. Never invent outcomes.';
+    // Honesty guardrail applied to ALL agents
+    const guardrailedSystem = this.systemPrompt +
+      ' YOU CAN ONLY CONFIRM FACTS VISIBLE IN THE LIVE SYSTEM STATE BLOCK ABOVE.' +
+      ' If something is NOT in that block, say "I do not have visibility into that right now."' +
+      ' Never say you have confirmed, logged, updated, or completed something unless the data above proves it.' +
+      ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
+
     const reply = await callAiProvider(
       this.provider,
       fullPrompt,
@@ -466,7 +485,7 @@ Return ONLY the JSON array, no other text.`;
       if (taskId && typeof this.completeTask === 'function') await this.completeTask(taskId, result || {});
       return { success: true, taskId, result };
     } catch (e) {
-      console.error(`[${this.displayName}] run() error:`, e.message);
+      console.error('[' + this.displayName + '] run() error:', e.message);
       if (taskId && typeof this.failTask === 'function') await this.failTask(taskId, e.message);
       return { success: false, taskId, error: e.message };
     }
