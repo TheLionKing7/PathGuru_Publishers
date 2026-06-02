@@ -948,26 +948,41 @@ async function _sendWhatsAppDirect(to, message) {
       method:  'POST',
       headers: {
         'Content-Type':  'application/x-www-form-urlencoded',
-        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+        'Authorization': `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
       },
-      body:   params.toString(),
-      signal: AbortSignal.timeout(15_000),
+      body: params.toString(),
     });
+    const data = await res.json();
     if (!res.ok) {
-      const t = await res.text().catch(() => '');
-      console.error(`[Nexus] Reminder WhatsApp error ${res.status}:`, t.slice(0, 150));
+      console.error(`[Nexus] WhatsApp error ${res.status}:`, JSON.stringify(data));
+    } else {
+      console.log(`[Nexus] WhatsApp sent → ${toWA} (sid: ${data.sid})`);
     }
   } catch (e) {
-    console.error('[Nexus] Reminder WhatsApp error:', e.message);
+    console.error('[Nexus] WhatsApp send failed:', e.message);
   }
 }
 
+// ── Send WhatsApp to the platform owner (Ola) ──────────────────────────────
+// Uses OWNER_PHONE env var (e.g. +2348012345678)
+async function _notifyOwnerWhatsApp(message) {
+  const ownerPhone = (process.env.OWNER_PHONE || '').trim();
+  if (!ownerPhone) {
+    console.warn('[Nexus] OWNER_PHONE not set — skipping WhatsApp owner notification');
+    return;
+  }
+  return _sendWhatsAppDirect(ownerPhone, message);
+}
+
+// ── Monday ISO date helper ─────────────────────────────────────────────────
 function _getMondayISO() {
-  const d = new Date();
-  const day = d.getDay(); // 0=Sun … 6=Sat
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun,1=Mon,...
   const diff = (day === 0 ? -6 : 1 - day);
-  d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diff);
+  return monday.toISOString().slice(0, 10);
 }
 
 export const nexus = new Nexus();
+export { _notifyOwnerWhatsApp };

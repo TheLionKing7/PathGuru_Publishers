@@ -38,7 +38,7 @@ import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supaba
 
 // ── Agent network ──────────────────────────────────────────────────────────────
 import { synthesizer } from './agents/synthesizer.js';
-import { nexus }       from './agents/nexus.js';
+import { nexus, _notifyOwnerWhatsApp } from './agents/nexus.js';
 import { researcher }  from './agents/researcher.js';
 import { atlas }       from './agents/atlas.js';
 import { nova }        from './agents/nova.js';
@@ -856,27 +856,34 @@ ent.refundOrder(shopRefundMatch[1], body);
       const { data, error: dbErr } = await db.from('tasks').insert(taskRow).select().single();
       if (dbErr) { err(res, dbErr.message, 500); return; }
 
-      // If an agent is assigned, dispatch immediately via the agent's execute()
+      // If an agent is assigned, dispatch with full lifecycle management
+      // so the task moves through pending → in_progress → completed/failed
+      // and never gets stuck triggering escalation alerts.
       if (agent_id && data) {
         const agentMap = { nexus, atlas, nova, aether, pulse, synthesizer, researcher };
         const agent = agentMap[agent_id];
-        if (agent && typeof agent.execute === 'function') {
-          agent.execute({ ...data, instruction: description || title }).catch(e =>
-            console.warn(`[Server] Task dispatch to ${agent_id} failed:`, e.message)
-          );
+        if (agent) {
+          const taskId = data.id;
+          (async () => {
+            try {
+              if (taskId && typeof agent.startTask === 'function') await agent.startTask(taskId);
+              const result = await agent.execute({ ...data, instruction: description || title });
+              if (taskId && typeof agent.completeTask === 'function') await agent.completeTask(taskId, result);
+            } catch (e) {
+              console.warn(`[Server] Task dispatch to ${agent_id} failed:`, e.message);
+              if (taskId && typeof agent.failTask === 'function') await agent.failTask(taskId, e.message);
+            }
+          })();
         }
       }
 
-      // Nexus acknowledges task creation to owner via push + WhatsApp
-      const agentLabel  = agent_id ? agent_id.charAt(0).toUpperCase() + agent_id.slice(1) : 'Unassigned';
-      const priorityMap = { 1: 'Critical', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Minimal' };
+      // Nexus acknowledges task creation to owner via WhatsApp SMS only (no Chrome push)
+      const agentLabel    = agent_id ? agent_id.charAt(0).toUpperCase() + agent_id.slice(1) : 'Unassigned';
+      const priorityMap   = { 1: '🔴 Critical', 2: '🟠 High', 3: '🟡 Normal', 4: '🟢 Low', 5: '⚪ Minimal' };
       const priorityLabel = priorityMap[taskRow.priority] || 'Normal';
-      nexus.escalateToOwner({
-        subject:  `Task created: ${title}`,
-        body:     `New task logged.\n• Agent: ${agentLabel}\n• Priority: ${priorityLabel}\n• Type: ${type}\n${description ? `• Brief: ${description.slice(0, 120)}` : ''}`,
-        severity: 'info',
-        context:  { taskId: data?.id, agent_id, type },
-      }).catch(e => console.warn('[Server] Nexus task-ack notification failed:', e.message));
+      const waMessage     = `✅ *Task Logged — Nexus*\n\n*${title}*\n• Agent: ${agentLabel}\n• Priority: ${priorityLabel}\n• Type: ${type}${description ? `\n• Brief: ${description.slice(0, 150)}` : ''}`;
+      _notifyOwnerWhatsApp(waMessage)
+        .catch(e => console.warn('[Server] Nexus WhatsApp task-ack failed:', e.message));
 
       json(res, { success: true, task: data });
     } catch (e) { err(res, e.message, 500); }
@@ -2371,9 +2378,9 @@ async function startup() {
   setInterval(async () => {
     try { await processContentSchedule(); } catch(e) { console.warn('[Content] schedule error:', e.message); }
   }, 60 * 60 * 1000);
-  setTimeout(async () => {
-    try { await AGENTS.nexus.checkEscalationTriggers(); } catch(e) {}
-  }, 15_000);
+  // NOTE: checkEscalationTriggers() is NOT called on startup — it runs inside
+  // generateDailyBriefing() at 7am only. Calling it on every restart caused
+  // a Chrome notification flood on every Render deploy/spin-up.
 }
 
 function scheduleDailyBriefing() {
