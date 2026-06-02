@@ -22,8 +22,8 @@
     },
     {
       id: 'researcher',
-      name: 'Researcher',
-      role: 'Web Intelligence',
+      name: 'Orion',
+      role: 'Intelligence & Research',
       desc: 'Web intelligence specialist. Crawls live data via Tavily, Firecrawl, and Perplexity — merges findings with the internal knowledge base before delivery.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
       color: '#38bdf8',
@@ -378,7 +378,7 @@
           </div>
 
           <div class="console-chat-section">
-            <div class="console-chat-label">Chat with Researcher</div>
+            <div class="console-chat-label">Chat with Orion</div>
             <div class="console-chat-history" id="researcher-chat-history"></div>
             <div class="console-chat-input-row">
               <input class="console-chat-input" id="researcher-chat-input" placeholder="Ask about any topic or request a quick research..." />
@@ -931,7 +931,25 @@
 
       if (!taskId) {
         // Synchronous result
-        renderMarkdown(markdownEl, res.result || JSON.stringify(res, null, 2));
+        const syncRaw = res.result ?? res;
+        let syncDisplay;
+        if (typeof syncRaw === 'string') {
+          syncDisplay = syncRaw;
+        } else if (syncRaw?.plan && Array.isArray(syncRaw.plan)) {
+          const lines = [`**Execution Plan** — ${syncRaw.plan.length} task(s) created\n`];
+          syncRaw.plan.forEach((t, i) => {
+            lines.push(`**${i + 1}. ${t.title || t.agent_id}**`);
+            if (t.agent_id)    lines.push(`Agent: ${t.agent_id}`);
+            if (t.type)        lines.push(`Type: ${t.type}`);
+            if (t.priority)    lines.push(`Priority: ${t.priority}`);
+            if (t.description) lines.push(`${t.description}`);
+            lines.push('');
+          });
+          syncDisplay = lines.join('\n');
+        } else {
+          syncDisplay = '```json\n' + JSON.stringify(syncRaw, null, 2) + '\n```';
+        }
+        renderMarkdown(markdownEl, syncDisplay);
         outputEl.style.display = 'flex';
         if (outputLabelEl) outputLabelEl.textContent = 'Output';
         if (onSuccess) onSuccess(res);
@@ -949,7 +967,28 @@
 
           if (task.status === 'done' || task.status === 'completed') {
             statusEl.style.display = 'none';
-            renderMarkdown(markdownEl, task.result || task.output || '(No output)');
+            const raw = task.result || task.output;
+            let display;
+            if (!raw) {
+              display = '(No output)';
+            } else if (typeof raw === 'string') {
+              display = raw;
+            } else if (raw.plan && Array.isArray(raw.plan)) {
+              // Nexus orchestrate result — render as readable execution plan
+              const lines = [`**Execution Plan** — ${raw.plan.length} task(s) created\n`];
+              raw.plan.forEach((t, i) => {
+                lines.push(`**${i + 1}. ${t.title || t.agent_id}**`);
+                if (t.agent_id)    lines.push(`Agent: ${t.agent_id}`);
+                if (t.type)        lines.push(`Type: ${t.type}`);
+                if (t.priority)    lines.push(`Priority: ${t.priority}`);
+                if (t.description) lines.push(`${t.description}`);
+                lines.push('');
+              });
+              display = lines.join('\n');
+            } else {
+              display = '```json\n' + JSON.stringify(raw, null, 2) + '\n```';
+            }
+            renderMarkdown(markdownEl, display);
             outputEl.style.display = 'flex';
             if (onSuccess) onSuccess(task);
           } else if (task.status === 'failed') {
@@ -1108,16 +1147,98 @@
       const markdownEl = $('nexusMarkdownOutput');
       const copyBtn    = $('nexusCopyBtn');
 
-      runBtn?.addEventListener('click', async () => {
-        const goal     = $('nexusGoalInput')?.value?.trim();
-        const priority = $('nexusPrioritySelect')?.value || 'normal';
-        if (!goal) { alert('Please enter a project goal.'); return; }
+      // Store research brief in closure for Phase 2
+      let _pendingBrief = null;
+      let _pendingInstruction = null;
+
+      async function callOrchestrate(instruction, extraOpts = {}) {
+        const priority = parseInt($('nexusPrioritySelect')?.value) || 3;
         runBtn.disabled = true;
-        await runTask('nexus', { action: 'orchestrate', description: goal, priority }, {
-          statusEl, statusMsgEl: statusMsg, outputEl, markdownEl,
-          onSuccess () { runBtn.disabled = false; },
-        });
+        statusEl.style.display = 'flex';
+        outputEl.style.display = 'none';
+        statusMsg.textContent  = 'Nexus is thinking…';
+
+        try {
+          const res = await apiFetch('/api/agents/nexus/orchestrate', {
+            method: 'POST',
+            body:   JSON.stringify({ instruction, priority, ...extraOpts }),
+          });
+          statusEl.style.display = 'none';
+
+          // ── Research complete — show brief + next-step buttons ──
+          if (res?.type === 'research_complete') {
+            _pendingBrief       = res.brief;
+            _pendingInstruction = instruction;
+            renderMarkdown(markdownEl,
+              `**Orion has completed the research.**\n\n${res.brief || ''}\n\n---\n*What should I do with these findings?*`
+            );
+            // Inject next-step buttons below the output
+            const btnRow = document.createElement('div');
+            btnRow.className = 'nexus-nextstep-row';
+            btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;';
+            (res.nextSteps || []).forEach(step => {
+              const btn = document.createElement('button');
+              btn.className   = 'btn-console-run';
+              btn.style.cssText = 'font-size:13px;padding:6px 14px;';
+              btn.textContent = step.label;
+              btn.title       = step.description || '';
+              btn.addEventListener('click', async () => {
+                btnRow.remove();
+                await callOrchestrate(_pendingInstruction, {
+                  researchBrief: _pendingBrief,
+                  nextStep:      step.id,
+                });
+              });
+              btnRow.appendChild(btn);
+            });
+            outputEl.style.display = 'flex';
+            outputEl.appendChild(btnRow);
+
+          // ── Blog published ──
+          } else if (res?.type === 'blog_published') {
+            renderMarkdown(markdownEl,
+              `**${res.published ? '✓ Article published as draft' : '✓ Article written'}**\n\n` +
+              `**"${res.title}"**\n\n${res.message}\n\n---\n*Preview:*\n\n${res.content || ''}`
+            );
+            outputEl.style.display = 'flex';
+
+          // ── Task queued ──
+          } else if (res?.type === 'task_queued') {
+            renderMarkdown(markdownEl, `**Task queued successfully**\n\n${res.message}`);
+            outputEl.style.display = 'flex';
+
+          // ── Execution plan (multi-step) ──
+          } else if (res?.plan && Array.isArray(res.plan)) {
+            const lines = [`**Execution Plan** — ${res.plan.length} task(s) queued\n`];
+            res.plan.forEach((t, i) => {
+              lines.push(`**${i + 1}. ${t.title}**`);
+              if (t.agent_id)    lines.push(`- Agent: \`${t.agent_id}\``);
+              if (t.type)        lines.push(`- Type: ${t.type}`);
+              if (t.description) lines.push(`- ${t.description}`);
+              lines.push('');
+            });
+            renderMarkdown(markdownEl, lines.join('\n'));
+            outputEl.style.display = 'flex';
+
+          } else {
+            renderMarkdown(markdownEl, '```json\n' + JSON.stringify(res, null, 2) + '\n```');
+            outputEl.style.display = 'flex';
+          }
+        } catch (e) {
+          statusEl.style.display = 'none';
+          renderMarkdown(markdownEl, `**Error:** ${esc(e.message)}`);
+          outputEl.style.display = 'flex';
+        }
         runBtn.disabled = false;
+      }
+
+      runBtn?.addEventListener('click', async () => {
+        const goal = $('nexusGoalInput')?.value?.trim();
+        if (!goal) { alert('Please enter a goal or question for Nexus.'); return; }
+        // Clear any previous next-step buttons
+        outputEl.querySelectorAll('.nexus-nextstep-row').forEach(el => el.remove());
+        _pendingBrief = null;
+        await callOrchestrate(goal);
       });
       copyBtn?.addEventListener('click', () => copyText(markdownEl?.innerText || ''));
     }

@@ -814,9 +814,9 @@ ent.refundOrder(shopRefundMatch[1], body);
   // Send a natural-language instruction — Nexus decomposes and routes it.
   if (req.method === 'POST' && path === '/api/agents/nexus/orchestrate') {
     try {
-      const { instruction, priority } = await readBody(req);
+      const { instruction, priority, researchBrief, nextStep } = await readBody(req);
       if (!instruction) { err(res, 'instruction required', 400); return; }
-      const result = await nexus.orchestrate(instruction, { priority });
+      const result = await nexus.orchestrate(instruction, { priority, researchBrief, nextStep });
       json(res, result);
     } catch (e) { err(res, e.message, 500); }
     return;
@@ -1706,6 +1706,68 @@ ent.refundOrder(shopRefundMatch[1], body);
       }
       json(res, { booking: data });
     } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/webhooks/whatsapp — Twilio inbound WhatsApp messages ──────────
+  // Twilio sends a POST with URL-encoded form data when you receive a WhatsApp message.
+  // We verify the sender is OWNER_PHONE, pass the text to Nexus.chat(), and reply
+  // with TwiML so Twilio delivers the response back to the same WhatsApp number.
+  // Webhook URL to paste in Twilio console:
+  //   https://<your-render-url>/api/webhooks/whatsapp
+  if (req.method === 'POST' && path === '/api/webhooks/whatsapp') {
+    try {
+      // Twilio sends application/x-www-form-urlencoded
+      const raw = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', c => data += c);
+        req.on('end',  () => resolve(data));
+        req.on('error', reject);
+      });
+      const params  = new URLSearchParams(raw);
+      const from    = (params.get('From') || '').replace('whatsapp:', '').trim();
+      const msgBody = (params.get('Body') || '').trim();
+
+      // Security: only accept messages from the owner's number
+      const ownerPhone = (process.env.OWNER_PHONE || '').trim().replace('whatsapp:', '');
+      const allowed    = !ownerPhone || from === ownerPhone || from === ownerPhone.replace('+', '');
+
+      const twiml = reply => {
+        res.writeHead(200, { 'Content-Type': 'text/xml' });
+        res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${reply.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Message></Response>`);
+      };
+
+      if (!allowed) {
+        console.warn(`[WhatsApp] Blocked message from unknown number: ${from}`);
+        return twiml('Unauthorised.');
+      }
+
+      if (!msgBody) return twiml('I did not receive any text. Please try again.');
+
+      console.log(`[WhatsApp→Nexus] From: ${from} | Message: ${msgBody.slice(0, 80)}`);
+
+      // Maintain per-number conversation history in memory (resets on server restart)
+      if (!global._waHistory) global._waHistory = {};
+      const history = global._waHistory[from] || [];
+
+      // Pass to Nexus chat
+      const result  = await AGENTS.nexus.chat(msgBody, history);
+      const reply   = typeof result === 'string' ? result : result?.response || result?.message || JSON.stringify(result);
+
+      // Update history (keep last 10 turns to avoid bloat)
+      history.push({ role: 'user',      content: msgBody });
+      history.push({ role: 'assistant', content: reply   });
+      global._waHistory[from] = history.slice(-20);
+
+      // Twilio caps messages at 1600 chars — truncate gracefully
+      const safe = reply.length > 1550 ? reply.slice(0, 1547) + '…' : reply;
+      return twiml(safe);
+
+    } catch (e) {
+      console.error('[WhatsApp webhook] Error:', e.message);
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>Nexus encountered an error: ${e.message.slice(0, 100)}</Message></Response>`);
+    }
     return;
   }
 

@@ -276,20 +276,174 @@ export class Nexus extends AgentBase {
   // TASK ROUTING & ORCHESTRATION
   // ══════════════════════════════════════════════════════════════════════════
 
-  async orchestrate(instruction, options = {}) {
-    const { priority = 3 } = options;
+  // ── Intent classifier — detects if an instruction is primarily research ──
+  _isResearchIntent(instruction) {
+    const lower = instruction.toLowerCase();
+    const researchSignals = [
+      'research', 'find out', 'investigate', 'look up', 'look into',
+      'what is', 'what are', 'how does', 'how do', 'tell me about',
+      'gather', 'compile', 'analyse', 'analyze', 'study', 'explore',
+      'what do we know', 'intelligence on', 'intel on', 'data on',
+      'market data', 'market research', 'competitive intel', 'background on',
+      'deep dive', 'audit', 'scan', 'survey', 'review the', 'understand',
+    ];
+    return researchSignals.some(s => lower.includes(s));
+  }
 
-    const decompositionPrompt = `You are decomposing a team instruction into discrete tasks for the DigiFusion agent network.
+  // ── Route to the right agent after research ──────────────────────────────
+  _suggestNextSteps(brief) {
+    return [
+      { id: 'blog',     label: 'Write a blog article',         agent: 'aether',      description: 'Aether will craft a publication-ready article from the research findings.' },
+      { id: 'strategy', label: 'Create a strategy brief',      agent: 'atlas',       description: 'Atlas will synthesize the research into a BD or strategy recommendation.' },
+      { id: 'report',   label: 'Produce a full report',        agent: 'synthesizer', description: 'Synthesizer will build a structured intelligence report and save it to the knowledge base.' },
+      { id: 'save',     label: 'Save to knowledge base only',  agent: 'synthesizer', description: 'Store findings in the Synthesizer KB for future agent reference — no further output.' },
+    ];
+  }
+
+  async orchestrate(instruction, options = {}) {
+    const { priority = 3, researchBrief = null, nextStep = null } = options;
+    const db = getSupabase();
+
+    // ── PHASE 2: User has chosen what to do with research results ────────────
+    if (researchBrief && nextStep) {
+      console.log(`[Nexus] Phase 2 — routing research result to: ${nextStep}`);
+      const stepMap = {
+        blog:     { agent_id: 'aether',      title: 'Write blog article from research',         type: 'content' },
+        strategy: { agent_id: 'atlas',       title: 'Create strategy brief from research',      type: 'analysis' },
+        report:   { agent_id: 'synthesizer', title: 'Build intelligence report from research',  type: 'analysis' },
+        save:     { agent_id: 'synthesizer', title: 'Save research to knowledge base',          type: 'research' },
+      };
+      const step = stepMap[nextStep] || { agent_id: 'atlas', title: 'Act on research findings', type: 'general' };
+
+      if (db) {
+        await db.from('tasks').insert({
+          title:       step.title,
+          description: `Use the following research brief:\n\n${researchBrief.slice(0, 2000)}`,
+          agent_id:    step.agent_id,
+          created_by:  'nexus',
+          status:      'pending',
+          priority,
+          type:        step.type,
+          input:       JSON.stringify({ researchBrief, originalInstruction: instruction }),
+        });
+      }
+
+      // If blog — trigger Aether immediately via content publish pipeline
+      if (nextStep === 'blog') {
+        try {
+          const { aether } = await import('./aether.js');
+          const writePrompt = `You are DigiFusion's senior content strategist. Using the research findings below, write a complete, publication-ready blog article for DigiFusion.
+
+RESEARCH FINDINGS:
+${researchBrief.slice(0, 3000)}
+
+REQUIREMENTS:
+- Length: 1,200–1,800 words
+- Tone: Authoritative, insightful, practitioner-grade
+- Structure: Strong hook, clear H2/H3 headers, data-backed claims, concrete takeaways
+- Close with a CTA pointing to DigiFusion's strategy session
+- Format: Markdown
+
+Write the full article now.`;
+          const articleContent = await aether.chat(writePrompt);
+          const titleMatch = articleContent.match(/^#\s+(.+)$/m);
+          const title = titleMatch?.[1] || instruction.slice(0, 80);
+          const { generateAndPublishBlogPost } = await import('../blogPublisher.js');
+          const publishResult = await generateAndPublishBlogPost({
+            title, content: articleContent, sector: 'intelligence',
+            tags: ['research', 'digifusion'], status: 'draft', authorName: 'DigiFusion Intelligence',
+          }).catch(() => null);
+
+          return {
+            type:      'blog_published',
+            title,
+            published: Boolean(publishResult),
+            message:   publishResult
+              ? `Aether has written "${title}" and saved it as a draft. Review it in your blog dashboard.`
+              : `Aether wrote the article but blog publishing is not configured. The content is ready below.`,
+            content:   articleContent.slice(0, 500) + '…',
+          };
+        } catch (e) {
+          console.error('[Nexus] Aether blog dispatch failed:', e.message);
+        }
+      }
+
+      return {
+        type:    'task_queued',
+        agent:   step.agent_id,
+        message: `${step.agent_id.charAt(0).toUpperCase() + step.agent_id.slice(1)} has been briefed and the task is queued. Check the Tasks tab to monitor progress.`,
+      };
+    }
+
+    // ── PHASE 1A: Pure research intent — run Orion immediately ───────────────
+    if (this._isResearchIntent(instruction)) {
+      console.log(`[Nexus] Research intent detected — dispatching Orion immediately`);
+      const db2 = getSupabase();
+
+      // Log a parent task
+      if (db2) {
+        await db2.from('tasks').insert({
+          title:       `[Orion] Research: ${instruction.slice(0, 80)}`,
+          description: instruction,
+          agent_id:    'researcher',
+          created_by:  'nexus',
+          status:      'in_progress',
+          priority,
+          type:        'research',
+        }).catch(() => {});
+      }
+
+      let brief = null;
+      try {
+        const { researcher } = await import('./researcher.js');
+        const result = await researcher.research({
+          topic:        instruction,
+          forAgent:     'nexus',
+          depth:        'standard',
+          mergeWithKB:  true,
+        });
+        brief = result?.brief || result?.summary || String(result || '');
+      } catch (e) {
+        console.error('[Nexus] Orion research failed:', e.message);
+        brief = `Research could not be completed: ${e.message}`;
+      }
+
+      const nextSteps = this._suggestNextSteps(brief);
+
+      await this.rememberEpisodic({
+        summary:    `Orion researched: "${instruction.slice(0, 80)}"`,
+        content:    { instruction, brief: brief?.slice(0, 500) },
+        type:       'research',
+        tags:       ['orion', 'research'],
+        importance: 3,
+      });
+
+      return {
+        type:       'research_complete',
+        agent:      'orion',
+        brief,
+        nextSteps,
+        message:    `Orion has completed the research. What should I do with these findings?`,
+      };
+    }
+
+    // ── PHASE 1B: Multi-step instruction — decompose and queue ───────────────
+    const decompositionPrompt = `You are Nexus — the strategic coordinator of the DigiFusion agent network. Decompose this instruction into discrete tasks.
 
 INSTRUCTION: "${instruction}"
 
-AVAILABLE AGENTS AND CAPABILITIES:
+AVAILABLE AGENTS:
 ${Object.entries(AGENT_CAPABILITIES).map(([id, caps]) => `- ${id}: ${caps.join(', ')}`).join('\n')}
 
-Break this instruction into 2–6 well-defined tasks. For each task return JSON with fields:
-title, description, agent_id, type (research|content|design|analysis|general), priority (1-5), depends_on (array), estimated_complexity (simple|moderate|complex)
-
-Return a JSON array of tasks ordered by execution sequence. Return ONLY the JSON array.`;
+Rules:
+- If any task requires current data or web research, assign it to the researcher (Orion) FIRST
+- Content tasks go to aether
+- BD/strategy tasks go to atlas
+- Automation tasks go to nova
+- Analytics tasks go to pulse
+- Knowledge base tasks go to synthesizer
+- Break into 2–5 tasks maximum — no more
+- Return ONLY a JSON array with fields: title, description, agent_id, type, priority (1-5)`;
 
     let tasks;
     try {
@@ -297,57 +451,25 @@ Return a JSON array of tasks ordered by execution sequence. Return ONLY the JSON
       tasks = this._parseJsonArray(raw);
     } catch (e) {
       console.error('[Nexus] Decomposition failed:', e.message);
-      tasks = [{
-        title:       instruction.slice(0, 80),
-        description: instruction,
-        agent_id:    'atlas',
-        type:        'general',
-        priority,
-      }];
-    }
-
-    const db = getSupabase();
-    const created = [];
-
-    // Auto-prepend a Researcher task for any research-type tasks in the plan
-    const researchTasks = tasks.filter(t => RESEARCH_REQUIRED_TYPES.includes(t.type));
-    if (researchTasks.length > 0 && (process.env.TAVILY_API_KEY || process.env.PERPLEXITY_API_KEY || process.env.FIRECRAWL_API_KEY)) {
-      const researchTopics = researchTasks.map(t => t.title).join('; ');
-      tasks.unshift({
-        title:                `Research brief: ${researchTopics.slice(0, 80)}`,
-        description:          `Researcher to gather web intelligence and merge with internal KB for: ${researchTopics}`,
-        agent_id:             'researcher',
-        type:                 'research',
-        priority:             Math.max(...researchTasks.map(t => t.priority || 3)),
-        estimated_complexity: 'moderate',
-        depends_on:           [],
-      });
+      tasks = [{ title: instruction.slice(0, 80), description: instruction, agent_id: 'atlas', type: 'general', priority }];
     }
 
     const { data: parent } = db ? await db.from('tasks').insert({
-      title:       `[Nexus] ${instruction.slice(0, 100)}`,
-      description: instruction,
-      agent_id:    'nexus',
-      created_by:  'team',
-      status:      'in_progress',
-      priority,
-      type:        'general',
+      title: `[Nexus] ${instruction.slice(0, 100)}`,
+      description: instruction, agent_id: 'nexus', created_by: 'team',
+      status: 'in_progress', priority, type: 'general',
     }).select().single() : { data: null };
 
     const parentId = parent?.id;
+    const created  = [];
 
     for (const t of tasks) {
       if (db) {
         const { data } = await db.from('tasks').insert({
-          title:          t.title,
-          description:    t.description,
-          agent_id:       t.agent_id,
-          created_by:     'nexus',
-          parent_task_id: parentId,
-          status:         'pending',
-          priority:       t.priority || priority,
-          type:           t.type || 'general',
-          input:          { instruction, complexity: t.estimated_complexity },
+          title: t.title, description: t.description, agent_id: t.agent_id,
+          created_by: 'nexus', parent_task_id: parentId,
+          status: 'pending', priority: t.priority || priority, type: t.type || 'general',
+          input: JSON.stringify({ instruction }),
         }).select().single();
         if (data) created.push(data);
       }
@@ -356,13 +478,11 @@ Return a JSON array of tasks ordered by execution sequence. Return ONLY the JSON
     await this.rememberEpisodic({
       summary:    `Orchestrated: "${instruction.slice(0, 100)}" → ${tasks.length} tasks`,
       content:    { instruction, tasks, parentId },
-      type:       'decision',
-      tags:       ['orchestration'],
-      importance: 4,
+      type:       'decision', tags: ['orchestration'], importance: 4,
     });
 
-    console.log(`[Nexus] Orchestrated: "${instruction.slice(0, 60)}" → ${created.length} tasks`);
-    return { parentId, tasks: created, plan: tasks };
+    console.log(`[Nexus] Orchestrated "${instruction.slice(0, 60)}" → ${created.length} tasks`);
+    return { type: 'plan', parentId, tasks: created, plan: tasks };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -942,9 +1062,11 @@ async function _sendWhatsAppDirect(to, message) {
   const from  = (process.env.TWILIO_WHATSAPP_FROM || '').trim();
   if (!sid || !token || !from) return;
 
-  const toWA = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
+  // Ensure both From and To carry the whatsapp: prefix (prevents Twilio error 21910)
+  const fromWA = from.startsWith('whatsapp:') ? from : `whatsapp:${from}`;
+  const toWA   = to.startsWith('whatsapp:')   ? to   : `whatsapp:${to}`;
   try {
-    const params = new URLSearchParams({ From: from, To: toWA, Body: message });
+    const params = new URLSearchParams({ From: fromWA, To: toWA, Body: message });
     const res    = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method:  'POST',
       headers: {

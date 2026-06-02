@@ -63,8 +63,8 @@ export class Researcher extends AgentBase {
   constructor() {
     super({
       id:           'researcher',
-      displayName:  'Researcher',
-      role:         'Web Intelligence & Research Specialist',
+      displayName:  'Orion',
+      role:         'Intelligence & Research Specialist',
       systemPrompt: RESEARCHER_SYSTEM,
       domains:      ['general', 'business_development', 'automation', 'digital_media'],
     });

@@ -55,8 +55,11 @@ async function sendPush(_title, _body) {
 async function sendWhatsAppTwilio(title, body, recipients) {
   const sid   = env('TWILIO_ACCOUNT_SID');
   const token = env('TWILIO_AUTH_TOKEN');
-  const from  = env('TWILIO_WHATSAPP_FROM'); // e.g. whatsapp:+14155238886
-  if (!sid || !token || !from) return null;   // caller tries Meta next
+  const raw   = env('TWILIO_WHATSAPP_FROM'); // e.g. +14155238886 or whatsapp:+14155238886
+  if (!sid || !token || !raw) return null;   // caller tries Meta next
+
+  // Always ensure both From and To carry the whatsapp: channel prefix (error 21910 fix)
+  const from = raw.startsWith('whatsapp:') ? raw : `whatsapp:${raw}`;
 
   const message = `*${title}*\n${body}`;
   const results = [];
