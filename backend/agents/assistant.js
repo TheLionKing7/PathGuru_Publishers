@@ -497,12 +497,12 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the
     await this.notify(
       `New session booking — ${data.client_name || 'Unknown'}`,
       `Track: ${data.track || 'TBD'} | Time: ${data.booking_time ? new Date(data.booking_time).toLocaleString('en-GB', { timeZone: 'Africa/Lagos' }) : 'TBD'} | Via: Aria`,
-      'warning', 'all', data.id
+      'warning', 'whatsapp', data.id
     );
     sendImmediate(
       `New session booking — ${data.client_name || 'Unknown'}`,
       `${data.company || ''} | ${data.track || ''} | ${answers.preferred_time || 'time TBD'}`,
-      'all'
+      'whatsapp'
     ).catch(() => {});
 
     return data.id;
@@ -715,10 +715,10 @@ If their answer reveals something significant (a constraint, an opportunity, a r
     // ── Notify team — write to table + fire immediately for hot leads ───────
     const intakeTitle = `Intake complete — ${flow.trackName} (score ${score}/5)`;
     const intakeBody  = `${leadState.company || leadState.name || 'Unknown'}: intake submitted, assigned to ${flow.agentOwner}. Notion synced.`;
-    await this.notify(intakeTitle, intakeBody, score >= 4 ? 'warning' : 'info', 'all', leadRecord?.id || null);
+    await this.notify(intakeTitle, intakeBody, score >= 4 ? 'warning' : 'info', 'whatsapp', leadRecord?.id || null);
     // Hot leads (4+/5) get immediate push — don't wait for the 5-min Pulse sweep
     if (score >= 4) {
-      sendImmediate(intakeTitle, intakeBody, 'all').catch(() => {});
+      sendImmediate(intakeTitle, intakeBody, 'whatsapp').catch(() => {});
     }
 
     // ── Delegate to specialist agent ────────────────────────────────────────
@@ -837,9 +837,9 @@ If their answer reveals something significant (a constraint, an opportunity, a r
     if (data && score >= 3) {
       const leadTitle = `New ${score >= 4 ? 'hot' : 'qualified'} lead (score ${score}/5)`;
       const leadBody  = `${leadState.company || leadState.name || 'Unknown'}: "${(leadState.challenge || '').slice(0, 120)}"`;
-      await this.notify(leadTitle, leadBody, score >= 4 ? 'warning' : 'info', 'all', data.id);
+      await this.notify(leadTitle, leadBody, score >= 4 ? 'warning' : 'info', 'whatsapp', data.id);
       if (score >= 4) {
-        sendImmediate(leadTitle, leadBody, 'all').catch(() => {});
+        sendImmediate(leadTitle, leadBody, 'whatsapp').catch(() => {});
       }
     }
 

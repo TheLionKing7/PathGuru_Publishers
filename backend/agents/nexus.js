@@ -175,11 +175,12 @@ export class Nexus extends AgentBase {
     console.log(`[Nexus→Ola] ESCALATION [${severity.toUpperCase()}]: ${subject}`);
 
     // Write to Supabase notifications table (dashboard polling)
-    await this.notify(subject, body, severity, 'all', context.leadId || null);
+    // channel = 'whatsapp' — Chrome push is permanently disabled; WhatsApp only.
+    await this.notify(subject, body, severity, 'whatsapp', context.leadId || null);
 
     // For warning/critical — send immediately without waiting for Pulse sweep
     if (severity === 'warning' || severity === 'critical') {
-      sendImmediate(subject, body, 'all').catch(e =>
+      sendImmediate(subject, body, 'whatsapp').catch(e =>
         console.warn('[Nexus] Immediate dispatch error:', e.message)
       );
     }

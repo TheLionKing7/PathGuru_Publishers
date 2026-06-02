@@ -106,7 +106,7 @@ export class Pulse extends AgentBase {
         title:    `High task failure rate: ${pct}%`,
         body:     `${failedTasks.length} of ${totalRecent} tasks in the last 24h failed. Top errors: ${failedTasks.slice(0, 3).map(t => t.error || 'unknown').join(' | ')}`,
         severity: 'critical',
-        channel:  'all',
+        channel:  'whatsapp',
       });
     }
 
@@ -124,7 +124,7 @@ export class Pulse extends AgentBase {
         title:    `${newLeads.length} unprocessed leads`,
         body:     `Lead queue has grown to ${newLeads.length}. Review and follow up.`,
         severity: 'warning',
-        channel:  'push',
+        channel:  'whatsapp',
       });
     }
 
@@ -133,7 +133,7 @@ export class Pulse extends AgentBase {
         title:    `${stuckCritical.length} critical task(s) stalled`,
         body:     `Priority-5 tasks running > 1 hour: ${stuckCritical.map(t => `"${t.title}" (${t.agent_id})`).join(', ')}`,
         severity: 'critical',
-        channel:  'all',
+        channel:  'whatsapp',
       });
     }
 

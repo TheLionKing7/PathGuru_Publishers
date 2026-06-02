@@ -2395,7 +2395,7 @@ function scheduleDailyBriefing() {
     try {
       const briefing = await AGENTS.nexus.generateDailyBriefing();
       const { sendImmediate } = await import('./skills/notifier.js');
-      await sendImmediate('DigiFusion Daily Briefing', briefing?.summary || 'Daily briefing ready.', 'all');
+      await sendImmediate('DigiFusion Daily Briefing', briefing?.summary || 'Daily briefing ready.', 'whatsapp');
     } catch(e) { console.warn('[Nexus] Daily briefing error:', e.message); }
     setTimeout(run, 24 * 60 * 60 * 1000);
   }, msUntil7am());

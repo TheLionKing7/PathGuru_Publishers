@@ -40,56 +40,14 @@ function env(name) {
   return typeof v === 'string' ? v.trim() : '';
 }
 
-// ── OneSignal push ────────────────────────────────────────────────────────────
+// ── OneSignal push — DISABLED ─────────────────────────────────────────────────
+// Chrome/browser push notifications are permanently disabled.
+// All owner alerts are delivered exclusively via WhatsApp (Nexus → Twilio).
+// To re-enable, restore the OneSignal fetch call below.
 
-async function sendPush(title, body) {
-  const appId  = env('ONESIGNAL_APP_ID');
-  const apiKey = env('ONESIGNAL_API_KEY');
-  if (!appId || !apiKey) {
-    console.warn('[Notifier] Push skipped — ONESIGNAL_APP_ID / ONESIGNAL_API_KEY not set.');
-    return { skipped: true, reason: 'no_credentials' };
-  }
-
-  const payload = {
-    app_id:            appId,
-    included_segments: ['All'],          // broadcast to all subscribers
-    headings:          { en: title },
-    contents:          { en: body },
-    web_push_topic:    'digifusion-ops', // groups/replaces similar notifications
-  };
-
-  try {
-    const res = await fetch('https://onesignal.com/api/v1/notifications', {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Basic ${apiKey}`,
-      },
-      body:   JSON.stringify(payload),
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      console.error(`[Notifier] OneSignal error ${res.status}: ${text.slice(0, 200)}`);
-      return { error: `OneSignal ${res.status}` };
-    }
-
-    const data = await res.json();
-    if (data.errors?.length) {
-      console.error(`[Notifier] OneSignal errors:`, JSON.stringify(data.errors));
-      return { error: `OneSignal: ${data.errors.join(', ')}` };
-    }
-    if (!data.recipients) {
-      console.warn(`[Notifier] Push delivered but 0 recipients — no subscribers have opted in, or app ID is wrong. id: ${data.id}`);
-    } else {
-      console.log(`[Notifier] Push sent — id: ${data.id}, recipients: ${data.recipients}`);
-    }
-    return { sent: true, id: data.id, recipients: data.recipients ?? 0 };
-  } catch (e) {
-    console.error('[Notifier] Push error:', e.message);
-    return { error: e.message };
-  }
+async function sendPush(_title, _body) {
+  console.log('[Notifier] Push suppressed — Chrome notifications disabled; using WhatsApp only.');
+  return { skipped: true, reason: 'push_disabled' };
 }
 
 // ── WhatsApp via Twilio ───────────────────────────────────────────────────────
@@ -186,9 +144,10 @@ async function sendWhatsAppMeta(title, body, recipients) {
 // ── WhatsApp dispatcher (tries Twilio first, then Meta) ───────────────────────
 
 async function sendWhatsApp(title, body) {
-  const toRaw = env('WHATSAPP_TO');
+  // Accept WHATSAPP_TO or OWNER_PHONE — whichever is set (WHATSAPP_TO takes priority)
+  const toRaw = env('WHATSAPP_TO') || env('OWNER_PHONE');
   if (!toRaw) {
-    console.warn('[Notifier] WhatsApp skipped — WHATSAPP_TO not set.');
+    console.warn('[Notifier] WhatsApp skipped — neither WHATSAPP_TO nor OWNER_PHONE is set.');
     return { skipped: true, reason: 'no_recipients' };
   }
 
