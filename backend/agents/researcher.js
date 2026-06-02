@@ -116,8 +116,14 @@ export class Researcher extends AgentBase {
     // Layer 3: Firecrawl deep scrape of priority URLs (standard/deep only)
     let scrapedContent = [];
     if (process.env.FIRECRAWL_API_KEY && depth !== 'quick' && tavilyResults.length > 0) {
-      const priorityUrls = this._selectPriorityUrls(tavilyResults, depth === 'deep' ? 6 : 3);
-      scrapedContent = await this._firecrawlScrape(priorityUrls);
+      // Cap at 2 URLs on free tier to avoid long timeouts (Firecrawl free = slow)
+      const maxUrls = depth === 'deep' ? 3 : 2;
+      const priorityUrls = this._selectPriorityUrls(tavilyResults, maxUrls);
+      // 30-second timeout guard — if Firecrawl is slow, skip and use Tavily snippets
+      scrapedContent = await Promise.race([
+        this._firecrawlScrape(priorityUrls),
+        new Promise(resolve => setTimeout(() => resolve([]), 30_000)),
+      ]);
       console.log(`[Researcher] Firecrawl: ${scrapedContent.length} pages scraped`);
     }
 

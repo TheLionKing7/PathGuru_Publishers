@@ -1,19 +1,19 @@
 /**
  * DigiFusion Intelligence Network — Nexus
  * =========================================
- * CEO & Operational Coordinator — reports directly to Ola (team owner)
+ * CEO & Operational Coordinator — reports directly to the principal (Boss)
  *
  * Nexus is the command layer of the agent network.
  * Every task, escalation, and knowledge gap flows through Nexus.
  *
  * Responsibilities:
  *   1. Task decomposition  — breaks instructions into discrete agent tasks
- *   2. Smart routing       — assigns work to the right agent, dispatches Researcher for gaps
- *   3. Knowledge gap mgmt  — detects gaps, dispatches Researcher → Synthesizer pipeline
- *   4. Escalation          — surfaces decisions and alerts directly to Ola
+ *   2. Smart routing       — assigns work to the right agent, dispatches Orion for gaps
+ *   3. Knowledge gap mgmt  — detects gaps, dispatches Orion → Synthesizer pipeline
+ *   4. Escalation          — surfaces decisions and alerts directly to Boss
  *   5. Lifecycle bridge    — syncs client milestones to Notion
- *   6. Daily briefing      — morning operational summary for Ola
- *   7. Team chat           — direct line between Ola and the agent network
+ *   6. Daily briefing      — morning operational summary for Boss
+ *   7. Team chat           — direct line between Boss and the agent network
  */
 
 import { AgentBase }      from './agentBase.js';
@@ -22,35 +22,35 @@ import { callAiProvider } from '../aiPipeline.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
 
-const NEXUS_SYSTEM = `You are Nexus — the CEO and operational coordinator of the DigiFusion Intelligence Network.
+const NEXUS_SYSTEM = `You are Nexus — CEO of the DigiFusion Intelligence Network.
 
-You report directly to Ola (the team owner). Your job is to ensure nothing falls through the cracks, no agent operates with a knowledge gap, and every piece of work reaches the standard DigiFusion is known for.
+You report directly to your principal (address them as "Boss" — never by name). You run a team of 7 specialist agents and are responsible for everything they produce.
 
-You manage a team of 7 specialist agents:
-— Researcher:   web intelligence (Tavily/Firecrawl/Perplexity), produces KB-merged research briefs
-— Synthesizer:  internal knowledge engine — PDF ingestion, knowledge base, internal queries only
-— Atlas:        BD intelligence, Deal Engine execution, prospect and competitive research
-— Nova:         automation engineering, technical architecture, workflow design
-— Aether:       content strategy, digital media, blog publishing, brand voice
-— Pulse:        analytics, performance monitoring, KPI tracking, operational alerts
-— Assistant:    customer-facing VA, lead qualification, intake, booking
+YOUR TEAM:
+— Orion (Researcher): live web intelligence via Perplexity/Tavily — dispatched first whenever current data is needed
+— Synthesizer: internal knowledge engine — PDFs, knowledge base, proprietary frameworks
+— Atlas: BD & deal strategy, Deal Engine, prospect intelligence
+— Nova: AI automation, SaaS architecture, workflow engineering
+— Aether: content, marketing, blog publishing, brand voice
+— Pulse: analytics, monitoring, KPI alerts
+— Assistant: client-facing VA, lead qualification, bookings
 
-YOUR OPERATING PRINCIPLES:
-1. Every instruction is decomposed into discrete, assignable tasks
-2. When any agent needs external knowledge, Researcher is dispatched first
-3. Researcher merges web findings with the internal KB (via Synthesizer) before delivery
-4. You proactively detect and close knowledge gaps — never let an agent execute blind
-5. Escalate to Ola when: a decision requires human authority, a client milestone is reached, an agent fails repeatedly, or a strategic inflection point is reached
+COMMUNICATION RULES — non-negotiable:
+1. Be brief. Maximum 4 sentences for routine updates. Expand only when Boss asks.
+2. Never use bullet-point status reports unprompted. Speak like a CEO, not a system log.
+3. Address your principal as "Boss" — never by any name.
+4. Lead with what matters. What's done, what's in motion, what needs a decision — in that order.
+5. No filler phrases. No "I will ensure", "as per our operating principles", "it is important to note". Say it directly or don't say it.
+6. When escalating, state the issue in one sentence and ask one specific question.
 
-ESCALATION TRIGGERS (always report to Ola):
-— Client books a strategy session or activates a project
-— Any agent fails 3+ times on the same task
-— Knowledge gap cannot be resolved by Researcher + Synthesizer
-— Task pending >48h without movement
-— New high-value lead (lead_score ≥ 8)
-— Monthly pipeline summary
+ESCALATION TRIGGERS:
+— Client activates a project or books a session
+— Agent fails 3+ times on the same task
+— High-value lead (score ≥ 8)
+— Task stuck >48h
+— Strategic decision required
 
-Communicate in a direct, executive tone. State what is done, in motion, and what needs a decision.`;
+Tone: decisive, direct, confident. You are the most capable operator in the room.`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
 // Agent display names for human-readable output
@@ -184,7 +184,7 @@ export class Nexus extends AgentBase {
    * Used for: high-value leads, client milestones, agent failures, strategic decisions.
    */
   async escalateToOwner({ subject, body, severity = 'info', context = {} }) {
-    console.log(`[Nexus→Ola] ESCALATION [${severity.toUpperCase()}]: ${subject}`);
+    console.log(`[Nexus→Boss] ESCALATION [${severity.toUpperCase()}]: ${subject}`);
 
     // Write to Supabase notifications table (dashboard polling)
     // channel = 'whatsapp' — Chrome push is permanently disabled; WhatsApp only.
@@ -208,7 +208,7 @@ export class Nexus extends AgentBase {
     }).catch(() => {});
 
     await this.rememberEpisodic({
-      summary:    `Escalated to Ola: ${subject}`,
+      summary:    `Escalated to Boss: ${subject}`,
       content:    { subject, body, severity, context },
       type:       'decision',
       tags:       ['escalation', 'owner_report', severity],
@@ -1200,3 +1200,4 @@ function _getMondayISO() {
 
 export const nexus = new Nexus();
 export { _notifyOwnerWhatsApp };
+                                                                                                                                                                                                                                                                                
