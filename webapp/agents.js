@@ -1202,6 +1202,20 @@
             );
             outputEl.style.display = 'flex';
 
+          // ── Atlas BD brief ──
+          } else if (res?.type === 'bd_brief_ready') {
+            renderMarkdown(markdownEl,
+              `**Atlas — BD Strategy Brief**\n\n${res.message}\n\n---\n\n${res.content || ''}`
+            );
+            outputEl.style.display = 'flex';
+
+          // ── Nova automation brief ──
+          } else if (res?.type === 'automation_brief_ready') {
+            renderMarkdown(markdownEl,
+              `**Nova — Automation Solution Design**\n\n${res.message}\n\n---\n\n${res.content || ''}`
+            );
+            outputEl.style.display = 'flex';
+
           // ── Task queued ──
           } else if (res?.type === 'task_queued') {
             renderMarkdown(markdownEl, `**Task queued successfully**\n\n${res.message}`);

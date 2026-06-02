@@ -53,6 +53,18 @@ ESCALATION TRIGGERS (always report to Ola):
 Communicate in a direct, executive tone. State what is done, in motion, and what needs a decision.`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
+// Agent display names for human-readable output
+const AGENT_DISPLAY = {
+  nexus:       'Nexus (Coordinator)',
+  researcher:  'Orion (Intelligence & Research)',
+  atlas:       'Atlas (BD & Deal Strategy)',
+  nova:        'Nova (AI, SaaS & Automation)',
+  aether:      'Aether (Marketing & Content)',
+  synthesizer: 'Synthesizer (Knowledge Engine)',
+  pulse:       'Pulse (Analytics & Monitoring)',
+  assistant:   'Assistant (Client VA)',
+};
+
 const AGENT_CAPABILITIES = {
   researcher:  ['web research', 'live data', 'competitive intelligence', 'market data', 'external knowledge', 'trend research', 'source scraping', 'research brief'],
   synthesizer: ['internal knowledge', 'pdf ingestion', 'knowledge base query', 'cross-source synthesis', 'proprietary frameworks'],
@@ -293,10 +305,36 @@ export class Nexus extends AgentBase {
   // ── Route to the right agent after research ──────────────────────────────
   _suggestNextSteps(brief) {
     return [
-      { id: 'blog',     label: 'Write a blog article',         agent: 'aether',      description: 'Aether will craft a publication-ready article from the research findings.' },
-      { id: 'strategy', label: 'Create a strategy brief',      agent: 'atlas',       description: 'Atlas will synthesize the research into a BD or strategy recommendation.' },
-      { id: 'report',   label: 'Produce a full report',        agent: 'synthesizer', description: 'Synthesizer will build a structured intelligence report and save it to the knowledge base.' },
-      { id: 'save',     label: 'Save to knowledge base only',  agent: 'synthesizer', description: 'Store findings in the Synthesizer KB for future agent reference — no further output.' },
+      {
+        id:          'blog',
+        label:       'Write a blog article — Aether (Marketing)',
+        agent:       'aether',
+        description: 'Aether drafts a publication-ready article using the research. Best for thought leadership, SEO content, and audience education.',
+      },
+      {
+        id:          'bd_brief',
+        label:       'Build a BD strategy brief — Atlas (BD)',
+        agent:       'atlas',
+        description: 'Atlas applies the Deal Engine framework to the research and produces a business development strategy with prospect recommendations and winning angles.',
+      },
+      {
+        id:          'automation',
+        label:       'Design an automation solution — Nova (AI & SaaS)',
+        agent:       'nova',
+        description: 'Nova maps the research findings to an AI workflow or SaaS automation architecture using the Automation Velocity Engine framework.',
+      },
+      {
+        id:          'report',
+        label:       'Produce a full intelligence report — Synthesizer',
+        agent:       'synthesizer',
+        description: 'Synthesizer builds a structured intelligence brief and saves it to the knowledge base for all agents to reference.',
+      },
+      {
+        id:          'save',
+        label:       'Save to knowledge base only',
+        agent:       'synthesizer',
+        description: 'Store findings quietly in the Synthesizer KB. No output document produced.',
+      },
     ];
   }
 
@@ -308,12 +346,15 @@ export class Nexus extends AgentBase {
     if (researchBrief && nextStep) {
       console.log(`[Nexus] Phase 2 — routing research result to: ${nextStep}`);
       const stepMap = {
-        blog:     { agent_id: 'aether',      title: 'Write blog article from research',         type: 'content' },
-        strategy: { agent_id: 'atlas',       title: 'Create strategy brief from research',      type: 'analysis' },
-        report:   { agent_id: 'synthesizer', title: 'Build intelligence report from research',  type: 'analysis' },
-        save:     { agent_id: 'synthesizer', title: 'Save research to knowledge base',          type: 'research' },
+        blog:       { agent_id: 'aether',      title: 'Write blog article from Orion research',               type: 'content'  },
+        bd_brief:   { agent_id: 'atlas',       title: 'Build BD strategy brief from Orion research',          type: 'analysis' },
+        automation: { agent_id: 'nova',        title: 'Design automation solution from Orion research',       type: 'analysis' },
+        report:     { agent_id: 'synthesizer', title: 'Build intelligence report from Orion research',        type: 'analysis' },
+        save:       { agent_id: 'synthesizer', title: 'Save Orion research to knowledge base',                type: 'research' },
+        // legacy key kept for backward compat
+        strategy:   { agent_id: 'atlas',       title: 'Create strategy brief from Orion research',            type: 'analysis' },
       };
-      const step = stepMap[nextStep] || { agent_id: 'atlas', title: 'Act on research findings', type: 'general' };
+      const step = stepMap[nextStep] || { agent_id: 'atlas', title: 'Act on Orion research findings', type: 'general' };
 
       if (db) {
         await db.from('tasks').insert({
@@ -326,6 +367,50 @@ export class Nexus extends AgentBase {
           type:        step.type,
           input:       JSON.stringify({ researchBrief, originalInstruction: instruction }),
         });
+      }
+
+      // If BD brief — trigger Atlas immediately
+      if (nextStep === 'bd_brief' || nextStep === 'strategy') {
+        try {
+          const { atlas } = await import('./atlas.js');
+          const bdPrompt = `You are Atlas, DigiFusion's BD specialist. Using the research findings below, produce a structured business development strategy brief.
+
+RESEARCH FINDINGS:
+${researchBrief.slice(0, 3000)}
+
+Apply the Deal Engine framework: identify the opportunity, the ideal prospect profile, the winning angle, key objections, and recommended next actions. Be specific and actionable.`;
+          const brief = await atlas.chat(bdPrompt);
+          return {
+            type:    'bd_brief_ready',
+            agent:   'atlas',
+            message: 'Atlas has produced a BD strategy brief from the research.',
+            content: brief,
+          };
+        } catch (e) {
+          console.error('[Nexus] Atlas dispatch failed:', e.message);
+        }
+      }
+
+      // If automation — trigger Nova immediately
+      if (nextStep === 'automation') {
+        try {
+          const { nova } = await import('./nova.js');
+          const novaPrompt = `You are Nova, DigiFusion's AI & SaaS automation specialist. Using the research findings below, design an AI automation or SaaS solution architecture.
+
+RESEARCH FINDINGS:
+${researchBrief.slice(0, 3000)}
+
+Apply the Automation Velocity Engine (AVE) framework: identify the automation opportunity, map the workflow, recommend the AI/SaaS stack, outline the implementation phases, and estimate the efficiency gain.`;
+          const brief = await nova.chat(novaPrompt);
+          return {
+            type:    'automation_brief_ready',
+            agent:   'nova',
+            message: 'Nova has designed an automation solution from the research.',
+            content: brief,
+          };
+        } catch (e) {
+          console.error('[Nexus] Nova dispatch failed:', e.message);
+        }
       }
 
       // If blog — trigger Aether immediately via content publish pipeline
@@ -390,7 +475,7 @@ Write the full article now.`;
           status:      'in_progress',
           priority,
           type:        'research',
-        }).catch(() => {});
+        });
       }
 
       let brief = null;
@@ -428,22 +513,28 @@ Write the full article now.`;
     }
 
     // ── PHASE 1B: Multi-step instruction — decompose and queue ───────────────
-    const decompositionPrompt = `You are Nexus — the strategic coordinator of the DigiFusion agent network. Decompose this instruction into discrete tasks.
+    const decompositionPrompt = `You are Nexus — the strategic coordinator of the DigiFusion agent network. Decompose this instruction into discrete tasks and assign each to the right specialist.
 
 INSTRUCTION: "${instruction}"
 
-AVAILABLE AGENTS:
-${Object.entries(AGENT_CAPABILITIES).map(([id, caps]) => `- ${id}: ${caps.join(', ')}`).join('\n')}
+SPECIALIST AGENTS — match tasks precisely:
+- researcher (Orion): Any task requiring live web data, market intelligence, competitor research, or current facts. ALWAYS first in sequence if research is needed.
+- atlas (BD Specialist): Business development, deal strategy, prospect analysis, client intelligence, sales frameworks, BD playbooks, opportunity assessment, Dream 50.
+- nova (AI & SaaS Specialist): AI automation design, SaaS tool architecture, workflow automation, technical blueprints, process automation, digital transformation systems.
+- aether (Marketing Specialist): Blog articles, content strategy, social media, brand voice, editorial content, SEO, campaign copy, thought leadership writing.
+- synthesizer: Building structured knowledge documents, intelligence reports, saving to knowledge base, PDF extraction, knowledge queries.
+- pulse: Analytics, performance monitoring, health checks, dashboards, metrics sweeps.
 
-Rules:
-- If any task requires current data or web research, assign it to the researcher (Orion) FIRST
-- Content tasks go to aether
-- BD/strategy tasks go to atlas
-- Automation tasks go to nova
-- Analytics tasks go to pulse
-- Knowledge base tasks go to synthesizer
-- Break into 2–5 tasks maximum — no more
-- Return ONLY a JSON array with fields: title, description, agent_id, type, priority (1-5)`;
+Routing rules:
+1. If the instruction mentions research/investigation → researcher (Orion) goes FIRST
+2. If it mentions BD, deals, clients, sales, pipeline → atlas
+3. If it mentions automation, AI tools, SaaS, workflows, systems → nova
+4. If it mentions writing, content, articles, social posts, marketing → aether
+5. Never assign content writing to atlas or nova — that is always aether
+6. Never assign BD/sales to aether or nova — that is always atlas
+7. Break into 2–5 tasks maximum
+
+Return ONLY a JSON array with fields: title, description, agent_id, type (research|content|analysis|general), priority (1-5)`;
 
     let tasks;
     try {
