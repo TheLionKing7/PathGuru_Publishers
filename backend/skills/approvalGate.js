@@ -1,0 +1,222 @@
+/**
+ * DigiFusion Intelligence Network — Approval Gate
+ * =================================================
+ * Manages Boss approval requests for agent-initiated actions.
+ *
+ * Flow:
+ *   1. Agent wants to do something that needs Boss sign-off
+ *   2. createApprovalRequest() → saves to tasks table + fires WhatsApp immediately
+ *   3. Boss replies via WhatsApp → webhook calls handleApprovalReply()
+ *   4. If approved → executes the stored callback / payload
+ *   5. If rejected → marks cancelled, notifies Boss
+ *
+ * Rules:
+ *   - User-initiated actions (blog publisher, direct UI) → BYPASS this gate
+ *   - Agent-initiated actions (Nexus orchestration) → ALWAYS go through this gate
+ *   - Nexus fires WhatsApp and WAITS — no auto-proceed on timeout
+ */
+
+import { getSupabase }   from '../supabaseClient.js';
+import { sendImmediate } from './notifier.js';
+
+const APPROVAL_TASK_TYPE = 'pending_approval';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CREATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a pending approval request, persist it to Supabase, and fire
+ * an immediate WhatsApp notification to Boss.
+ *
+ * @param {object} opts
+ * @param {string} opts.approvalType  — 'blog_post' | 'content_publish' | 'outreach' | etc.
+ * @param {string} opts.subject       — Short subject (used as WhatsApp message title)
+ * @param {string} opts.detail        — Full detail message for Boss
+ * @param {object} opts.payload       — Everything needed to execute the action when approved
+ *                                      (e.g. blog topic, tone, author, seoKeyword …)
+ * @returns {{ approvalId: string|null, whatsappSent: boolean }}
+ */
+export async function createApprovalRequest({ approvalType, subject, detail, payload }) {
+  const db = getSupabase();
+
+  let approvalId = null;
+
+  if (db) {
+    const { data, error } = await db.from('tasks').insert({
+      title:       `[APPROVAL] ${subject}`,
+      description: detail,
+      agent_id:    'nexus',
+      created_by:  'nexus',
+      status:      'pending',
+      priority:    1,                         // highest priority — Boss is waiting
+      type:        APPROVAL_TASK_TYPE,
+      input:       {
+        approvalType,
+        subject,
+        detail,
+        payload,
+        requestedAt: new Date().toISOString(),
+      },
+    }).select('id').single();
+
+    if (error) {
+      console.error('[ApprovalGate] Failed to save approval request:', error.message);
+    } else {
+      approvalId = data?.id || null;
+    }
+  }
+
+  // Build WhatsApp message — concise, action-oriented
+  const shortId  = approvalId ? approvalId.slice(0, 8) : 'N/A';
+  const waTitle  = `⏸ Nexus — Approval Required`;
+  const waBody   = [
+    `*${subject}*`,
+    ``,
+    detail,
+    ``,
+    `Reply *YES* to approve or *NO* to reject.`,
+    `_(Ref: ${shortId})_`,
+  ].join('\n');
+
+  let whatsappSent = false;
+  try {
+    const result = await sendImmediate(waTitle, waBody, 'whatsapp');
+    whatsappSent = !result?.whatsapp?.skipped && !result?.whatsapp?.error;
+    console.log(`[ApprovalGate] WhatsApp sent for approval ${shortId}:`, JSON.stringify(result).slice(0, 120));
+  } catch (e) {
+    console.error('[ApprovalGate] WhatsApp dispatch failed:', e.message);
+  }
+
+  return { approvalId, whatsappSent };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FIND
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch the most recent pending approval request (if any).
+ * Called by the WhatsApp webhook before routing to Nexus chat.
+ *
+ * @returns {object|null} Supabase task row or null
+ */
+export async function findPendingApproval() {
+  const db = getSupabase();
+  if (!db) return null;
+
+  const { data, error } = await db.from('tasks')
+    .select('*')
+    .eq('type',   APPROVAL_TASK_TYPE)
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (error) {
+    console.error('[ApprovalGate] findPendingApproval error:', error.message);
+    return null;
+  }
+
+  return data?.[0] || null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSE BOSS REPLY
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Parse Boss's WhatsApp reply text into a decision.
+ *
+ * @param {string} text — Raw reply from Boss
+ * @returns {{ decision: 'approved'|'rejected'|null, feedback: string }}
+ */
+export function parseApprovalReply(text) {
+  const t = (text || '').trim().toLowerCase();
+
+  const approved = /^(yes|yep|yup|approve[d]?|go ahead|proceed|confirm[ed]?|ok|okay|do it|publish|send it|looks good|fire it|go|green light|✅|👍)/i.test(t);
+  const rejected = /^(no|nope|reject[ed]?|cancel|stop|don'?t|hold|wait|not yet|abort|pause|skip|❌|👎|change|revise|redo)/i.test(t);
+
+  if (approved) return { decision: 'approved',  feedback: text };
+  if (rejected) return { decision: 'rejected',  feedback: text };
+  return          { decision: null,             feedback: text };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESOLVE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Mark an approval as approved or rejected in Supabase.
+ *
+ * @param {string} approvalId
+ * @param {'approved'|'rejected'} decision
+ * @param {string} [feedback] — Boss's raw reply text
+ * @returns {object|null} Updated task row
+ */
+export async function resolveApproval(approvalId, decision, feedback = '') {
+  const db = getSupabase();
+  if (!db) return null;
+
+  const newStatus = decision === 'approved' ? 'completed' : 'cancelled';
+
+  const { data, error } = await db.from('tasks')
+    .update({
+      status:     newStatus,
+      output:     { decision, feedback, resolvedAt: new Date().toISOString() },
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', approvalId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[ApprovalGate] resolveApproval error:', error.message);
+    return null;
+  }
+
+  console.log(`[ApprovalGate] Approval ${approvalId.slice(0,8)} → ${decision}`);
+  return data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HANDLE REPLY — full cycle: parse + resolve + return payload
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Called by the WhatsApp webhook when a message arrives.
+ * Checks for a pending approval, parses the reply, resolves it.
+ *
+ * @param {string} replyText — Boss's raw WhatsApp message
+ * @returns {{
+ *   handled: boolean,
+ *   decision: 'approved'|'rejected'|null,
+ *   approvalType: string|null,
+ *   payload: object|null,
+ *   feedback: string
+ * }}
+ */
+export async function handleApprovalReply(replyText) {
+  const pending = await findPendingApproval();
+  if (!pending) return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
+
+  const { decision, feedback } = parseApprovalReply(replyText);
+  if (!decision) {
+    // Boss said something but it's not clearly yes/no — don't consume the message
+    return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
+  }
+
+  // Resolve in DB
+  await resolveApproval(pending.id, decision, feedback);
+
+  const input = typeof pending.input === 'string' ? JSON.parse(pending.input) : (pending.input || {});
+
+  return {
+    handled:      true,
+    decision,
+    approvalId:   pending.id,
+    approvalType: input.approvalType || null,
+    payload:      input.payload      || null,
+    subject:      input.subject      || pending.title,
+    feedback,
+  };
+}

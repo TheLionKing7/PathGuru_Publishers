@@ -21,6 +21,10 @@ import { AgentBase }      from './agentBase.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
+import {
+  buildContentAdvocateSystemBlock,
+  buildContentAdvocateUserBlock,
+} from '../skills/contentAdvocate.js';
 
 // ── The C2C Framework — hardcoded as Aether's operating logic ────────────────
 const C2C_FRAMEWORK = `
@@ -761,14 +765,31 @@ RETURN ONLY a valid JSON object with this exact schema:
   // ══════════════════════════════════════════════════════════════════════════
 
   async produceContent(contentType, topic, options = {}) {
-    const { audience, voiceNotes = '', callToAction = '', wordCount, stdcStage = '' } = options;
+    const {
+      audience, voiceNotes = '', callToAction = '', wordCount, stdcStage = '',
+      researchBrief = '', playbookTitle = '', playbookExcerpt = '', frameworkId = '',
+    } = options;
 
     const knowledge = await synthesizer.answer(
       `${contentType} best practices and content strategy for: ${topic}`,
       'aether', ['digital_media', 'general'],
     ).catch(() => '');
 
-    const prompt = `${knowledge ? `## Intelligence Base\n${knowledge.slice(0, 1500)}\n\n---\n\n` : ''}
+    const advocateBlock = buildContentAdvocateUserBlock({
+      researchBrief,
+      playbookTitle,
+      playbookExcerpt,
+      frameworkId,
+      derivativeGoal: stdcStage || 'THINK — consideration and authority-building',
+    });
+
+    const prompt = `${buildContentAdvocateSystemBlock()}
+
+---
+
+${advocateBlock}
+
+${knowledge ? `## Intelligence Base\n${knowledge.slice(0, 1500)}\n\n---\n\n` : ''}
 ## Content Production: ${contentType.toUpperCase()}
 
 Topic: ${topic}
@@ -778,19 +799,37 @@ ${voiceNotes ? `Voice direction: ${voiceNotes}` : ''}
 ${callToAction ? `CTA: ${callToAction}` : ''}
 ${wordCount ? `Target length: ${wordCount} words` : ''}
 
-You are Aether. Produce ${contentType} content that meets the standard of a piece that wins industry awards.
-
-Requirements:
-— Opens with a specific, counter-intuitive insight — not a definition or a question
-— Every claim is either evidenced or explicitly framed as strategic opinion
-— Written for a reader who knows their industry and will skip anything generic
-— Serves the STDC stage: ${stdcStage || 'THINK — reader is evaluating, needs to be given a reason to trust us'}
-— The CTA leads naturally from the content — it does not feel bolted on
-— No AI vocabulary: no "delve," "tapestry," "multifaceted," "leverage" as a verb, "game-changing"
-— Ends with a takeaway the reader can act on today
+You are Aether — globally rated digital media strategist. Produce ${contentType} that a senior operator would forward to their team.
 
 Produce the full content piece now.`;
 
+    return this.runLLM(prompt, { skipKnowledge: true });
+  }
+
+  /**
+   * Derive THINK-stage blog teasers from a playbook or Orion brief.
+   * Returns 1–3 headline + angle options — not full posts.
+   */
+  async deriveBlogSnippets({ researchBrief = '', playbookTitle = '', playbookExcerpt = '', frameworkId = '', count = 3 } = {}) {
+    const advocate = buildContentAdvocateUserBlock({
+      researchBrief,
+      playbookTitle,
+      playbookExcerpt,
+      frameworkId,
+      derivativeGoal: 'THINK — teaser headlines only, no full article',
+    });
+    const prompt = `${buildContentAdvocateSystemBlock()}
+
+---
+
+${advocate}
+
+Produce exactly ${count} blog teaser derivatives. Each must:
+— Be a sharp headline + 2-sentence angle (not a full post)
+— Reveal insight without giving away paid playbook internals
+— Sound like a globally rated expert, zero AI fluff
+
+Return as numbered list. Headline in bold markdown.`;
     return this.runLLM(prompt, { skipKnowledge: true });
   }
 

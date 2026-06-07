@@ -11,9 +11,21 @@ Publishing · Agents · Research · Blog · Shop             Blog · Intelligenc
 
 ---
 
+## Department architecture
+
+PathGuru is **one system, five departments** — not a monolith. See `ARCHITECTURE.md` for full detail.
+
+| Department | Purpose |
+|---|---|
+| **Publisher** (core) | Original design: Vektor-grade brief → KDP PDF/EPUB |
+| **Intelligence Studio** | Orion research → specialist playbooks → DigiFusion paid IP → blog teasers |
+| **Storefront** | DigiFusion shop console (products, orders, CMS) |
+| **Network** | 8-agent operations (roster, console, tasks, leads) |
+| **Analytics** | DigiFusion visitor footprint |
+
 ## What's inside
 
-### 1. AI Publishing Studio
+### 1. AI Publishing Studio (Publisher department)
 Brief → KDP-ready PDF with full design — cover, chapter openers, interior layout, all generated from a single form. Backed by a Learning Library of reference PDFs (stored in Cloudflare R2) that teach the pipeline your house style.
 
 ### 2. DigiFusion Intelligence Network — 7-Agent System

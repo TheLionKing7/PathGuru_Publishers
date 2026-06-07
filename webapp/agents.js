@@ -32,8 +32,8 @@
     {
       id: 'atlas',
       name: 'Atlas',
-      role: 'BD Intelligence',
-      desc: 'Senior BD director and deal architect. Runs the Deal Engine, builds prospect intelligence, Dream 50 targeting, and closes complex accounts.',
+      role: 'Business Development',
+      desc: 'Deal Engine specialist. BD strategy, prospect intelligence, Dream 50 targeting, and consulting-grade playbook synthesis.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
       color: '#5b8dee',
       actions: ['research', 'prospect_analysis', 'build_framework'],
@@ -41,17 +41,17 @@
     {
       id: 'nova',
       name: 'Nova',
-      role: 'Design & Brand',
-      desc: 'Generates cover concepts, brand guidelines, visual identities and design system decisions.',
+      role: 'AI & Systems Engineering',
+      desc: 'Automation Velocity Engine specialist. Designs AI workflows, SaaS architecture, system blueprints, and technical automation solutions.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
       color: '#e85d9a',
-      actions: ['design_brief', 'brand_guidelines'],
+      actions: ['automation_design', 'build_framework', 'system_blueprint'],
     },
     {
       id: 'aether',
       name: 'Aether',
-      role: 'Content & Editorial',
-      desc: 'Writes long-form manuscripts, blog posts, and editorial content — from outline to polished final copy.',
+      role: 'Digital Media & Content Strategy',
+      desc: 'Content-to-Capital Pipeline lead. Builds content architecture, editorial strategy, and derivative teasers from premium IP.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
       color: '#4ecdc4',
       actions: ['write', 'outline', 'edit'],
@@ -879,7 +879,29 @@
         </div>
         <div class="console-form-group">
           <textarea id="aetherTaskInput" class="console-textarea" rows="3"
-            placeholder="Topic, angle, target audience…"></textarea>
+            placeholder="Derivative angle / headline — must trace to research or playbook below"></textarea>
+        </div>
+        <div class="console-form-row">
+          <div class="console-form-group" style="flex:2">
+            <label class="console-label">Orion research brief <span style="opacity:.6">(required unless playbook slug set)</span></label>
+            <textarea id="aetherResearchBrief" class="console-textarea" rows="4"
+              placeholder="Paste Orion output here — stats, sources, frameworks found…"></textarea>
+          </div>
+          <div class="console-form-group" style="flex:1">
+            <label class="console-label">Playbook slug</label>
+            <input id="aetherPlaybookSlug" class="console-input" type="text" placeholder="agency-ip slug" />
+            <label class="console-label" style="margin-top:8px">Framework lens</label>
+            <select id="aetherFrameworkId" class="console-select">
+              <option value="">Auto</option>
+              <option value="ave">AVE</option>
+              <option value="deal-engine">Deal Engine</option>
+              <option value="c2c">C2C Pipeline</option>
+              <option value="sme-scale-engine">SME Scale Engine</option>
+              <option value="enterprise-velocity">Enterprise Velocity</option>
+              <option value="govtech">GovTech</option>
+              <option value="fira">FIRA</option>
+            </select>
+          </div>
         </div>
         <div class="console-actions" style="gap:8px;flex-wrap:wrap">
           <button class="btn-console-run btn-secondary-run" id="aetherRunBtn">
@@ -1415,12 +1437,19 @@
       // ── Write & Publish Blog via Aether pipeline ──────────────────────────
       const publishBlogBtn = $('aetherPublishBlogBtn');
       publishBlogBtn?.addEventListener('click', async () => {
-        const topic = $('aetherTaskInput')?.value?.trim();
-        if (!topic) { alert('Enter a topic or blog brief first.'); return; }
+        const topic         = $('aetherTaskInput')?.value?.trim();
+        const researchBrief = $('aetherResearchBrief')?.value?.trim() || '';
+        const playbookSlug  = $('aetherPlaybookSlug')?.value?.trim() || '';
+        const frameworkId   = $('aetherFrameworkId')?.value?.trim() || '';
+        if (!topic) { alert('Enter a derivative angle / headline first.'); return; }
+        if (!researchBrief && !playbookSlug) {
+          alert('Blog derivatives require IP lineage: paste an Orion research brief OR enter a playbook slug from Intelligence Studio.');
+          return;
+        }
         publishBlogBtn.disabled = true;
         runBtn.disabled = true;
         statusEl.style.display = 'flex';
-        statusMsg.textContent  = 'Aether is writing and publishing your blog post…';
+        statusMsg.textContent  = 'Aether is writing and publishing your blog derivative…';
         outputEl.style.display = 'none';
 
         try {
@@ -1430,12 +1459,16 @@
             headers: { 'Content-Type': 'application/json' },
             body:    JSON.stringify({
               topic,
+              researchBrief,
+              playbookSlug,
+              frameworkId,
               audience:   'business professionals in digital transformation, automation, or media',
               tone:       'authoritative yet accessible',
               niche:      'digital_media',
               ctaGoal:    'Book a free strategy session at digitafusion.com/agency/booking',
               wordCount:  1200,
               publish:    true,
+              author:     'Boroji Adebayo-Hopewell, Founder',
             }),
           });
           const data = await res.json();
@@ -1815,7 +1848,7 @@
         if (tab === 'agents-tasks')   loadTasks();
         if (tab === 'agents-leads')   loadLeads();
         if (tab === 'agents-console') buildConsoleNav();
-        if (tab === 'agents-ip')      loadIPLibrary();
+        if (tab === 'agents-ip')      { loadFirmIpCatalog(); loadIPLibrary(); }
         if (tab === 'agents-content') { loadContentCalendar(); wireContentTab(); }
       });
     });
@@ -2123,6 +2156,48 @@ async function downloadIPDoc() {
     URL.revokeObjectURL(url);
   } catch (e) {
     alert('Download failed: ' + e.message);
+  }
+}
+
+/**
+ * Load and render the canonical Firm IP catalog (operating + library layers).
+ */
+async function loadFirmIpCatalog() {
+  const container = document.getElementById('firmIpCatalogBody');
+  if (!container) return;
+  container.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading catalog…</span></div>';
+
+  try {
+    const catalog = await window._agentApiFetch('/api/firm-ip/library');
+    const operating = catalog.operating || [];
+    const library   = catalog.library   || [];
+
+    const renderSection = (title, items, badgeClass) => {
+      if (!items.length) return `<p class="ip-library-empty">No ${title.toLowerCase()} registered.</p>`;
+      return `
+        <h4 class="ip-section-label">${title}</h4>
+        <div class="ip-library-grid">
+          ${items.map(item => `
+            <div class="ip-library-item">
+              <div class="ip-item-top">
+                <span class="ip-badge ${badgeClass}">${item.layer === 'intelligence_library' ? 'Library' : 'DNA'}</span>
+                <span class="ip-badge ip-badge--access ${item.access === 'purchasable' ? '' : 'ip-badge--public'}">${item.access || 'internal'}</span>
+              </div>
+              <h4 class="ip-item-title">${item.name}</h4>
+              <p class="ip-item-tagline">${item.oneLiner || item.description || ''}</p>
+              ${item.agent ? `<p class="ip-item-sources">Agent: ${item.agent}</p>` : ''}
+              ${item.r2?.key ? `<p class="ip-item-sources">R2: ${item.r2.key}</p>` : ''}
+            </div>
+          `).join('')}
+        </div>`;
+    };
+
+    container.innerHTML = `
+      ${renderSection('Operating Frameworks (Agent DNA)', operating, 'ip-badge--dna')}
+      ${renderSection('Intelligence Library (Paywalled)', library, 'ip-badge--library')}
+      <p class="ip-item-sources" style="margin-top:12px">Source: ${catalog.source || 'firmKnowledge.js'} · ${catalog.total || 0} documents</p>`;
+  } catch (e) {
+    container.innerHTML = `<p class="ip-library-empty" style="color:#ef4444">Failed to load catalog: ${e.message}</p>`;
   }
 }
 

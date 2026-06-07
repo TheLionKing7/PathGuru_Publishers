@@ -18,9 +18,12 @@
 import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { notion }        from '../notionClient.js';
+import { getFrameworksForAgent } from '../skills/firmKnowledge.js';
 
-// - Default model for all agents (override per agent if needed) ---
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+// Default model follows AI_PROVIDER (e.g. deepseek) when set
+const DEFAULT_MODEL = process.env.SYNTHESIZER_MODEL
+  || process.env.DEEPSEEK_MODEL
+  || 'deepseek-chat';
 
 export class AgentBase {
   /**
@@ -36,9 +39,14 @@ export class AgentBase {
     this.id           = config.id;
     this.displayName  = config.displayName;
     this.role         = config.role;
-    this.systemPrompt = config.systemPrompt;
+    const fwBlock     = getFrameworksForAgent(config.id)
+      .map(f => `— ${f.name}: ${f.oneLiner}`)
+      .join('\n');
+    this.systemPrompt = fwBlock
+      ? `${config.systemPrompt}\n\nYOUR OPERATING FRAMEWORKS (DigiFusion firm IP):\n${fwBlock}`
+      : config.systemPrompt;
     this.domains      = config.domains || [];
-    this.model        = config.model || DEFAULT_MODEL;
+    this.model        = config.model || resolveProvider()?.model || DEFAULT_MODEL;
     this.provider     = resolveProvider();
   }
 

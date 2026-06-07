@@ -18,6 +18,7 @@ import { AgentBase }    from './agentBase.js';
 import { getSupabase }  from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { isR2Enabled, getJsonCache }       from '../cloudflareR2.js';
+import { FIRM_IP_FRAMEWORKS, getOperatingFrameworks, getIntelligenceLibraryProducts } from '../skills/firmKnowledge.js';
 
 
 // ── AWS-spec URI encoder ─────────────────────────────────────────────────────
@@ -274,33 +275,47 @@ You serve the following agents: Atlas (research + BD), Nova (automation), Aether
 When asked to synthesize across multiple sources, you identify convergent themes, contradictions, and gaps — you do not flatten everything into agreement.`;
 
 
+/** Build provider chain: AI_PROVIDER first, then sensible fallbacks (no Claude-first override). */
+function buildSynthesizerProviderChain() {
+  const primary = resolveProvider();
+  const fallbackNames = ['deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity'];
+  const chain = [];
+  const seen  = new Set();
+
+  for (const p of [primary, ...fallbackNames.map(n => resolveProvider(n))]) {
+    if (p && !seen.has(p.name)) {
+      seen.add(p.name);
+      chain.push(p);
+    }
+  }
+  return chain;
+}
+
+
 export class Synthesizer extends AgentBase {
   constructor() {
+    const providerChain = buildSynthesizerProviderChain();
+    const primary       = providerChain[0];
+
     super({
       id:           'synthesizer',
       displayName:  'Synthesizer',
       role:         'Knowledge Engine & Orchestrator',
       systemPrompt: SYNTHESIZER_SYSTEM,
       domains:      ['business_development', 'automation', 'digital_media', 'general'],
-      model:        process.env.SYNTHESIZER_MODEL || 'claude-sonnet-4-5',
+      model:        process.env.SYNTHESIZER_MODEL
+        || primary?.model
+        || process.env.DEEPSEEK_MODEL
+        || 'deepseek-chat',
     });
-    // Build an ordered provider fallback chain.
-    // Groq is primary (ultra-fast, reliable free tier).
-    // Gemini excluded — blocked in many server regions (Render).
-    // Perplexity placed last in general chain (web-search overhead unnecessary
-    // for synthesis tasks; it's promoted to first for research queries specifically).
-    // If a provider hits a quota/token-limit error, _callWithFallback() advances
-    // to the next provider in the chain automatically.
-    this._providerChain = [
-      resolveProvider('groq'),
-      resolveProvider('cerebras'),
-      resolveProvider('claude'),
-      resolveProvider('deepseek'),
-      resolveProvider('perplexity'),
-    ].filter(Boolean);
 
-    // Also set this.provider to the first available (used by AgentBase.runLLM)
-    if (this._providerChain.length > 0) this.provider = this._providerChain[0];
+    // Honour AI_PROVIDER (e.g. deepseek) — do not hardcode groq/claude ahead of pinned provider.
+    this._providerChain = providerChain;
+
+    if (this._providerChain.length > 0) {
+      this.provider = this._providerChain[0];
+      console.log(`[Synthesizer] AI provider chain: ${this._providerChain.map(p => p.name).join(' → ')}`);
+    }
   }
 
   /**
@@ -310,7 +325,7 @@ export class Synthesizer extends AgentBase {
    * @param {string} prompt
    * @param {string} [systemHint]
    */
-  async _callWithFallback(prompt, systemHint) {
+  async _callWithFallback(prompt, systemHint, options = {}) {
     const isQuotaError = msg =>
       msg.includes('token_quota_exceeded') ||
       msg.includes('quota_exceeded') ||
@@ -325,10 +340,11 @@ export class Synthesizer extends AgentBase {
       msg.includes('rate_limit') ||
       (msg.includes('429') && !isQuotaError(msg));
 
-    return this._runChain(this._providerChain, prompt, systemHint);
+    return this._runChain(this._providerChain, prompt, systemHint, options);
   }
 
-  async _runChain(chain, prompt, systemHint) {
+  async _runChain(chain, prompt, systemHint, options = {}) {
+    const { json = false } = options;
     const isQuotaError = msg =>
       msg.includes('token_quota_exceeded') ||
       msg.includes('quota_exceeded') ||
@@ -347,7 +363,7 @@ export class Synthesizer extends AgentBase {
       const provider = chain[pi];
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          return await callAiProvider(provider, prompt, systemHint, { json: false });
+          return await callAiProvider(provider, prompt, systemHint, { json, fallback: false });
         } catch (e) {
           const msg = e.message || '';
           if (isQuotaError(msg)) {
@@ -437,7 +453,7 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
 
       let raw = '';
       try {
-        raw = await this._callWithFallback(extractionPrompt, this.systemPrompt);
+        raw = await this._callWithFallback(extractionPrompt, this.systemPrompt, { json: true });
       } catch (e) {
         console.warn(`[Synthesizer] Extraction failed for chunk ${idx} of ${r2Key}:`, e.message);
       }
@@ -514,8 +530,14 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
       'knowledge/media':      'digital_media',
       'library/frameworks':   'digital_media',      // marketing frameworks: AIDAS, 4Ps, STP, etc.
       'library/playbooks':    'business_development',
-      'library/research':     'digital_media',      // research PDFs skew toward content/marketing
+      'library/research':     'digital_media',
       'library/case-studies': 'digital_media',
+      'firm_ip/frameworks/automation-velocity-engine': 'automation',
+      'firm_ip/frameworks/deal-engine':                'business_development',
+      'firm_ip/frameworks/content-to-capital-pipeline':  'digital_media',
+      'firm_ip/frameworks/':  'general',
+      'firm_ip/blueprints/':  'business_development',
+      'firm_ip/research/':    'business_development',
     };
 
     for (const pdf of pdfs) {
@@ -532,6 +554,168 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
   // ══════════════════════════════════════════════════════════════════════════
 
   /**
+   * Search knowledge_base by query terms (not just top relevance_score).
+   * Falls back to domain-ordered scan when no term matches.
+   */
+  async _searchKnowledge(query, domains = [], limit = 8) {
+    const db = getSupabase();
+    if (!db) return [];
+
+    const terms = [...new Set(
+      (query || '')
+        .replace(/[^\w\s-]/g, ' ')
+        .split(/\s+/)
+        .filter(t => t.length > 3)
+        .slice(0, 6),
+    )];
+
+    const seen = new Set();
+    const hits = [];
+
+    const pushRows = rows => {
+      for (const row of rows || []) {
+        if (!seen.has(row.title)) {
+          seen.add(row.title);
+          hits.push(row);
+        }
+      }
+    };
+
+    const select = 'title, domain, content, frameworks, concepts, statistics, source_name, source_key';
+
+    if (terms.length > 0) {
+      for (const term of terms) {
+        let q = db.from('knowledge_base')
+          .select(select)
+          .or(`title.ilike.%${term}%,content.ilike.%${term}%`)
+          .order('relevance_score', { ascending: false })
+          .limit(limit);
+        if (domains.length > 0) q = q.in('domain', [...domains, 'general']);
+        const { data } = await q;
+        pushRows(data);
+        if (hits.length >= limit) break;
+      }
+    }
+
+    if (hits.length === 0) {
+      let q = db.from('knowledge_base')
+        .select(select)
+        .order('relevance_score', { ascending: false })
+        .limit(limit * 2);
+      if (domains.length > 0) q = q.in('domain', [...domains, 'general']);
+      const { data } = await q;
+      pushRows(data);
+    }
+
+    return hits.slice(0, limit);
+  }
+
+  /**
+   * Probe knowledge_base for DigiFusion's seven firm operating frameworks.
+   */
+  async getFirmFrameworks() {
+    const db = getSupabase();
+
+    const operatingList = getOperatingFrameworks();
+    const libraryList   = getIntelligenceLibraryProducts();
+
+    const toCanonical = fw => ({
+      id:             fw.id,
+      name:           fw.name,
+      shortName:      fw.shortName,
+      agent:          fw.agent,
+      domain:         fw.domain,
+      kind:           fw.kind || 'operating_framework',
+      access:         fw.access || 'internal',
+      kbSlug:         fw.kbSlug,
+      r2Key:          fw.r2Key,
+      doctrineSource: fw.r2Key || fw.source,
+      searchTerms:    [fw.name, fw.shortName, ...(fw.kbSlug ? [fw.kbSlug] : [])],
+    });
+
+    const canonical = [
+      ...operatingList.map(toCanonical),
+      ...libraryList.filter(lp => !operatingList.some(o => o.kbSlug === lp.kbSlug)).map(toCanonical),
+    ];
+
+    let firmIpSources = [];
+    let totalUnits = 0;
+
+    if (db) {
+      const { count } = await db.from('knowledge_base').select('*', { count: 'exact', head: true });
+      totalUnits = count || 0;
+
+      const { data: sourceRows } = await db.from('knowledge_base')
+        .select('source_key')
+        .like('source_key', 'firm_ip/%')
+        .limit(500);
+      firmIpSources = [...new Set((sourceRows || []).map(r => r.source_key).filter(Boolean))];
+    }
+
+    const frameworks = [];
+
+    for (const fw of canonical) {
+      let kbHits = [];
+
+      if (db) {
+        for (const term of fw.searchTerms) {
+          const { data } = await db.from('knowledge_base')
+            .select('id, title, domain, source_key, source_name, frameworks, relevance_score')
+            .or(`title.ilike.%${term}%,content.ilike.%${term}%`)
+            .order('relevance_score', { ascending: false })
+            .limit(4);
+          if (data?.length) kbHits.push(...data);
+        }
+
+        if (fw.kbSlug) {
+          const { data } = await db.from('knowledge_base')
+            .select('id, title, domain, source_key, source_name, frameworks, relevance_score')
+            .or(`source_key.ilike.%${fw.kbSlug}%,title.ilike.%${fw.kbSlug}%`)
+            .limit(4);
+          if (data?.length) kbHits.push(...data);
+        }
+
+        const seen = new Set();
+        kbHits = kbHits.filter(h => {
+          const key = h.id || h.title;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 5);
+      }
+
+      frameworks.push({
+        ...fw,
+        inKnowledgeBase: kbHits.length > 0,
+        kbHits: kbHits.map(h => ({
+          title: h.title,
+          domain: h.domain,
+          source_key: h.source_key,
+          source_name: h.source_name,
+          frameworks: h.frameworks,
+        })),
+        status: kbHits.length > 0 ? 'kb_backed' : 'doctrine_only',
+      });
+    }
+
+    const kbBacked = frameworks.filter(f => f.inKnowledgeBase).length;
+    const doctrineOnly = frameworks.filter(f => !f.inKnowledgeBase);
+
+    return {
+      frameworks,
+      summary: {
+        totalKbUnits: totalUnits,
+        firmIpSourcesInKb: firmIpSources,
+        frameworksInKb: kbBacked,
+        frameworksDoctrineOnly: doctrineOnly.map(f => f.id),
+        note: kbBacked < canonical.length
+          ? `${canonical.length - kbBacked} framework(s) not yet extracted into knowledge_base. Run: node --env-file=.env backend/scripts/ingest_firm_ip.js --synthesize`
+          : `All ${canonical.length} frameworks have knowledge_base backing.`,
+      },
+    };
+  }
+
+  /**
    * Answer a knowledge query for another agent.
    * Searches the knowledge_base, selects relevant entries, and synthesizes a brief.
    * @param {string} query        — what the requesting agent needs to know
@@ -541,18 +725,8 @@ Return ONLY a valid JSON array. If no substantive knowledge, return [].`;
    * @returns {string}            — synthesized knowledge brief
    */
   async answer(query, forAgent, domains = [], limit = 8) {
-    const db = getSupabase();
-    if (!db) return '';
-
-    let q = db.from('knowledge_base')
-      .select('title, domain, content, frameworks, concepts, statistics, source_name')
-      .order('relevance_score', { ascending: false })
-      .limit(limit * 2); // fetch more, then filter
-
-    if (domains.length > 0) q = q.in('domain', [...domains, 'general']);
-
-    const { data, error } = await q;
-    if (error || !data?.length) return 'No relevant knowledge found in the intelligence base.';
+    const data = await this._searchKnowledge(query, domains, limit);
+    if (!data?.length) return 'No relevant knowledge found in the intelligence base.';
 
     const synthesisPrompt = `You are serving a knowledge request from ${forAgent}.
 
@@ -612,6 +786,9 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
 
       case 'answer':
         return { answer: await this.answer(query, forAgent || 'unknown', domains || []) };
+
+      case 'firm_frameworks':
+        return await this.getFirmFrameworks();
 
       case 'synthesize':
         return { result: await this.synthesize({ instruction, domains, outputFormat }) };

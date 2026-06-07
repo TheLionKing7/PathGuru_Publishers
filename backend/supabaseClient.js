@@ -108,7 +108,7 @@ export async function createPost(post) {
       linkedin_caption: post.linkedinCaption || null,
       categories: post.categories || [],
       tags: post.tags || [],
-      author_name: post.authorName || 'DigiFusion Team',
+      author_name: post.authorName || null,
       author_avatar: post.authorAvatar || null,
       reading_time_minutes: post.readingTimeMinutes || null,
       word_count: post.wordCount || null,

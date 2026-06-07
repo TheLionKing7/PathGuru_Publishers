@@ -11,19 +11,19 @@
    sub-tab is activated, and lets us pick the module's default sub-tab
    when the user clicks a sidebar module icon. */
 const MODULE_OF_TAB = {
-  // Publishing module
+  // Publisher department
   brief: 'publishing', assets: 'publishing', compile: 'publishing',
-  // Blog module
+  // Intelligence Studio — blog derivatives (separate shell, same department)
   blog: 'blog', 'blog-assets': 'blog',
-  // Shop module — Products / Services / Payments / Analytics / Settings
+  // Storefront department
   'shop-products': 'shop', 'shop-services': 'shop', 'shop-payments': 'shop',
   'shop-analytics': 'shop', 'shop-settings': 'shop',
-  // Analytics module
+  // Analytics department
   analytics: 'analytics',
-  // Agents module
+  // Network + Intelligence Studio (shared agents shell, different tabs)
   'agents-network': 'agents', 'agents-console': 'agents',
   'agents-tasks': 'agents',   'agents-leads': 'agents',
-  'agents-ip': 'agents',
+  'agents-ip': 'agents',      'agents-content': 'agents',
 };
 const DEFAULT_TAB_OF_MODULE = {
   publishing: 'brief',
@@ -32,6 +32,29 @@ const DEFAULT_TAB_OF_MODULE = {
   analytics: 'analytics',
   agents: 'agents-network',
 };
+
+/** Called by shell.js for cross-department navigation */
+function setActiveTab (tab, moduleOverride) {
+  const mod = moduleOverride || MODULE_OF_TAB[tab] || 'publishing';
+  _dataDirectSet('activeModule', mod);
+  _dataDirectSet('activeTab', tab);
+  // Persist per-department last tab
+  if (window.PathGuruShell) {
+    const dept = window.PathGuruShell.deptForModule(mod, tab);
+    if (dept) localStorage.setItem(`pg_lastTab_${dept.id}`, tab);
+  }
+  UI.render('activeModule');
+  UI.render('activeTab');
+  if (window.PathGuruShell) {
+    window.PathGuruShell.updateChrome(tab, mod);
+  }
+}
+
+function _dataDirectSet (key, value) {
+  // Bypass State.set listener loop for batch updates
+  const _data = State._internals();
+  _data[key] = value;
+}
 
 const State = (() => {
   const _data = {
@@ -56,12 +79,10 @@ const State = (() => {
 
   return {
     get (key) { return _data[key]; },
+    _internals () { return _data; },
 
     set (key, value) {
       _data[key] = value;
-      // When the sub-tab changes, derive and update activeModule so
-      // sidebar highlighting stays in sync without callers having to
-      // touch both pieces of state.
       if (key === 'activeTab') {
         const mod = MODULE_OF_TAB[value];
         if (mod && mod !== _data.activeModule) {
@@ -69,6 +90,12 @@ const State = (() => {
           _listeners.forEach(fn => fn('activeModule', mod));
           UI.render('activeModule');
         }
+        if (window.PathGuruShell) {
+          window.PathGuruShell.updateChrome(value, _data.activeModule);
+        }
+      }
+      if (key === 'activeModule' && window.PathGuruShell) {
+        window.PathGuruShell.updateChrome(_data.activeTab, value);
       }
       _listeners.forEach(fn => fn(key, value));
       UI.render(key);
@@ -103,15 +130,16 @@ const UI = (() => {
     }
   }
 
-  /* Sidebar modules — show only the active shell */
+  /* Department modules — show only the active shell */
   function renderModules () {
     const mod = State.get('activeModule');
     document.querySelectorAll('.module-shell').forEach(s => {
       s.classList.toggle('active', s.dataset.module === mod);
     });
-    document.querySelectorAll('.nav-btn[data-module]').forEach(b => {
-      b.classList.toggle('active', b.dataset.module === mod);
-    });
+    // Sidebar highlighting is owned by shell.js (dept-aware)
+    if (window.PathGuruShell) {
+      window.PathGuruShell.updateChrome(State.get('activeTab'), mod);
+    }
   }
 
   /* Sub-tabs — show the matching tab-panel, swap the visible panel-header,
@@ -577,23 +605,14 @@ async function uploadAssetsToR2 () {
 
 /* ── Event wiring ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
-  // Sidebar — pick a module (jumps to that module's default sub-tab).
-  document.querySelectorAll('.nav-btn[data-module]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const mod = btn.dataset.module;
-      const defaultTab = DEFAULT_TAB_OF_MODULE[mod];
-      // Remember last-visited sub-tab per module so the user comes back to it.
-      const remembered = State.get(`lastTab_${mod}`);
-      State.set('activeTab', remembered || defaultTab);
-    });
-  });
+  // Expose for shell.js cross-department navigation
+  window.__pgSetTab = setActiveTab;
 
   // Top-tab strip — switch the sub-tab within the active module.
   document.querySelectorAll('.module-tab[data-subtab]').forEach(btn => {
     btn.addEventListener('click', () => {
       const tab = btn.dataset.subtab;
       const mod = MODULE_OF_TAB[tab];
-      // Remember per-module last sub-tab.
       if (mod) State.set(`lastTab_${mod}`, tab);
       State.set('activeTab', tab);
     });
@@ -1001,4 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
   UI.render('activeTab');
   UI.render('selectedAssets');
   UI.render('result');
+  if (window.PathGuruShell) {
+    window.PathGuruShell.updateChrome(State.get('activeTab'), State.get('activeModule'));
+  }
 });

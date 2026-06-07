@@ -21,6 +21,9 @@ import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider } from '../aiPipeline.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
+import { createApprovalRequest }               from '../skills/approvalGate.js';
+import { scoreResearchBrief, formatQualityBadge } from '../skills/researchQualityGate.js';
+import { ENGAGEMENT_MODEL_DOCTRINE } from '../skills/firmKnowledge.js';
 
 const NEXUS_SYSTEM = `You are Nexus — CEO of the DigiFusion Intelligence Network.
 
@@ -58,7 +61,10 @@ HONESTY RULES — violation of these is a critical failure:
 - NEVER say "I've confirmed X" unless X appears in the data passed to you.
 - NEVER say "I've updated", "I've logged", "I've notified" unless code in this session actually ran those functions.
 - "The task is moving forward as planned" is forbidden if you have no data proving it.
-- When uncertain: be short and honest. "I can't verify that without checking" is always correct.`;
+- When uncertain: be short and honest. "I can't verify that without checking" is always correct.
+
+YOUR DELIVERY ARCHITECTURE — DigiFusion Engagement Model (apply to every orchestration):
+${ENGAGEMENT_MODEL_DOCTRINE}`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
 // Agent display names for human-readable output
@@ -423,41 +429,104 @@ Apply the Automation Velocity Engine (AVE) framework: identify the automation op
 
       // If blog — trigger Aether immediately via content publish pipeline
       if (nextStep === 'blog') {
+        // ── BOSS APPROVAL GATE ──────────────────────────────────────────────
+        // Nexus NEVER publishes or saves a blog post without explicit Boss sign-off.
+        // This step produces a draft outline + first paragraph for Boss to review.
+        // Boss must confirm title, author name, tone, and content before Aether writes.
         try {
           const { aether } = await import('./aether.js');
-          const writePrompt = `You are DigiFusion's senior content strategist. Using the research findings below, write a complete, publication-ready blog article for DigiFusion.
+          const outlinePrompt = `You are DigiFusion's senior content strategist. Using the research findings below, produce a blog post BRIEF for Boss approval — NOT the full article.
 
 RESEARCH FINDINGS:
 ${researchBrief.slice(0, 3000)}
 
-REQUIREMENTS:
-- Length: 1,200–1,800 words
-- Tone: Authoritative, insightful, practitioner-grade
-- Structure: Strong hook, clear H2/H3 headers, data-backed claims, concrete takeaways
-- Close with a CTA pointing to DigiFusion's strategy session
-- Format: Markdown
+Return a JSON object with:
+{
+  "proposedTitle": "...",
+  "metaDescription": "...",
+  "hook": "Opening paragraph (2–3 sentences max)",
+  "outline": ["H2 heading 1", "H2 heading 2", "H2 heading 3", "H2 heading 4"],
+  "recommendedTone": "...",
+  "recommendedAuthor": "...",
+  "estimatedWordCount": 1400,
+  "seoKeyword": "..."
+}
 
-Write the full article now.`;
-          const articleContent = await aether.chat(writePrompt);
-          const titleMatch = articleContent.match(/^#\s+(.+)$/m);
-          const title = titleMatch?.[1] || instruction.slice(0, 80);
-          const { generateAndPublishBlogPost } = await import('../blogPublisher.js');
-          const publishResult = await generateAndPublishBlogPost({
-            title, content: articleContent, sector: 'intelligence',
-            tags: ['research', 'digifusion'], status: 'draft', authorName: 'DigiFusion Intelligence',
-          }).catch(() => null);
+No full article. Brief only.`;
+
+          const rawBrief = await aether.chat(outlinePrompt);
+          let brief = {};
+          try {
+            const jsonMatch = rawBrief.match(/\{[\s\S]*\}/);
+            brief = jsonMatch ? JSON.parse(jsonMatch[0]) : { proposedTitle: instruction.slice(0, 80), outline: [], hook: rawBrief.slice(0, 300) };
+          } catch { brief = { proposedTitle: instruction.slice(0, 80), hook: rawBrief.slice(0, 400), outline: [] }; }
+
+          // ── Fire WhatsApp + save approval request ──────────────────────
+          const approvalDetail = [
+            `Aether drafted a blog brief from Orion's research.`,
+            ``,
+            `📌 *Proposed title:* ${brief.proposedTitle || instruction.slice(0, 80)}`,
+            `✍️  *Recommended author:* ${brief.recommendedAuthor || 'Not specified'}`,
+            `🎯 *Tone:* ${brief.recommendedTone || 'Not specified'}`,
+            `📝 *Outline:*\n${(brief.outline || []).map((h, i) => `  ${i + 1}. ${h}`).join('\n')}`,
+            ``,
+            `*Hook:*\n${(brief.hook || '').slice(0, 280)}`,
+          ].join('\n');
+
+          const { approvalId, whatsappSent } = await createApprovalRequest({
+            approvalType: 'blog_post',
+            subject:      `Blog post approval — ${(brief.proposedTitle || instruction).slice(0, 60)}`,
+            detail:       approvalDetail,
+            payload: {
+              topic:            instruction,
+              proposedTitle:    brief.proposedTitle,
+              outline:          brief.outline,
+              recommendedTone:  brief.recommendedTone,
+              recommendedAuthor: brief.recommendedAuthor || 'Boroji Adebayo-Hopewell, Founder',
+              seoKeyword:       brief.seoKeyword,
+              researchBrief:    researchBrief.slice(0, 3000),
+              frameworkId:      'c2c',
+              niche:            'digital_media',
+            },
+          });
 
           return {
-            type:      'blog_published',
-            title,
-            published: Boolean(publishResult),
-            message:   publishResult
-              ? `Aether has written "${title}" and saved it as a draft. Review it in your blog dashboard.`
-              : `Aether wrote the article but blog publishing is not configured. The content is ready below.`,
-            content:   articleContent.slice(0, 500) + '…',
+            type:               'pending_boss_approval',
+            stage:              'blog_brief',
+            approvalId,
+            whatsappSent,
+            message:            `Approval request sent to Boss via WhatsApp. Waiting for sign-off before Aether writes anything. Nothing proceeds until Boss replies YES.`,
+            proposedTitle:      brief.proposedTitle,
+            hook:               brief.hook,
+            outline:            brief.outline,
+            recommendedTone:    brief.recommendedTone,
+            recommendedAuthor:  brief.recommendedAuthor,
+            seoKeyword:         brief.seoKeyword,
+            estimatedWordCount: brief.estimatedWordCount,
+            researchBrief:      researchBrief.slice(0, 800),
           };
         } catch (e) {
-          console.error('[Nexus] Aether blog dispatch failed:', e.message);
+          console.error('[Nexus] Aether brief generation failed:', e.message);
+
+          // Even if brief generation fails — still send WhatsApp and wait
+          const { approvalId, whatsappSent } = await createApprovalRequest({
+            approvalType: 'blog_post',
+            subject:      `Blog post approval — ${instruction.slice(0, 60)}`,
+            detail:       `Orion completed research on: "${instruction.slice(0, 120)}"\n\nAether is ready to write the blog post. Please confirm:\n• Author name\n• Any specific angles to include or avoid\n• Tone preference`,
+            payload: {
+              topic:        instruction,
+              researchBrief: researchBrief.slice(0, 3000),
+            },
+          });
+
+          return {
+            type:          'pending_boss_approval',
+            stage:         'blog_brief',
+            approvalId,
+            whatsappSent,
+            message:       `Approval request sent to Boss via WhatsApp. Waiting for confirmation before proceeding.`,
+            researchBrief: researchBrief.slice(0, 800),
+          };
         }
       }
 
@@ -487,6 +556,7 @@ Write the full article now.`;
       }
 
       let brief = null;
+      let researchMeta = {};
       try {
         const { researcher } = await import('./researcher.js');
         const result = await researcher.research({
@@ -495,28 +565,71 @@ Write the full article now.`;
           depth:        'standard',
           mergeWithKB:  true,
         });
-        brief = result?.brief || result?.summary || String(result || '');
+        brief         = result?.brief || result?.summary || String(result || '');
+        researchMeta  = {
+          sources:     result?.sources      || [],
+          gaps:        result?.gaps         || [],
+          coverStats:  result?.coverStats   || [],
+          mergedWithKB: result?.mergedWithKB || false,
+          depth:       result?.depth        || 'standard',
+        };
       } catch (e) {
         console.error('[Nexus] Orion research failed:', e.message);
         brief = `Research could not be completed: ${e.message}`;
       }
 
-      const nextSteps = this._suggestNextSteps(brief);
+      // ── Research Quality Gate ──────────────────────────────────────────────
+      // Score brief before showing Boss. Grade D → re-run deeper automatically.
+      const qScore = scoreResearchBrief({ brief, ...researchMeta });
+      console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100) — ${qScore.gradeLabel}`);
+
+      if (!qScore.passed) {
+        // Grade D — too poor to show Boss. Re-run at deep depth.
+        console.warn('[Nexus] Research quality too low — re-running Orion at deep depth');
+        try {
+          const { researcher } = await import('./researcher.js');
+          const deepResult = await researcher.research({
+            topic:       instruction,
+            forAgent:    'nexus',
+            depth:       'deep',
+            mergeWithKB: true,
+          });
+          brief        = deepResult?.brief || brief;
+          researchMeta = {
+            sources:     deepResult?.sources      || researchMeta.sources,
+            gaps:        deepResult?.gaps         || researchMeta.gaps,
+            coverStats:  deepResult?.coverStats   || researchMeta.coverStats,
+            mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
+            depth:       'deep',
+          };
+        } catch (e) {
+          console.error('[Nexus] Deep re-run failed:', e.message);
+        }
+        // Re-score after deep run
+        const qScore2 = scoreResearchBrief({ brief, ...researchMeta });
+        console.log(`[Nexus] Re-run quality: ${qScore2.grade} (${qScore2.score}/100)`);
+        Object.assign(qScore, qScore2);
+      }
+
+      const qualityBadge = formatQualityBadge(qScore);
+      const nextSteps    = this._suggestNextSteps(brief);
 
       await this.rememberEpisodic({
         summary:    `Orion researched: "${instruction.slice(0, 80)}"`,
-        content:    { instruction, brief: brief?.slice(0, 500) },
+        content:    { instruction, brief: brief?.slice(0, 500), qualityScore: qScore.score },
         type:       'research',
         tags:       ['orion', 'research'],
         importance: 3,
       });
 
       return {
-        type:       'research_complete',
-        agent:      'orion',
+        type:         'research_complete',
+        agent:        'orion',
         brief,
         nextSteps,
-        message:    `Orion has completed the research. What should I do with these findings?`,
+        qualityScore: qScore,
+        qualityBadge,
+        message:      `Orion has completed the research. What should I do with these findings?`,
       };
     }
 

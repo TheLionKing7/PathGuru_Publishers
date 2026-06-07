@@ -92,7 +92,9 @@ const STATIC = {
   '/':                      { file: join(WEBAPP, 'index.html'),            mime: 'text/html; charset=utf-8' },
   '/index.html':            { file: join(WEBAPP, 'index.html'),            mime: 'text/html; charset=utf-8' },
   '/style.css':             { file: join(WEBAPP, 'style.css'),             mime: 'text/css; charset=utf-8' },
+  '/css/departments.css':   { file: join(WEBAPP, 'css', 'departments.css'), mime: 'text/css; charset=utf-8' },
   '/app.js':                { file: join(WEBAPP, 'app.js'),                mime: 'application/javascript; charset=utf-8' },
+  '/js/core/shell.js':      { file: join(WEBAPP, 'js', 'core', 'shell.js'), mime: 'application/javascript; charset=utf-8' },
   '/blog.js':               { file: join(WEBAPP, 'blog.js'),               mime: 'application/javascript; charset=utf-8' },
   '/shop.js':               { file: join(WEBAPP, 'shop.js'),               mime: 'application/javascript; charset=utf-8' },
   '/analytics.js':          { file: join(WEBAPP, 'analytics.js'),          mime: 'application/javascript; charset=utf-8' },
@@ -270,8 +272,41 @@ const server = createServer(async (req, res) => {
     try {
       const input = await readBody(req);
       if (!input.topic) { err(res, 'topic is required', 400); return; }
+
+      // ── Approval gate ─────────────────────────────────────────────────────
+      // initiatedBy === 'user'  (default) → Boss is driving from the blog publisher.
+      //   No approval needed. Generate and return immediately.
+      // initiatedBy === 'agent' → An agent (Nexus/Aether) is trying to push a post.
+      //   Must pause, fire WhatsApp to Boss, and wait for explicit YES.
+      const initiatedBy = (input.initiatedBy || 'user').toLowerCase();
+
+      if (initiatedBy === 'agent') {
+        console.log(`[PathGuru] Agent-initiated blog — routing through approval gate`);
+        const { createApprovalRequest } = await import('./skills/approvalGate.js');
+        const { approvalId, whatsappSent } = await createApprovalRequest({
+          approvalType: 'blog_post',
+          subject:      `Blog post approval — ${input.topic.slice(0, 60)}`,
+          detail: [
+            `An agent wants to write and publish a blog post.`,
+            ``,
+            `📌 *Topic:* ${input.topic}`,
+            `✍️  *Author:* ${input.author || 'Not specified — please confirm'}`,
+            `🎯 *Tone:* ${input.tone || 'Not specified'}`,
+            `👥 *Audience:* ${input.audience || 'Not specified'}`,
+          ].join('\n'),
+          payload: { ...input, platforms: [] },
+        });
+        json(res, {
+          status:      'pending_approval',
+          approvalId,
+          whatsappSent,
+          message:     'Approval request sent to Boss via WhatsApp. Nothing will be written until Boss confirms.',
+        });
+        return;
+      }
+
+      // User-initiated — proceed immediately, no gate needed
       console.log(`[PathGuru] Generating blog post: "${input.topic}"`);
-      // Strip platforms so generation never auto-publishes
       const result = await generateAndPublishBlogPost({ ...input, platforms: [] });
       json(res, result);
     } catch (e) { err(res, e.message || 'Blog generation failed'); }
@@ -332,7 +367,7 @@ const server = createServer(async (req, res) => {
           linkedinCaption:     body.linkedin_caption    || '',
           categories:          body.categories          || [],
           tags:                body.tags                || [],
-          authorName:          body.author_name         || 'PathGuru Team',
+          authorName:          body.author_name         || null,
           readingTimeMinutes:  readingTime,
           wordCount,
           status:              body.status              || 'draft',
@@ -358,7 +393,7 @@ const server = createServer(async (req, res) => {
         linkedin_caption:      body.linkedin_caption    || '',
         categories:            body.categories          || [],
         tags:                  body.tags                || [],
-        author_name:           body.author_name         || 'PathGuru Team',
+        author_name:           body.author_name         || null,
         reading_time_minutes:  readingTime,
         word_count:            wordCount,
       });
@@ -1089,6 +1124,30 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/firm-ip/library ─────────────────────────────────────────────
+  // Unified catalog: operating frameworks (agent DNA) + Intelligence Library (paywalled).
+  if (req.method === 'GET' && path === '/api/firm-ip/library') {
+    try {
+      const { buildFirmIpLibraryCatalog, seedEngagementModelKnowledge } = await import('./skills/firmKnowledge.js');
+      const db = getSupabase();
+      if (db) await seedEngagementModelKnowledge(db);
+      const manifest = await listFirmIpDocuments();
+      const catalog = buildFirmIpLibraryCatalog(manifest);
+      json(res, catalog);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/synthesizer/frameworks ───────────────────────────────
+  // Probe knowledge_base for firm operating frameworks (registry + KB status).
+  if (req.method === 'GET' && path === '/api/agents/synthesizer/frameworks') {
+    try {
+      const result = await synthesizer.getFirmFrameworks();
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── POST /api/agents/synthesizer/query ──────────────────────────────────
   // Query the knowledge base. Body: { query, forAgent, domains }
   if (req.method === 'POST' && path === '/api/agents/synthesizer/query') {
@@ -1260,23 +1319,43 @@ ent.refundOrder(shopRefundMatch[1], body);
   }
 
   // ── POST /api/agents/aether/write-blog ───────────────────────────────────
-  // Aether writes a full blog post using the C2C Pipeline and knowledge base,
-  // then passes it through the blog publisher (HTML build + Pexels + CMS publish).
-  // Body: { topic, audience?, tone?, wordCount?, seoKeyword?, niche?,
-  //         ctaGoal?, personaId?, publish? (default true) }
+  // Aether writes a blog derivative (teaser) from Orion research or a stored playbook.
+  // Body: { topic, researchBrief? | playbookSlug?, force?, audience?, tone?, wordCount?,
+  //         seoKeyword?, niche?, ctaGoal?, personaId?, frameworkId?, publish? (default true) }
   if (req.method === 'POST' && path === '/api/agents/aether/write-blog') {
     try {
       const body = await readBody(req);
-      const { topic, audience, tone, wordCount, seoKeyword, niche, ctaGoal, personaId, voiceNotes, publish = true } = body;
+      const {
+        topic, audience, tone, wordCount, seoKeyword, niche, ctaGoal, personaId,
+        voiceNotes, publish = true, researchBrief, playbookSlug, frameworkId, force = false,
+      } = body;
       if (!topic?.trim()) { err(res, 'topic is required', 400); return; }
 
-      // Step 1 — Aether produces the raw content (knowledge-base grounded)
+      const { validateBlogDerivativeInput } = await import('./skills/contentAdvocate.js');
+      const gate = validateBlogDerivativeInput({ researchBrief, playbookSlug, force });
+      if (!gate.ok) { err(res, gate.error, 422); return; }
+
+      let playbookTitle   = '';
+      let playbookExcerpt = '';
+      if (playbookSlug?.trim()) {
+        const pb = await getAgencyPlaybook(playbookSlug.trim());
+        if (!pb) { err(res, `Playbook not found: ${playbookSlug}`, 404); return; }
+        playbookTitle   = pb.title || playbookSlug;
+        const raw       = pb.content ?? pb.body ?? '';
+        playbookExcerpt = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      }
+
+      // Step 1 — Aether produces raw content grounded in research / playbook IP
       const rawContent = await aether.produceContent('blog post', topic, {
         audience: audience || 'business professionals in digital transformation, automation, or media',
         voiceNotes: voiceNotes || '',
         callToAction: ctaGoal || 'Book a free strategy session at digitafusion.com/agency/booking',
         wordCount: wordCount || 1200,
         stdcStage: 'THINK — consideration and authority-building',
+        researchBrief: researchBrief || '',
+        playbookTitle,
+        playbookExcerpt,
+        frameworkId: frameworkId || '',
       });
 
       // Step 2 — Pass through the full blog publisher pipeline (HTML + image + CMS)
@@ -1288,11 +1367,22 @@ ent.refundOrder(shopRefundMatch[1], body);
         niche:          niche || 'digital_media',
         ctaGoal,
         personaId,
-        aetherContent:  rawContent,  // pre-written content override
-        publish,
+        aetherContent:  rawContent,
+        postType:       body.postType || 'guide',
+        author:         body.author || 'Boroji Adebayo-Hopewell, Founder',
+        researchBrief:  researchBrief || '',
+        playbookSlug:   playbookSlug || '',
+        playbookTitle,
+        playbookExcerpt,
+        frameworkId:    frameworkId || '',
+        platforms: publish ? [{
+          type:    'digifusion',
+          status:  'published',
+          siteUrl: process.env.DIGIFUSION_API_URL || 'http://localhost:3000',
+        }] : [],
       });
 
-      json(res, { ok: true, post: result, agent: 'aether' });
+      json(res, { ok: true, ...result, agent: 'aether', published: publish });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -1746,13 +1836,56 @@ ent.refundOrder(shopRefundMatch[1], body);
 
       console.log(`[WhatsApp→Nexus] From: ${from} | Message: ${msgBody.slice(0, 80)}`);
 
+      // ── Approval gate check — FIRST before Nexus chat ────────────────────
+      // If there is a pending approval request and Boss's reply is YES/NO,
+      // resolve it and execute the approved action rather than passing to chat.
+      let reply;
+      try {
+        const { handleApprovalReply } = await import('./skills/approvalGate.js');
+        const approval = await handleApprovalReply(msgBody);
+
+        if (approval.handled) {
+          if (approval.decision === 'approved') {
+            console.log(`[WhatsApp] Boss approved: ${approval.approvalType} (${approval.approvalId?.slice(0,8)})`);
+
+            // Execute the approved action
+            if (approval.approvalType === 'blog_post' && approval.payload) {
+              try {
+                const { executeApprovedBlogPublish } = await import('./skills/blogApprovalFlow.js');
+                const blogResult = await executeApprovedBlogPublish(approval.payload);
+                const url = blogResult?.url || (blogResult?.slug ? `https://www.digitafusion.com/blog/${blogResult.slug}` : '');
+                reply = `✅ Approved and published.\n\n${blogResult.topic || 'Blog post'} is live${url ? `:\n${url}` : ''}.`;
+              } catch (blogErr) {
+                console.error('[WhatsApp] Blog execution after approval failed:', blogErr.message);
+                reply = `✅ Approved, but publishing hit an error: ${blogErr.message.slice(0, 120)}. Check PathGuru logs.`;
+              }
+            } else {
+              reply = `✅ Approved. I'll proceed with: ${approval.subject || approval.approvalType}.`;
+            }
+          } else {
+            // Rejected
+            console.log(`[WhatsApp] Boss rejected: ${approval.approvalType} (${approval.approvalId?.slice(0,8)})`);
+            reply = `❌ Understood. ${approval.approvalType === 'blog_post' ? 'Blog post' : 'Request'} cancelled. Let me know if you want to revisit or change direction.`;
+          }
+
+          // No Nexus chat needed — approval was handled
+          const safe = (reply || '').length > 1550 ? reply.slice(0, 1547) + '…' : reply;
+          res.writeHead(200, { 'Content-Type': 'text/xml' });
+          res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${safe.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Message></Response>`);
+          return;
+        }
+      } catch (gateErr) {
+        console.warn('[WhatsApp] Approval gate check failed (continuing to Nexus chat):', gateErr.message);
+      }
+
+      // ── No pending approval — route to Nexus chat as normal ──────────────
       // Maintain per-number conversation history in memory (resets on server restart)
       if (!global._waHistory) global._waHistory = {};
       const history = global._waHistory[from] || [];
 
       // Pass to Nexus chat
-      const result  = await AGENTS.nexus.chat(msgBody, history);
-      const reply   = typeof result === 'string' ? result : result?.response || result?.message || JSON.stringify(result);
+      const result = await AGENTS.nexus.chat(msgBody, history);
+      reply        = typeof result === 'string' ? result : result?.response || result?.message || JSON.stringify(result);
 
       // Update history (keep last 10 turns to avoid bloat)
       history.push({ role: 'user',      content: msgBody });
@@ -2294,7 +2427,7 @@ Produce a structured content brief with:
 2. Target keyword and 5 secondary keywords
 3. Article structure: intro hook, 4–6 main sections with sub-points, strong CTA
 4. Key statistics or data points to include
-5. DigiFusion angle: how our frameworks (Deal Engine / AVE / C2C / AVE) are relevant
+5. DigiFusion angle: how our proprietary IP frameworks are relevant (AVE, Deal Engine, C2C, Engagement Model, SME Scale, Enterprise Velocity, GovTech, FIRA)
 6. Recommended word count and content type
 
 Keep it sharp and actionable. This is a DigiFusion content asset.`;
@@ -2362,7 +2495,7 @@ Write the full article now.`;
         tags:   tags || [sector, 'digifusion', 'strategy'].filter(Boolean),
         category: category || sector || 'business-intelligence',
         aiProvider: aiProvider || null,
-        authorName: 'DigiFusion Intelligence',
+        authorName: null,
         status: 'published',
       });
 
@@ -2434,6 +2567,8 @@ server.listen(PORT, () => {
   │   GET  /api/agents/assistant/knowledge           │
   │                                                  │
   │   FIRM IP / BLUEPRINTS                           │
+  │   GET  /api/firm-ip/library                      │
+  │   GET  /api/agents/synthesizer/frameworks        │
   │   GET  /api/blueprints                           │
   │   GET  /api/blueprints/:slug                     │
   │   POST /api/blueprints/:slug/purchase            │
@@ -2455,6 +2590,14 @@ server.on('error', e => { console.error('[PathGuru] Server error:', e); process.
 
 async function startup() {
   prewarmFonts().catch(() => {});
+  try {
+    const db = getSupabase();
+    if (db) {
+      const { seedEngagementModelKnowledge } = await import('./skills/firmKnowledge.js');
+      const seed = await seedEngagementModelKnowledge(db);
+      if (seed.seeded) console.log('[FirmIP] Seeded Engagement Model into knowledge_base');
+    }
+  } catch (e) { console.warn('[FirmIP] Engagement Model seed skipped:', e.message); }
   const PULSE_SWEEP_INTERVAL_MS = parseInt(process.env.PULSE_SWEEP_INTERVAL_MS || '300000', 10);
   setInterval(async () => {
     try { await AGENTS.pulse.sweep(); } catch(e) { console.warn('[Pulse] sweep error:', e.message); }

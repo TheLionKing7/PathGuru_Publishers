@@ -198,19 +198,24 @@
     // Prefer Compose section picker, fall back to Assets persona picker
     const personaId = g('blogComposePicker') || g('blogPersonaPicker');
     const aiProvider = g('blogAiProvider') || null;
+    const researchBrief = g('blogResearchBrief');
+    const playbookSlug  = g('blogPlaybookSlug');
     const input = {
-      topic:      g('blogTopic'),
-      postType:   g('blogPostType'),
-      audience:   g('blogAudience'),
-      goal:       g('blogGoal'),
-      tone:       g('blogTone'),
-      wordCount:  g('blogWordCount'),
-      seoKeyword: g('blogSeoKeyword'),
-      ctaGoal:    g('blogCtaGoal'),
-      author:     g('blogAuthor'),
-      personaId:  personaId || null,
-      aiProvider: aiProvider,
-      platforms:  [],
+      topic:          g('blogTopic'),
+      researchBrief,
+      playbookSlug,
+      frameworkId:    g('blogFrameworkId'),
+      postType:       g('blogPostType'),
+      audience:       g('blogAudience'),
+      goal:           g('blogGoal'),
+      tone:           g('blogTone'),
+      wordCount:      g('blogWordCount'),
+      seoKeyword:     g('blogSeoKeyword'),
+      ctaGoal:        g('blogCtaGoal'),
+      author:         g('blogAuthor'),
+      personaId:      personaId || null,
+      aiProvider:     aiProvider,
+      platforms:      [],
     };
     if (document.getElementById('wpEnabled')?.checked)
       input.platforms.push({ type: 'wordpress', siteUrl: g('wpUrl'), username: g('wpUser'), appPassword: g('wpPass'), status: g('wpStatus') });
@@ -290,7 +295,7 @@
   // ── Generate ───────────────────────────────────────────────────────
   async function runBlogGenerate() {
     const input = collectBlogInput();
-    if (!input.topic) { blogToast('Enter a topic to generate.', 'error'); return; }
+    if (!input.topic) { blogToast('Enter a derivative angle / headline.', 'error'); return; }
     const backendUrl = getBackendUrl();
     if (!backendUrl.startsWith('http')) {
       blogToast('Configure your backend URL in Settings first.', 'error');

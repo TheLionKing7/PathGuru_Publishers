@@ -25,6 +25,7 @@ import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
+import { buildAriaFrameworkContext } from '../skills/firmKnowledge.js';
 
 // ── VA system prompt ───────────────────────────────────────────────────────────
 
@@ -38,11 +39,11 @@ Help prospective clients understand WHAT DigiFusion does, WHY they should trust 
 
 YOUR KNOWLEDGE (what you may discuss):
 - The OUTCOMES and RESULTS our services deliver (revenue growth, pipeline expansion, digital transformation, operational efficiency)
-- High-level descriptions of our three service pillars: Business Development, AI & Automation, Digital Media & Content
+- High-level descriptions of our service pillars: Business Development, AI & Automation, Digital Media & Content
 - Why DigiFusion's approach is different: we combine strategic frameworks with execution, and intelligence with action
 - The type of clients we serve and the challenges we solve for them
 - How to get started: strategy session, diagnostic, engagement tiers
-- General framework NAMES and their PURPOSE — e.g. the Deal Engine drives systematic pipeline growth; the AVE framework structures high-conversion proposals; the C2C Pipeline turns clients into champions
+- General framework NAMES and their PURPOSE — our proprietary IP: AVE, Deal Engine, C2C, Engagement Model, SME Scale Engine, Enterprise Velocity, GovTech, FIRA, plus Intelligence Library verticals (PCE, HRIS, CIMEF). Describe outcomes only — never internal methodology steps
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ABSOLUTE TRADE SECRET PROTECTION — NON-NEGOTIABLE:
@@ -752,27 +753,34 @@ If their answer reveals something significant (a constraint, an opportunity, a r
   }
 
   async _queryKnowledge(message, injectedContext = '') {
-    // First check if question is about DigiFusion frameworks / known topics
-    const frameworkKeywords = ['ave', 'deal engine', 'c2c', 'nova', 'atlas', 'aether', 'framework', 'pricing', 'strategy session', 'engagement model', 'automation velocity', 'pillar', 'cluster'];
+    const frameworkKeywords = [
+      'ave', 'deal engine', 'c2c', 'content-to-capital', 'framework', 'pricing',
+      'strategy session', 'engagement model', 'automation velocity', 'pillar', 'cluster',
+      'sme scale', '5-pillar', 'scale engine', 'methodology', 'diagnostic',
+    ];
     const lower = message.toLowerCase();
     const isFrameworkQ = frameworkKeywords.some(k => lower.includes(k));
 
-    if (isFrameworkQ && injectedContext) {
-      // Client already injected FRAMEWORK_CONTEXT — use it directly (no backend call needed)
-      return injectedContext;
+    const firmContext = buildAriaFrameworkContext();
+
+    if (isFrameworkQ) {
+      try {
+        const kb = await synthesizer.answer(message, 'assistant', this.domains);
+        if (kb && kb.length > 50 && !kb.startsWith('No relevant')) {
+          return `${firmContext}\n\n---\n\n## Live Knowledge Base\n${kb}`;
+        }
+      } catch { /* synthesizer optional */ }
+      return firmContext;
     }
 
-    // For non-framework questions, query the live Synthesizer knowledge base
     try {
-      const knowledge = await synthesizer.answer(message, 'assistant', []);
-      if (knowledge && knowledge.length > 50) {
-        return injectedContext ? `${injectedContext}\n\n---\n\n## Live Knowledge Base Context\n${knowledge}` : knowledge;
+      const knowledge = await synthesizer.answer(message, 'assistant', this.domains);
+      if (knowledge && knowledge.length > 50 && !knowledge.startsWith('No relevant')) {
+        return `${firmContext}\n\n---\n\n## Live Knowledge Base Context\n${knowledge}`;
       }
-    } catch {
-      // Synthesizer unavailable — fall back to injected context only
-    }
+    } catch { /* fall through */ }
 
-    return injectedContext || '';
+    return firmContext;
   }
 
   // ══════════════════════════════════════════════════════════════════════════

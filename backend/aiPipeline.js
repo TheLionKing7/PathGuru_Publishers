@@ -177,7 +177,8 @@ async function runEditorialAgents(input, project, research, provider) {
  * @param {boolean} [options.fallback=true] — try next provider if this one fails
  */
 export async function callAiProvider(provider, prompt, systemHint, options = {}) {
-  const { json = true, fallback = true } = options;
+  // When AI_PROVIDER is pinned, do not silently fall back to broken keys (e.g. Gemini billing)
+  const { json = true, fallback = options.fallback ?? !process.env.AI_PROVIDER } = options;
   try {
     if (provider.name === "gemini") return await callGemini(prompt, provider.model, systemHint, json);
     if (provider.name === "claude") return await callClaude(provider, prompt, systemHint);
@@ -193,8 +194,11 @@ export async function callAiProvider(provider, prompt, systemHint, options = {})
 
 /** Select the next available provider, skipping the one that just failed. */
 function _resolveFallbackProvider(excludeName) {
-  // Priority: Groq → Cerebras → Gemini → DeepSeek → Claude → Perplexity
-  const PRIORITY = ['groq', 'cerebras', 'gemini', 'deepseek', 'claude', 'perplexity'];
+  const pinned = process.env.AI_PROVIDER?.toLowerCase();
+  const PRIORITY = [
+    ...(pinned ? [pinned] : []),
+    'deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity',
+  ];
   for (const name of PRIORITY) {
     if (name === excludeName) continue;
     const p = resolveProvider(name);
@@ -310,11 +314,8 @@ async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
       // Only include response_format for structured JSON tasks.
       // Cerebras/DeepSeek with json_object on a chat prompt forces a JSON wrapper
       // around conversational text, breaking the VA widget.
-      ...(json ? { response_format: { type: "json_object" } } : {}),
-      ...(provider.name === "deepseek" ? {
-        thinking: { type: process.env.DEEPSEEK_THINKING || "disabled" },
-        reasoning_effort: process.env.DEEPSEEK_REASONING_EFFORT || "high"
-      } : {})
+      // deepseek-chat does not support thinking/reasoning_effort — only deepseek-reasoner does
+      ...(json && provider.name !== "deepseek" ? { response_format: { type: "json_object" } } : {}),
     })
   });
 
@@ -377,7 +378,10 @@ export function resolveProvider(overrideName) {
   };
 
   if (requested && providers[requested]) return providers[requested];
-  // Auto-select priority: Groq (primary fast) → Cerebras → Gemini → DeepSeek → Claude → Perplexity
+  // Auto-select: honour AI_PROVIDER env, else Groq → Cerebras → Gemini → DeepSeek → Claude → Perplexity
+  if (process.env.AI_PROVIDER && providers[process.env.AI_PROVIDER.toLowerCase()]) {
+    return providers[process.env.AI_PROVIDER.toLowerCase()];
+  }
   return providers.groq || providers.cerebras || providers.gemini || providers.deepseek || providers.claude || providers.perplexity || null;
 }
 
@@ -396,7 +400,12 @@ export function resolveResearchProvider() {
  * Used by the book/playbook publishing pipeline where content quality is paramount.
  */
 export function resolveEditorialProvider() {
-  return resolveProvider('claude') || resolveProvider('groq') || resolveProvider('gemini') || resolveProvider('deepseek') || resolveProvider();
+  // Honour AI_PROVIDER when explicitly set (e.g. deepseek, groq, cerebras)
+  if (process.env.AI_PROVIDER) {
+    const pinned = resolveProvider(process.env.AI_PROVIDER);
+    if (pinned) return pinned;
+  }
+  return resolveProvider('claude') || resolveProvider('groq') || resolveProvider('cerebras') || resolveProvider('deepseek') || resolveProvider('gemini') || resolveProvider();
 }
 
 

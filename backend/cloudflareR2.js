@@ -20,6 +20,11 @@ export const r2Config = {
 
 // ── AWS Signature V4 helpers ──────────────────────────────────────────────────
 
+function toAmzDate(d = new Date()) {
+  // YYYYMMDDTHHMMSSZ — ISO string already ends with Z after stripping punctuation
+  return d.toISOString().replace(/[:-]|\.\d{3}/g, '');
+}
+
 function hmac(key, data, encoding) {
   return createHmac("sha256", key).update(data, "utf8").digest(encoding || "buffer");
 }
@@ -46,14 +51,14 @@ async function buildR2Headers(url, body, contentType) {
       "Authorization":        `Bearer ${apiToken}`,
       "Content-Type":         contentType,
       "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
-      "x-amz-date":           new Date().toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z",
+      "x-amz-date":           toAmzDate(),
     };
   }
 
   const region  = "auto";
   const service = "s3";
   const now     = new Date();
-  const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, "").slice(0, 16) + "Z";
+  const amzDate = toAmzDate(now);
   const dateStamp = amzDate.slice(0, 8);
 
   const parsed     = new URL(url);

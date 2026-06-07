@@ -21,6 +21,10 @@ import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './sk
 import { selectPersonaForNiche } from './skills/personas.js';
 import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiPipeline.js';
 import { synthesizer } from './agents/synthesizer.js';
+import { injectAdvocateIntoBlogPrompt, buildContentAdvocateSystemBlock } from './skills/contentAdvocate.js';
+
+/** Default byline for DigiFusion blog posts — founder voice, not system accounts. */
+export const DEFAULT_BLOG_AUTHOR = 'Boroji Adebayo-Hopewell, Founder';
 
 /* ── Build blog post HTML from sections ───────────────── */
 function buildBlogHtml(post, design = {}) {
@@ -331,7 +335,7 @@ async function publishToDigiFusion (post, settings, html) {
     linkedin_caption:      post.linkedinCaption       || '',
     categories:            post.categories            || [],
     tags:                  post.tags                  || [],
-    author_name:           post.authorName            || 'Tolulope',
+    author_name:           post.authorName            || DEFAULT_BLOG_AUTHOR,
     reading_time_minutes:  post.readingTimeMinutes    || 5,    // number, not nullable — default 5 min
     word_count:            post.wordCount             || 0,    // number, not nullable — default 0
   };
@@ -462,10 +466,16 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
   } else {
     // Standard generation path — use editorial provider (Claude-first) for quality
     const basePrompt = buildBlogPrompt({ ...input, knowledgeContext }, research);
-    const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: basePrompt });
+    const advocatedPrompt = injectAdvocateIntoBlogPrompt(basePrompt, {
+      researchBrief:   input.researchBrief || research?.summary || '',
+      playbookTitle:   input.playbookTitle || '',
+      playbookExcerpt: input.playbookExcerpt || '',
+      frameworkId:     input.frameworkId || '',
+    });
+    const { prompt: finalPrompt } = injectPersonaIntoPrompt({ persona, user: advocatedPrompt });
     const provider = resolveProvider(input.aiProvider || null) || resolveEditorialProvider();
     if (!provider) throw new Error('No AI provider configured. Set CLAUDE_API_KEY, GROQ_API_KEY, GEMINI_API_KEY, or DEEPSEEK_API_KEY in .env');
-    const blogSystemHint = 'You are an expert blog copywriter. Return strict, valid JSON only — no markdown fences, no commentary outside the JSON object.';
+    const blogSystemHint = `${buildContentAdvocateSystemBlock()}\n\nReturn strict, valid JSON only — no markdown fences, no commentary outside the JSON object.`;
     rawResponse = await callAiProvider(provider, finalPrompt, blogSystemHint);
   }
 
@@ -479,7 +489,7 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
   // Stamp input-level fields onto the post object so they survive the
   // publish pipeline (post.postType / post.authorName are not AI-generated)
   post.postType  = input.postType || post.postType || 'guide';
-  post.authorName = input.author || post.authorName || 'Tolulope';
+  post.authorName = input.author || post.authorName || DEFAULT_BLOG_AUTHOR;
 
   // 4. Fetch featured image from Pexels
   let featuredImageUrl = null;
@@ -537,7 +547,7 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
       linkedinCaption: post.linkedinCaption || '',
       categories: post.categories || [],
       tags: post.tags || [],
-      authorName: input.author || 'DigiFusion Team',
+      authorName: input.author || null,
       readingTimeMinutes: post.readingTimeMinutes || Math.max(1, Math.round(wordCount / 200)),
       wordCount,
       status: 'draft', // Always start as draft

@@ -6,14 +6,18 @@
   "type": "module",
   "scripts": {
     "start": "node backend/server.js",
-    "dev": "node --env-file=.env backend/server.js",
+    "dev": "node --env-file=.env.local --env-file=.env backend/server.js",
+    "prepare": "husky",
+    "guard": "node scripts/guard-staged.mjs",
+    "lint:staged": "lint-staged",
     "check": "node --check backend/server.js",
     "install-playwright": "npx playwright install --with-deps chromium",
     "test":         "node ./tests/skills.test.js",
     "test:blog":    "node --env-file=.env scripts/test-blog.mjs",
     "test:review":  "node --env-file=.env scripts/test-blog.mjs --review",
     "publish:post": "node --env-file=.env scripts/publish-html-post.mjs",
-    "delete:post":  "node --env-file=.env scripts/delete-post.mjs"
+    "delete:post":  "node --env-file=.env scripts/delete-post.mjs",
+    "seed:digifusion": "node --env-file=.env.local scripts/seed-digifusion-content.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
@@ -25,5 +29,12 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^15.4.3"
+  },
+  "lint-staged": {
+    "*.{js,mjs}": "node --check"
   }
 }
