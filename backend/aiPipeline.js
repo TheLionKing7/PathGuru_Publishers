@@ -192,13 +192,19 @@ export async function callAiProvider(provider, prompt, systemHint, options = {})
   }
 }
 
-/** Auto chain: DeepSeek primary, Groq fallback — Gemini only when AI_PROVIDER=gemini */
+/** Firm default: DeepSeek primary, Groq fallback. Gemini is never auto-used. */
 const DEFAULT_PROVIDER_NAME = 'deepseek';
 const PROVIDER_FALLBACK_CHAIN = ['deepseek', 'groq', 'cerebras', 'claude', 'perplexity'];
 
+function _effectiveProviderName() {
+  const raw = (process.env.AI_PROVIDER || DEFAULT_PROVIDER_NAME).toLowerCase();
+  if (raw === 'gemini') return DEFAULT_PROVIDER_NAME;
+  return raw;
+}
+
 /** Select the next available provider, skipping the one that just failed. */
 function _resolveFallbackProvider(excludeName) {
-  const explicit = (process.env.AI_PROVIDER || '').toLowerCase();
+  const explicit = _effectiveProviderName();
   const chain = explicit && explicit !== excludeName
     ? [explicit, ...PROVIDER_FALLBACK_CHAIN]
     : PROVIDER_FALLBACK_CHAIN;
@@ -207,8 +213,6 @@ function _resolveFallbackProvider(excludeName) {
     const p = _resolveProviderByName(name);
     if (p) return p;
   }
-  // Last resort only when explicitly configured
-  if (excludeName !== 'gemini') return _resolveProviderByName('gemini');
   return null;
 }
 
@@ -385,7 +389,7 @@ function _resolveProviderByName(name) {
 }
 
 export function resolveProvider(overrideName) {
-  const requested = (overrideName || process.env.AI_PROVIDER || DEFAULT_PROVIDER_NAME).toLowerCase();
+  const requested = (overrideName || _effectiveProviderName()).toLowerCase();
 
   // Explicit request (including default deepseek)
   const direct = _resolveProviderByName(requested);

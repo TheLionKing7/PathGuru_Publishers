@@ -81,6 +81,9 @@ async function sendWhatsAppTwilio(title, body, recipients) {
       if (!res.ok) {
         const t = await res.text().catch(() => '');
         console.error(`[Notifier] Twilio WhatsApp error ${res.status}: ${t.slice(0, 200)}`);
+        if (t.includes('63007')) {
+          console.error('[Notifier] Error 63007: TWILIO_WHATSAPP_FROM is not a WhatsApp-enabled sender. In Twilio Console → Messaging → WhatsApp senders, copy the exact sandbox or Business number (e.g. whatsapp:+14155238886 for sandbox).');
+        }
         // 429 = daily limit hit — mark as rate_limited so it is never retried
         const code = res.status === 429 ? 'rate_limited' : `Twilio ${res.status}`;
         results.push({ to, error: code, rateLimited: res.status === 429 });

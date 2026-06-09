@@ -35,7 +35,7 @@ import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
-import { createPost as dbCreatePost, updatePost as dbUpdatePost } from './supabaseClient.js';
+import { createPost as dbCreatePost, updatePost as dbUpdatePost, getSupabase } from './supabaseClient.js';
 
 // ── Agent network ──────────────────────────────────────────────────────────────
 import { synthesizer } from './agents/synthesizer.js';
