@@ -99,3 +99,18 @@ function envBoolean(name, fallback) {
 function round(value) {
   return Math.round(value * 1000) / 1000;
 }
+
+/** KDP mirror margin — wider gutter for longer books. */
+export function applyDynamicGutter(profile, estimatedPages = 200) {
+  if (!profile) return profile;
+  const pages = Number(estimatedPages) || 200;
+  let gutterIn = 0.375;
+  if (pages > 300) gutterIn = 0.75;
+  else if (pages > 150) gutterIn = 0.5;
+  return {
+    ...profile,
+    safeMarginIn: Math.max(profile.safeMarginIn || 0.625, gutterIn),
+    estimatedPages: pages,
+    gutterMarginIn: gutterIn,
+  };
+}

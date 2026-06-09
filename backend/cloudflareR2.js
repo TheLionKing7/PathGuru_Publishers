@@ -251,7 +251,10 @@ export async function deleteMediaAsset (key) {
 // same S3-compatible Bearer token used for PUT/GET/DELETE.
 // ═══════════════════════════════════════════════════════════════
 
-const VALID_LIBRARY_FOLDERS = ['playbooks', 'research', 'case-studies'];
+const VALID_LIBRARY_FOLDERS = [
+  'playbooks', 'research', 'case-studies', 'frameworks',
+  'ebook/non-fiction', 'ebook/fiction', 'ebook/back-cover',
+];
 
 export function isValidLibraryFolder (folder) {
   return VALID_LIBRARY_FOLDERS.includes(folder);

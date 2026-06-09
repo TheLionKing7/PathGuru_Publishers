@@ -1,5 +1,9 @@
-import { createComplianceReport, createKdpProfile, getPageCss } from "./kdpCompliance.js";
+import { createComplianceReport, createKdpProfile, getPageCss, applyDynamicGutter } from "./kdpCompliance.js";
 import { createAiPublishingPackage, callAiProvider, resolveProvider } from "./aiPipeline.js";
+import { resolvePageBudget, estimatePagesFromManuscript } from "./skills/kdp/pageBudget.js";
+import { resolveBundledLogo } from "./skills/kdp/imprintPack.js";
+import { validateManuscript, validationToRenderReport, normalizeManuscriptSections } from "./skills/kdp/manuscriptValidator.js";
+import { buildBackCoverPackage } from "./skills/kdp/backCover.js";
 
 const publisherProfiles = {
   pathfinda: {
@@ -130,9 +134,14 @@ export function createBaseProject(input) {
   const tone = clean(input.tone, "expert, clear, persuasive");
   const format = input.format && formatLabels[input.format] ? input.format : "pdf";
   const style = input.style && styleSystems[input.style] ? input.style : "modern";
-  const length = clean(input.length, "concise");
+  const length = clean(input.length, "standard");
+  const publishingIntent = clean(input.publishingIntent, "ebook");
   const inputPublisher = clean(input.publisher, "");
-  const publisherProfile = resolvePublisherProfile(input, inputPublisher);
+  const assetBaseUrl = input.assetBaseUrl
+    || process.env.PATHGURU_PUBLIC_URL
+    || `http://localhost:${process.env.PORT || 8787}`;
+  let publisherProfile = resolvePublisherProfile(input, inputPublisher);
+  publisherProfile = resolveBundledLogo(publisherProfile, assetBaseUrl);
   const publisher = clean(inputPublisher, publisherProfile.brandName || "PathGuru Publishers");
   const designSystem = mergeDesignSystem(styleSystems[style], publisherProfile);
   const kdpProfile = createKdpProfile(input);
@@ -159,6 +168,19 @@ export function createBaseProject(input) {
     tone,
     writingMode: clean(input.writingMode, "nonfiction guide"),
     length,
+    publishingIntent,
+    ebookGenre: clean(input.ebookGenre, 'non-fiction'),
+    jobMode: clean(input.jobMode, 'generate'),
+    pageBudget: resolvePageBudget(input, { length, publishingIntent }),
+    backCoverBlurb: clean(input.backCoverBlurb, ""),
+    backCoverBullets: input.backCoverBullets || [],
+    backCoverAuthorBio: clean(input.backCoverAuthorBio, ""),
+    bisacCodes: Array.isArray(input.bisacCodes)
+      ? input.bisacCodes
+      : String(input.bisacCodes || '').split(/[,;]/).map(s => s.trim()).filter(Boolean),
+    keywords: Array.isArray(input.keywords)
+      ? input.keywords
+      : String(input.keywords || '').split(/[,;]/).map(s => s.trim()).filter(Boolean),
     format,
     conversionGoal,
     designSystem,
@@ -500,6 +522,7 @@ export async function buildProject(input) {
   let design      = null;
   let html        = null;
   let pdfBuffer   = null;
+  let docxBuffer  = null;
   let renderReport = null;
   let nicheProfile = null;
 
@@ -544,18 +567,55 @@ export async function buildProject(input) {
     html        = pass1.html;
     renderReport = pass1.renderReport;
 
-    // Phase 7: Feedback loop (AI writing pass 2 — fixes weak sections)
-    const weakCount = (renderReport?.sections || []).filter(s => s.issues?.length > 0).length;
-    if (weakCount > 0) {
-      console.log(`[PathGuru] Phase 7: Feedback loop (${weakCount} sections to improve)...`);
-      manuscript = await runFeedbackLoop(manuscript, renderReport, nicheProfile, project);
+    // Phase 7–8: Feedback loop (up to 3 passes until validation improves)
+    const budget = project.pageBudget || resolvePageBudget(input, project);
+    let feedbackPass = 0;
+    const maxFeedbackPasses = 3;
+    while (feedbackPass < maxFeedbackPasses) {
+      const validation = validateManuscript(manuscript, budget);
+      project.generationReport = {
+        ...validation,
+        pageBudget: budget,
+        feedbackPass,
+      };
+      const weakCount = (renderReport?.sections || []).filter(s => s.issues?.length > 0).length;
+      if (validation.passed && weakCount === 0) break;
 
-      // Phase 8: Format pass 2 — re-render with improved content
-      console.log('[PathGuru] Phase 8: Layout engine (pass 2 — post-feedback)...');
-      const pass2 = await runFormattingAgent(project, manuscript, design, { includeCover: embedCoverInInterior });
-      html        = pass2.html;
-      renderReport = pass2.renderReport;
+      const mergedReport = {
+        sections: [
+          ...(renderReport?.sections || []),
+          ...validationToRenderReport(validation).sections,
+        ],
+        warnings: validation.issues,
+      };
+      const weakTotal = mergedReport.sections.filter(s => s.issues?.length > 0).length;
+      if (!weakTotal) break;
+
+      console.log(`[PathGuru] Phase 7: Feedback loop pass ${feedbackPass + 1} (${weakTotal} sections)...`);
+      manuscript = await runFeedbackLoop(manuscript, mergedReport, nicheProfile, project);
+      manuscript.sections = normalizeManuscriptSections(manuscript.sections);
+
+      console.log('[PathGuru] Phase 8: Layout engine (post-feedback)...');
+      const passN = await runFormattingAgent(project, manuscript, design, { includeCover: embedCoverInInterior });
+      html         = passN.html;
+      renderReport = passN.renderReport;
+      feedbackPass++;
     }
+
+    const pageEst = estimatePagesFromManuscript(manuscript);
+    project.kdpProfile = applyDynamicGutter(project.kdpProfile, pageEst.estimatedPages);
+
+    project.backCoverHtml = await buildBackCoverPackage(project, manuscript, {
+      blurb:     input.backCoverBlurb || manuscript?.positioning,
+      bullets:   input.backCoverBullets,
+      authorBio: input.backCoverAuthorBio,
+    });
+
+    // Final layout pass — includes back cover in interior HTML
+    console.log('[PathGuru] Phase 8b: Final layout (back cover + gutter)...');
+    const finalPass = await runFormattingAgent(project, manuscript, design, { includeCover: embedCoverInInterior });
+    html         = finalPass.html;
+    renderReport = finalPass.renderReport;
 
     // Phase 9: PDF export (interior)
     console.log('[PathGuru] Phase 9: PDF post-processing (metadata, bookmarks, page labels)...');
@@ -582,6 +642,18 @@ export async function buildProject(input) {
       const { exportToPdf } = await import('./exporter.js');
       pdfBuffer = await exportToPdf(html, project, manuscript || {}, renderReport);
     } catch {}
+  }
+
+  const fmtKey = String(input.format || project.format || 'pdf').toLowerCase();
+  const wantDocx = ['docx', 'both', 'pdf+docx'].includes(fmtKey) || input.includeDocx === true;
+  if (wantDocx && html) {
+    try {
+      const { buildKdpDocx } = await import('./skills/kdp/docxExport.js');
+      const doc = await buildKdpDocx(html, project);
+      docxBuffer = doc.buffer;
+    } catch (e) {
+      console.warn('[PathGuru] DOCX export skipped:', e.message);
+    }
   }
 
   // Compliance report — merge in automated font & preflight check results
@@ -623,6 +695,7 @@ export async function buildProject(input) {
   return {
     html,
     pdfBase64:      pdfBuffer      ? pdfBuffer.toString('base64')      : null,
+    docxBase64:     docxBuffer     ? docxBuffer.toString('base64')     : null,
     coverPdfBase64: coverPdfBuffer ? coverPdfBuffer.toString('base64') : null,
     coverExport,
     manuscript:  manuscript || { title: project.title, subtitle: project.subtitle, sections: project.sections || [] },
@@ -642,5 +715,8 @@ export async function buildProject(input) {
     positioning:       manuscript?.positioning       || '',
     writingPersonality:manuscript?.writingPersonality || '',
     proofreaderNotes:  manuscript?.proofreaderNotes  || project.proofreaderNotes || [],
+    generationReport:  project.generationReport || null,
+    pageBudget:        project.pageBudget || null,
+    backCoverHtml:     project.backCoverHtml || '',
   };
 }

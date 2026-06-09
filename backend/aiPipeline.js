@@ -1,14 +1,40 @@
-import { runResearchAgent, fallbackResearch } from './skills/research.js';
-import { buildEditorialPrompt, parseEditorialResponse, normalizeSection } from './skills/editorial.js';
+import { runResearchAgent, runDeepResearch, fallbackResearch } from './skills/research.js';
 import { runDesignAgent } from './skills/design.js';
 import { runFormattingAgent } from './skills/formatting.js';
-import { getLibraryContext } from './referenceLibrary.js';
+import { resolvePageBudget } from './skills/kdp/pageBudget.js';
+import { runChunkedEditorial } from './skills/kdp/chunkedEditorial.js';
+import { runManuscriptRefinement } from './skills/kdp/manuscriptRefinement.js';
+import { resolveBundledLogo } from './skills/kdp/imprintPack.js';
 
 export async function createAiPublishingPackage(input, baseProject) {
   // Editorial pipeline uses Claude-first provider for maximum prose quality.
   // Fast agents (Groq, Cerebras) are reserved for chat; PDFs deserve Claude.
   const provider = resolveEditorialProvider();
   const hasTavily = Boolean(process.env.TAVILY_API_KEY);
+  const hasFirecrawl = Boolean(process.env.FIRECRAWL_API_KEY);
+  const assetBaseUrl = input.assetBaseUrl
+    || process.env.PATHGURU_PUBLIC_URL
+    || `http://localhost:${process.env.PORT || 8787}`;
+
+  baseProject.publisherProfile = resolveBundledLogo(
+    baseProject.publisherProfile || {},
+    assetBaseUrl,
+  );
+  if (!baseProject.publisherProfile.logoUrl && input.brandLogoUrl) {
+    baseProject.publisherProfile = {
+      ...baseProject.publisherProfile,
+      logoUrl: input.brandLogoUrl,
+    };
+  }
+
+  const budget = resolvePageBudget(input, baseProject);
+  baseProject.pageBudget = budget;
+  baseProject.publishingIntent = input.publishingIntent || baseProject.publishingIntent;
+  baseProject.ebookGenre = input.ebookGenre || baseProject.ebookGenre || 'non-fiction';
+  baseProject.jobMode = input.jobMode || baseProject.jobMode || 'generate';
+
+  const isRefineMode = baseProject.jobMode === 'refine'
+    || Boolean(input.sourceManuscript?.text || input.manuscriptText || input.importedText);
 
   if (!provider) {
     return {
@@ -19,19 +45,61 @@ export async function createAiPublishingPackage(input, baseProject) {
     };
   }
 
-  // ── Phase 1: Research ─────────────────────────────────────────────────
-  console.log('[PathGuru AI] Phase 1: Running research agent...');
-  const rawResearch = hasTavily
-    ? await runResearchAgent(input, baseProject)
-    : fallbackResearch(input, baseProject);
+  let approvedResearch;
+  let manuscript;
 
-  // ── Phase 2: Editorial Quality Gate — assess & approve research ───────
-  console.log('[PathGuru AI] Phase 2: Editorial quality gate — assessing research depth...');
-  const approvedResearch = await assessAndApproveResearch(rawResearch, input, baseProject, provider);
+  if (isRefineMode) {
+    console.log('[PathGuru AI] Refine mode — skipping research, polishing imported manuscript...');
+    approvedResearch = {
+      summary: `Imported manuscript refinement for "${baseProject.title}".`,
+      sources: [],
+      refine:  true,
+    };
+    manuscript = await runManuscriptRefinement(
+      { ...input, assetBaseUrl },
+      baseProject,
+      provider,
+      (p, prompt) => callAiProvider(p, prompt),
+    );
+  } else {
+    // ── Phase 1: Research ─────────────────────────────────────────────────
+    console.log('[PathGuru AI] Phase 1: Running research agent...');
+    const useDeepResearch = hasFirecrawl && (
+      budget.lengthKey === 'deep'
+      || ['playbook', 'research'].includes(baseProject.publishingIntent)
+    );
+    let rawResearch;
+    if (useDeepResearch) {
+      console.log('[PathGuru AI] Deep research (Tavily + Firecrawl)...');
+      const deep = await runDeepResearch(baseProject.title || input.topic, {
+        audience: baseProject.audience,
+        depth:    budget.lengthKey === 'deep' ? 3 : 2,
+      });
+      rawResearch = {
+        summary: deep.brief || '',
+        sources: deep.sources || [],
+        deep:    true,
+      };
+    } else if (hasTavily || hasFirecrawl) {
+      rawResearch = await runResearchAgent(input, baseProject);
+    } else {
+      rawResearch = fallbackResearch(input, baseProject);
+    }
 
-  // ── Phase 3: Editorial writing ────────────────────────────────────────
-  console.log('[PathGuru AI] Phase 3: Writing manuscript from approved research brief...');
-  const manuscript = await runEditorialAgents(input, baseProject, approvedResearch, provider);
+    // ── Phase 2: Editorial Quality Gate ─────────────────────────────────
+    console.log('[PathGuru AI] Phase 2: Editorial quality gate — assessing research depth...');
+    approvedResearch = await assessAndApproveResearch(rawResearch, input, baseProject, provider);
+
+    // ── Phase 3: Chunked editorial writing ──────────────────────────────
+    console.log('[PathGuru AI] Phase 3: Chunked manuscript generation...');
+    manuscript = await runChunkedEditorial(
+      { ...input, assetBaseUrl },
+      baseProject,
+      approvedResearch,
+      provider,
+      (p, prompt) => callAiProvider(p, prompt),
+    );
+  }
 
   // ── Phase 4: Design + cover ───────────────────────────────────────────
   console.log('[PathGuru AI] Phase 4: Running design agent with research-driven cover...');
@@ -44,9 +112,18 @@ export async function createAiPublishingPackage(input, baseProject) {
     manuscript,
     design: designPackage,
     html: formatting.html,
-    notes: hasTavily
-      ? ["Research → Quality Gate → Editorial → Design pipeline completed."]
-      : ["TAVILY_API_KEY is not configured. Research used an internal brief — add TAVILY_API_KEY for live data."]
+    notes: [
+      isRefineMode
+        ? 'Imported manuscript — structural analysis, proofreading, and imprint applied.'
+        : `Page budget: ${budget.targetPagesMin}–${budget.targetPagesMax} pages · ${budget.targetChapterCount} chapters.`,
+      isRefineMode ? 'Research skipped (refine mode).' : (
+        hasFirecrawl && (budget.lengthKey === 'deep' || ['playbook', 'research'].includes(baseProject.publishingIntent))
+          ? 'Deep research (Tavily + Firecrawl) used.'
+          : (hasTavily || hasFirecrawl ? 'Standard research pipeline completed.' : 'No research API keys — internal brief only.')
+      ),
+      isRefineMode ? 'Section-by-section proofreading pass completed.' : 'Chunked chapter writing + imprint front matter applied.',
+    ],
+    pageBudget: budget,
   };
 }
 
@@ -143,29 +220,6 @@ scoring guide:
   };
   return research;
 }
-async function runEditorialAgents(input, project, research, provider) {
-  // Inject reference library context for the publisher's style
-  const style = project.publisherProfile?.resolvedStyle || input.style || 'modern';
-  const libraryContext = await getLibraryContext(style).catch(() => '');
-  const prompt = buildEditorialPrompt(input, project, research, undefined, libraryContext);
-  const text = await callAiProvider(provider, prompt);
-  const parsed = parseEditorialResponse(text);
-
-  if (!parsed.sections || !Array.isArray(parsed.sections)) {
-    throw new Error(`${provider.name} returned an invalid publishing package.`);
-  }
-
-  return {
-    title: clean(parsed.title, project.title),
-    subtitle: clean(parsed.subtitle, project.subtitle),
-    positioning: clean(parsed.positioning, ""),
-    writingPersonality: clean(parsed.writingPersonality, input.writingPersonality || "expert guide"),
-    proofreaderNotes: Array.isArray(parsed.proofreaderNotes) ? parsed.proofreaderNotes : [],
-    sections: parsed.sections.map(normalizeSection),
-    citations: Array.isArray(parsed.citations) ? parsed.citations : research.sources
-  };
-}
-
 /**
  * Call the AI provider with automatic fallback.
  *

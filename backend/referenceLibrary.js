@@ -212,16 +212,44 @@ export async function getLibrarySummary(dir = DEFAULT_LIBRARY_DIR) {
 // These are used for continuous learning and design guidelines per output type.
 // ═══════════════════════════════════════════════════════════════════════
 
-export const INTENT_FOLDERS = ['playbooks', 'research', 'case-studies'];
+export const INTENT_FOLDERS = [
+  'playbooks',
+  'research',
+  'case-studies',
+  'frameworks',
+  'ebook/non-fiction',
+  'ebook/fiction',
+  'ebook/back-cover',
+];
+
+export const BACK_COVER_LIBRARY_FOLDER = 'ebook/back-cover';
+
+/** Legacy flat folder — migrated paths resolve here. */
+const LEGACY_FOLDER_ALIASES = {
+  'non-fictions': 'ebook/non-fiction',
+  nonfiction:     'ebook/non-fiction',
+};
+
+export function resolveIntentFolder(folder) {
+  const key = String(folder || '').trim();
+  return LEGACY_FOLDER_ALIASES[key] || key;
+}
 
 export function isValidIntentFolder(folder) {
-  return INTENT_FOLDERS.includes(folder);
+  const resolved = resolveIntentFolder(folder);
+  return INTENT_FOLDERS.includes(resolved);
+}
+
+export function folderSlug(folder) {
+  return String(folder || '').replace(/\//g, '--');
 }
 
 function intentFolderPath(folder) {
+  const resolved = resolveIntentFolder(folder);
+  if (!INTENT_FOLDERS.includes(resolved)) throw new Error(`Invalid folder: ${folder}`);
   const base = process.env.REFERENCE_LIBRARY_DIR
     || path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'reference-library');
-  const dir = path.join(base, folder);
+  const dir = path.join(base, ...resolved.split('/'));
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -229,7 +257,8 @@ function intentFolderPath(folder) {
 /** List all PDFs in an intent folder */
 export async function listIntentFolder(folder) {
   if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
-  const dir     = intentFolderPath(folder);
+  const resolved = resolveIntentFolder(folder);
+  const dir     = intentFolderPath(resolved);
   const entries = await readdir(dir, { withFileTypes: true });
   const files   = await Promise.all(
     entries
@@ -238,7 +267,7 @@ export async function listIntentFolder(folder) {
         const filePath = path.join(dir, e.name);
         const info     = await stat(filePath).catch(() => null);
         return {
-          key:      `${folder}/${e.name}`,
+          key:      `${resolved}/${e.name}`,
           name:     e.name,
           size:     info?.size ?? 0,
           uploaded: info?.mtime?.toISOString() ?? null,
@@ -251,13 +280,14 @@ export async function listIntentFolder(folder) {
 /** Save an uploaded PDF buffer to an intent folder */
 export async function saveIntentFile(folder, filename, buffer) {
   if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
+  const resolved = resolveIntentFolder(folder);
   // Sanitise filename — strip path separators, keep extension
   const safe = path.basename(filename).replace(/[^\w\s.\-()]/g, '_');
-  const dest  = path.join(intentFolderPath(folder), safe);
+  const dest  = path.join(intentFolderPath(resolved), safe);
   await writeFile(dest, buffer);
   const info = await stat(dest);
   return {
-    key:      `${folder}/${safe}`,
+    key:      `${resolved}/${safe}`,
     name:     safe,
     size:     info.size,
     uploaded: info.mtime.toISOString(),
@@ -268,8 +298,8 @@ export async function saveIntentFile(folder, filename, buffer) {
 export async function deleteIntentFile(key) {
   const parts  = key.split('/');
   if (parts.length < 2) throw new Error('Invalid key');
-  const folder   = parts[0];
-  const filename = parts.slice(1).join('/');
+  const folder   = parts.length >= 3 ? `${parts[0]}/${parts[1]}` : parts[0];
+  const filename = parts.length >= 3 ? parts.slice(2).join('/') : parts.slice(1).join('/');
   if (!isValidIntentFolder(folder)) throw new Error(`Invalid folder: ${folder}`);
   const filePath = path.join(intentFolderPath(folder), path.basename(filename));
   if (!existsSync(filePath)) throw new Error('File not found');
@@ -277,24 +307,60 @@ export async function deleteIntentFile(key) {
   return { deleted: key };
 }
 
+/** Resolve ebook sub-category folder from genre hint. */
+export function resolveEbookLibraryFolder(ebookGenre) {
+  const g = String(ebookGenre || 'non-fiction').toLowerCase();
+  if (g === 'fiction') return 'ebook/fiction';
+  return 'ebook/non-fiction';
+}
+
 /** Get all intent folder files as context for the publishing agent */
-export async function getIntentFolderContext(publishingIntent) {
+export async function getIntentFolderContext(publishingIntent, ebookGenre = '') {
+  const intent = String(publishingIntent || '').toLowerCase();
   const folderMap = {
-    playbook:   'playbooks',
-    research:   'research',
-    'case-study': 'case-studies',
+    playbook:      'playbooks',
+    research:      'research',
+    'case-study':  'case-studies',
+    framework:     'frameworks',
+    frameworks:    'frameworks',
+    ebook:         resolveEbookLibraryFolder(ebookGenre),
+    'non-fiction': 'ebook/non-fiction',
+    nonfiction:    'ebook/non-fiction',
+    fiction:       'ebook/fiction',
   };
-  const folder = folderMap[publishingIntent];
+  const folder = folderMap[intent];
   if (!folder) return '';
   try {
     const files = await listIntentFolder(folder);
     if (!files.length) return '';
+    const label = folder.replace('/', ' › ');
     return `
-DESIGN LEARNING LIBRARY — ${folder.toUpperCase()}:
-The following reference PDFs have been uploaded to guide your output structure, design language, and editorial standards for this ${publishingIntent}:
+DESIGN LEARNING LIBRARY — ${label.toUpperCase()}:
+The following reference PDFs guide structure, design language, and editorial standards for this ${publishingIntent}${ebookGenre ? ` (${ebookGenre})` : ''}:
 ${files.map(f => `  • ${f.name}`).join('\n')}
 
 Study these examples and apply their structural and visual patterns to the output.
+`.trim();
+  } catch { return ''; }
+}
+
+/** Back-cover reference PDFs — blurb layout, bullet rhythm, author bio placement. */
+export async function getBackCoverLibraryContext() {
+  try {
+    const files = await listIntentFolder(BACK_COVER_LIBRARY_FOLDER);
+    if (!files.length) return '';
+    return `
+BACK COVER REFERENCE LIBRARY:
+The following uploaded back-cover PDFs define the house standard for this imprint. Match their:
+- Hook blurb length and emotional arc (2–4 sentences, benefit-led)
+- Bullet count and phrasing style (3–5 punchy outcomes, parallel structure)
+- Author bio tone and length (1–2 credential lines)
+- Overall copy density and hierarchy (blurb → bullets → bio → publisher)
+
+Reference files:
+${files.map(f => `  • ${f.name}`).join('\n')}
+
+Apply these patterns to the generated back-cover copy. Do not copy text verbatim.
 `.trim();
   } catch { return ''; }
 }

@@ -103,6 +103,7 @@
           <div class="header-actions">
             <button class="btn-secondary btn-sm" id="downloadHtmlBtn" disabled>HTML</button>
             <button class="btn-secondary btn-sm" id="downloadJsonBtn" disabled>JSON</button>
+            <button class="btn-secondary btn-sm" id="downloadDocxBtn" disabled>DOCX</button>
             <button class="btn-primary btn-sm" id="downloadPdfBtn" disabled>Download PDF</button>
             <button class="btn-primary btn-sm" id="downloadEpubBtn" disabled>Download EPUB</button>
           </div>
@@ -143,9 +144,48 @@
         <form id="briefForm" novalidate>
 
           <div class="form-section">
+            <h2 class="form-section-title">Job Mode</h2>
+            <div class="field-row">
+              <div class="field">
+                <label for="jobMode">What are you starting with?</label>
+                <select id="jobMode" name="jobMode">
+                  <option value="generate">Generate from brief — AI writes a new manuscript</option>
+                  <option value="refine">Refine existing manuscript — proofread, restructure &amp; polish</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section hidden" id="manuscriptImportSection">
+            <h2 class="form-section-title">Import Manuscript</h2>
+            <p class="field-hint" style="margin-bottom:12px">Upload or paste your draft. PathGuru will analyze structure, proofread, reorganize sections, apply your imprint, and export a finished KDP book.</p>
+            <div class="field">
+              <label>Upload file</label>
+              <div class="upload-zone" id="manuscriptZone">
+                <input type="file" id="manuscriptFile" accept=".txt,.md,.markdown,.docx,.pdf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                <svg class="upload-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
+                <span class="upload-zone-title">Drop manuscript here</span>
+                <span class="upload-zone-hint">TXT · MD · DOCX · PDF</span>
+                <span class="upload-zone-filename" id="manuscriptFilename"></span>
+                <button type="button" class="upload-zone-clear" id="manuscriptClear" title="Remove">×</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="manuscriptPaste">Or paste manuscript text</label>
+              <textarea id="manuscriptPaste" name="manuscriptPaste" rows="10" placeholder="Paste your full manuscript here. Use Chapter 1, Chapter 2… or markdown headings to help PathGuru detect sections."></textarea>
+            </div>
+            <div class="field">
+              <label for="refineInstructions">Refinement instructions</label>
+              <textarea id="refineInstructions" name="refineInstructions" rows="3" placeholder="e.g. UK spelling throughout · keep my anecdotes · tighten chapter 3 · more depth on case studies · match premium strategist voice"></textarea>
+              <p class="field-hint">Specific edits, depth, and style overrides. Tone, voice, audience, and length below also guide the agent.</p>
+            </div>
+            <p class="field-hint" id="manuscriptStats"></p>
+          </div>
+
+          <div class="form-section" id="bookConceptSection">
             <h2 class="form-section-title">The Book Concept</h2>
             <div class="field">
-              <label for="topic">Topic prompt <span class="required">*</span></label>
+              <label for="topic">Topic prompt <span class="required" id="topicRequired">*</span></label>
               <textarea id="topic" name="topic" rows="4" placeholder="Example: A conversion-focused guide for salon owners who want to use Instagram Reels to book more high-ticket clients — without dancing or going viral."></textarea>
               <p class="field-hint">Be specific about the reader, the result, and the emotional hook.</p>
             </div>
@@ -161,8 +201,9 @@
             </div>
           </div>
 
-          <div class="form-section">
-            <h2 class="form-section-title">Audience &amp; Outcome</h2>
+          <div class="form-section" id="audienceSection">
+            <h2 class="form-section-title">Audience, Voice &amp; Style</h2>
+            <p class="field-hint refine-style-hint hidden" id="refineStyleHint">In refine mode, these settings control proofreading tone, voice personality, depth, and how aggressively the agent restructures your manuscript.</p>
             <div class="field-row">
               <div class="field">
                 <label for="audience">Target audience</label>
@@ -244,6 +285,34 @@
           </div>
 
           <div class="form-section">
+            <h2 class="form-section-title">Back Cover &amp; Metadata</h2>
+            <div class="field">
+              <label for="backCoverBlurb">Back cover blurb</label>
+              <textarea id="backCoverBlurb" name="backCoverBlurb" rows="3" placeholder="Optional — leave blank and PathGuru writes copy using your book + back-cover samples from Assets → Format Library → eBook › Back cover."></textarea>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="backCoverBullets">Back cover bullets (one per line)</label>
+                <textarea id="backCoverBullets" name="backCoverBullets" rows="4" placeholder="What readers will learn&#10;Actionable frameworks&#10;Real-world examples"></textarea>
+              </div>
+              <div class="field">
+                <label for="backCoverAuthorBio">Author bio (back cover)</label>
+                <textarea id="backCoverAuthorBio" name="backCoverAuthorBio" rows="4" placeholder="Short author credential line for the back cover."></textarea>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="bisacCodes">BISAC categories</label>
+                <input id="bisacCodes" name="bisacCodes" type="text" placeholder="BUS043000, COM060000 (comma-separated)">
+              </div>
+              <div class="field">
+                <label for="keywords">KDP keywords</label>
+                <input id="keywords" name="keywords" type="text" placeholder="digital marketing, KDP, playbook (comma-separated)">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
             <h2 class="form-section-title">Format &amp; KDP Spec</h2>
             <div class="field-row">
               <div class="field">
@@ -252,8 +321,16 @@
                   <option value="playbook">Playbook — high-fidelity PDF, bold graphics (60–70 pages)</option>
                   <option value="research">Research report — charts &amp; data-dense (60–70 pages)</option>
                   <option value="case-study">Case study — narrative-led with supporting data</option>
-                  <option value="ebook">Standard eBook — KDP prose format</option>
+                  <option value="ebook">eBook — KDP prose format (fiction or non-fiction)</option>
                 </select>
+              </div>
+              <div class="field hidden" id="ebookGenreField">
+                <label for="ebookGenre">eBook category</label>
+                <select id="ebookGenre" name="ebookGenre">
+                  <option value="non-fiction">Non-fiction</option>
+                  <option value="fiction">Fiction</option>
+                </select>
+                <p class="field-hint">Reference samples load from the eBook → Non-fiction or Fiction library folder.</p>
               </div>
             </div>
             <div class="field-row three-col">
@@ -262,7 +339,9 @@
                 <select id="format" name="format">
                   <option value="pdf">PDF</option>
                   <option value="epub">EPUB</option>
+                  <option value="docx">DOCX</option>
                   <option value="both">PDF + EPUB</option>
+                  <option value="pdf+docx">PDF + DOCX</option>
                 </select>
               </div>
               <div class="field">
@@ -556,6 +635,96 @@
             </div>
           </div>
 
+          <!-- ── FRAMEWORKS folder ── -->
+          <div class="lib-folder" data-folder="frameworks">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">Frameworks <span class="lib-file-count" id="libCount-frameworks"></span></h3>
+                  <p class="lib-folder-desc">Consulting frameworks · models · structured methodology PDFs</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-frameworks">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-frameworks" data-folder="frameworks" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div id="libStatus-frameworks" class="lib-folder-status"></div>
+            <div class="lib-folder-list" id="libList-frameworks">
+              <div class="library-empty">No framework examples yet. Upload PDFs to train the agent.</div>
+            </div>
+          </div>
+
+          <!-- ── eBOOK category (non-fiction + fiction sub-folders) ── -->
+          <p class="assets-section-eyebrow" style="margin-top:24px">eBook</p>
+          <h3 class="lib-group-heading">eBook reference samples</h3>
+          <p class="assets-section-desc" style="margin-bottom:16px">Upload interior PDFs under Non-fiction or Fiction — the publisher uses these when Publishing intent is set to eBook.</p>
+
+          <div class="lib-folder" data-folder="ebook/non-fiction">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">eBook › Non-fiction <span class="lib-file-count" id="libCount-ebook--non-fiction"></span></h3>
+                  <p class="lib-folder-desc">Prose guides, memoirs, business books — chapter pacing &amp; interior rhythm</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-ebook--non-fiction">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-ebook--non-fiction" data-folder="ebook/non-fiction" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div id="libStatus-ebook--non-fiction" class="lib-folder-status"></div>
+            <div class="lib-folder-list" id="libList-ebook--non-fiction">
+              <div class="library-empty">No non-fiction eBook examples yet.</div>
+            </div>
+          </div>
+
+          <div class="lib-folder" data-folder="ebook/fiction">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">eBook › Fiction <span class="lib-file-count" id="libCount-ebook--fiction"></span></h3>
+                  <p class="lib-folder-desc">Novels, short fiction — scene breaks, dialogue rhythm, chapter hooks</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-ebook--fiction">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-ebook--fiction" data-folder="ebook/fiction" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div id="libStatus-ebook--fiction" class="lib-folder-status"></div>
+            <div class="lib-folder-list" id="libList-ebook--fiction">
+              <div class="library-empty">No fiction eBook examples yet.</div>
+            </div>
+          </div>
+
+          <div class="lib-folder" data-folder="ebook/back-cover">
+            <div class="lib-folder-header">
+              <div class="lib-folder-info">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <div>
+                  <h3 class="lib-folder-name">eBook › Back cover <span class="lib-file-count" id="libCount-ebook--back-cover"></span></h3>
+                  <p class="lib-folder-desc">Back-cover copy references — blurb rhythm, bullet style, author bio length. Used by the back-cover generator.</p>
+                </div>
+              </div>
+              <label class="lib-upload-btn" for="libUpload-ebook--back-cover">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
+                Upload PDF
+                <input type="file" id="libUpload-ebook--back-cover" data-folder="ebook/back-cover" accept="application/pdf" multiple style="display:none">
+              </label>
+            </div>
+            <div id="libStatus-ebook--back-cover" class="lib-folder-status"></div>
+            <div class="lib-folder-list" id="libList-ebook--back-cover">
+              <div class="library-empty">Upload back-cover PDF samples — the generator matches their copy patterns.</div>
+            </div>
+          </div>
+
         </div><!-- /pa-library -->
 
       </div><!-- /assets-subpanels -->
@@ -575,6 +744,12 @@
             <h2 class="compile-card-title">Book Strategy</h2>
             <dl class="strategy-list" id="strategyList">
               <div class="strategy-empty">Generate a draft to see strategy details.</div>
+            </dl>
+          </div>
+          <div class="compile-card">
+            <h2 class="compile-card-title">Generation Report</h2>
+            <dl class="strategy-list" id="generationReport">
+              <div class="strategy-empty">Page budget and validation stats appear after generation.</div>
             </dl>
           </div>
           <div class="compile-card">
@@ -2127,6 +2302,54 @@
     <div class="task-output-body" id="taskOutputBody"></div>
   </div>
   <div class="task-output-overlay" id="taskOutputOverlay"></div>
+
+  <!-- ── Settings Modal ── -->
+  <div class="modal-backdrop" id="settingsModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Settings</h2>
+        <button type="button" class="modal-close" id="closeSettings" aria-label="Close">&times;</button>
+      </div>
+      <form id="settingsForm" class="modal-body" autocomplete="off">
+        <div class="settings-field">
+          <label class="settings-label" for="backendUrl">Backend API URL</label>
+          <input class="settings-input" id="backendUrl" type="url" placeholder="http://localhost:8787">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label" for="cmsToken">CMS token (optional)</label>
+          <input class="settings-input" id="cmsToken" type="password" placeholder="Blog CMS token">
+        </div>
+        <div class="settings-field settings-field--row">
+          <div>
+            <label class="settings-label" for="brandPrimaryColor">Brand primary</label>
+            <div class="settings-color-row">
+              <input class="settings-color-swatch" id="brandPrimaryColor" type="color" value="#1b2a4a">
+              <input class="settings-input settings-input--color-text" id="brandPrimaryColorText" type="text" placeholder="#1b2a4a">
+            </div>
+          </div>
+          <div>
+            <label class="settings-label" for="brandSecondaryColor">Brand secondary</label>
+            <div class="settings-color-row">
+              <input class="settings-color-swatch" id="brandSecondaryColor" type="color" value="#c9a446">
+              <input class="settings-input settings-input--color-text" id="brandSecondaryColorText" type="text" placeholder="#c9a446">
+            </div>
+          </div>
+        </div>
+        <div class="settings-field">
+          <label class="settings-label" for="brandFontStack">Font stack</label>
+          <input class="settings-input" id="brandFontStack" type="text" placeholder="DM Sans, Georgia, Arial">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label" for="brandLogoUrl">Brand logo URL (optional)</label>
+          <input class="settings-input" id="brandLogoUrl" type="url" placeholder="Leave blank to use imprint default logo">
+        </div>
+      </form>
+      <div class="modal-footer">
+        <button type="button" class="btn-secondary" id="cancelSettings">Cancel</button>
+        <button type="button" class="btn-primary" id="saveSettings">Save settings</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/core/shell.js"></script>
   <script src="app.js"></script>

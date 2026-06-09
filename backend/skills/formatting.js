@@ -119,6 +119,7 @@ export async function runFormattingAgent(project, manuscript, design, options = 
     const out = [];
     let paraIdx = 0;
     let shIdx   = 0;
+    const seenSubheads = new Set();
 
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i].trim();
@@ -126,12 +127,16 @@ export async function runFormattingAgent(project, manuscript, design, options = 
 
       /* inject subheading from designIntent at paragraph 3 and 6 */
       if (subheadings.length && shIdx < subheadings.length && (paraIdx === 3 || paraIdx === 6)) {
-        out.push(`<h3 class="body-subhead">${esc(subheadings[shIdx++])}</h3>`);
+        const sh = subheadings[shIdx++];
+        const key = sh.toUpperCase();
+        if (!seenSubheads.has(key)) {
+          seenSubheads.add(key);
+          out.push(`<h3 class="body-subhead">${esc(sh)}</h3>`);
+        }
       }
 
-      /* pull-quote >> */
+      /* pull-quote >> — handled in prepareChapterBody for chapters; skip duplicate inline */
       if (b.startsWith('>>')) {
-        out.push(`<blockquote class="inline-pull">${ri(b.replace(/^>>\s*/,''))}</blockquote>`);
         continue;
       }
 
@@ -149,9 +154,13 @@ export async function runFormattingAgent(project, manuscript, design, options = 
         if (items) { out.push(`<ol class="body-list">${items}</ol>`); continue; }
       }
 
-      /* ALL CAPS subheading */
+      /* ALL CAPS subheading — skip consecutive duplicates */
       if (/^[A-Z][A-Z\s\d:,'\-–]{5,}$/.test(b) && b.length < 80) {
-        out.push(`<h3 class="body-subhead">${ri(b)}</h3>`); continue;
+        const key = b.toUpperCase();
+        if (seenSubheads.has(key)) continue;
+        seenSubheads.add(key);
+        out.push(`<h3 class="body-subhead">${ri(b)}</h3>`);
+        continue;
       }
 
       /* normal paragraph */
@@ -170,10 +179,29 @@ export async function runFormattingAgent(project, manuscript, design, options = 
       .replace(/_(.+?)_/g,'<em>$1</em>');
   }
 
-  /* drop cap */
-  function dropCap(raw, subheadings = []) {
+  /** Strip >> pull lines from body; return one pull string for end-of-chapter display. */
+  function prepareChapterBody(raw = '') {
+    const blocks = String(raw || '').split(/\n{2,}/);
+    const kept = [];
+    let pull = null;
+    for (const block of blocks) {
+      const t = block.trim();
+      if (!t) continue;
+      if (t.startsWith('>>')) {
+        if (!pull) pull = t.replace(/^>>\s*/, '').trim();
+        continue;
+      }
+      kept.push(block);
+    }
+    return { text: kept.join('\n\n'), pull };
+  }
+
+  function renderChapterBody(raw, subheadings = [], pullQuote = null) {
     const html = parseBody(raw, { subheadings });
-    return html.replace(/(<p[^>]*>)([A-Z"'"«])/, '$1<span class="drop-cap">$2</span>');
+    if (pullQuote) {
+      return `${html}\n<blockquote class="inline-pull chapter-pull">${ri(pullQuote)}</blockquote>`;
+    }
+    return html;
   }
 
   /* callout stat */
@@ -192,13 +220,18 @@ export async function runFormattingAgent(project, manuscript, design, options = 
     return sents.find(s => power.test(s))?.trim() || sents[2]?.trim() || null;
   }
 
+  const minChapterWords = project.pageBudget?.minWordsPerChapter || 1200;
+
   /* section quality checker */
   function checkSection(s) {
     const issues = [];
     const wc = (s.body||'').split(/\s+/).filter(Boolean).length;
     const type = (s.designIntent?.layout || s.type || 'chapter').toLowerCase();
+    if (['imprint-sigil','publisher-intro','title-page','copyright-page','toc'].includes(type)) {
+      return issues;
+    }
     if (['chapter','section','introduction','intro','conclusion'].includes(type)) {
-      if (wc < 1200)                       issues.push(`body too short (${wc} words, need 1800+)`);
+      if (wc < minChapterWords)            issues.push(`body too short (${wc} words, need ${minChapterWords}+)`);
       if (!s.body?.includes('>>') && !s.designIntent?.pullQuote) issues.push('no pull quote — add >> sentence');
       if (/<[a-z]/i.test(s.body||''))      issues.push('HTML tags detected in body');
     }
@@ -213,6 +246,50 @@ export async function runFormattingAgent(project, manuscript, design, options = 
   /* ════════════════════════════════════════════════
      SECTION RENDERERS
   ════════════════════════════════════════════════ */
+
+  function renderImprintSigil(s) {
+    const logo = s.logoUrl || project.publisherProfile?.logoUrl || '';
+    renderReport.sections.push({ title: s.title, type: 'imprint-sigil', issues: [] });
+    return `
+<section class="pg-section pg-imprint-sigil">
+  <div class="imprint-sigil-inner">
+    ${logo ? `<img class="imprint-sigil-logo" src="${esc(logo)}" alt="${esc(publisher)}">` : `<p class="imprint-sigil-text">${esc(publisher)}</p>`}
+  </div>
+</section>`;
+  }
+
+  function renderPublisherIntro(s) {
+    renderReport.sections.push({ title: s.title, type: 'publisher-intro', issues: [] });
+    return `
+<section class="pg-section pg-publisher-intro">
+  <div class="publisher-intro-inner">
+    <h2 class="publisher-intro-title">${esc(s.title)}</h2>
+    <div class="publisher-intro-body">${parseBody(s.body)}</div>
+  </div>
+</section>`;
+  }
+
+  function renderTitlePage(s) {
+    renderReport.sections.push({ title: s.title, type: 'title-page', issues: [] });
+    const lines = (s.body || '').split(/\n{2,}/).filter(Boolean);
+    return `
+<section class="pg-section pg-title-page">
+  <div class="title-page-inner">
+    <h1 class="title-page-heading">${esc(s.title)}</h1>
+    ${lines.map(l => `<p class="title-page-line">${esc(l)}</p>`).join('')}
+  </div>
+</section>`;
+  }
+
+  function renderCopyrightPage(s) {
+    renderReport.sections.push({ title: s.title, type: 'copyright-page', issues: [] });
+    return `
+<section class="pg-section pg-copyright-page">
+  <div class="copyright-page-inner">
+    <div class="copyright-body">${parseBody(s.body)}</div>
+  </div>
+</section>`;
+  }
 
   function renderFrontmatter(s) {
     renderReport.sections.push({ title: s.title, type: 'frontmatter', issues: [] });
@@ -249,12 +326,15 @@ export async function runFormattingAgent(project, manuscript, design, options = 
 
   function renderChapter(s, num) {
     const intent  = s.designIntent || {};
-    const pull    = intent.pullQuote || autoPull(s.body);
     const stat    = intent.calloutStat || null;
     const subh    = Array.isArray(intent.subheadings) ? intent.subheadings : [];
     const issues  = checkSection(s);
     renderReport.sections.push({ title: s.title, type: 'chapter', issues, wordCount: (s.body||'').split(/\s+/).length });
-    // Interior image — sourced from Pexels by design agent, keyed by chapter title
+
+    const { text: bodyText, pull: extractedPull } = prepareChapterBody(s.body);
+    let pull = intent.pullQuote || extractedPull || null;
+    if (!pull) pull = autoPull(bodyText);
+
     const imgUrl  = s.imageUrl || interiorImages[s.title] || null;
     const imgHtml = imgUrl ? `
   <div class="ch-image-band">
@@ -264,18 +344,13 @@ export async function runFormattingAgent(project, manuscript, design, options = 
 <section class="pg-section pg-chapter" aria-label="${esc(s.title)}">
   <div class="chapter-opener">
     <span class="chapter-number" aria-hidden="true">${num}</span>
-    <p class="eyebrow">Chapter</p>
+    <p class="eyebrow chapter-eyebrow">Chapter ${num}</p>
     <h2 class="section-heading">${esc(s.title)}</h2>
     <div class="chapter-rule"></div>
   </div>
   ${imgHtml}
   ${stat ? calloutStat(stat) : ''}
-  <div class="chapter-body">${dropCap(s.body, subh)}</div>
-  ${pull ? `
-  <aside class="pull-quote">
-    <div class="pull-quote-mark" aria-hidden="true">"</div>
-    <blockquote>${esc(pull)}</blockquote>
-  </aside>` : ''}
+  <div class="chapter-body">${renderChapterBody(bodyText, subh, pull)}</div>
 </section>`;
   }
 
@@ -392,9 +467,14 @@ export async function runFormattingAgent(project, manuscript, design, options = 
 
   /* ── Router ── */
   const CHAPTER_TYPES = new Set(['chapter','section','introduction','intro','conclusion']);
+  const NON_CHAPTER_PREFIX = new Set(['imprint-sigil','publisher-intro','title-page','copyright-page','frontmatter','copyright','toc']);
   function route(s, num, all) {
     const layout = (s.designIntent?.layout || s.type || 'chapter').toLowerCase().trim();
     switch (layout) {
+      case 'imprint-sigil':                 return renderImprintSigil(s);
+      case 'publisher-intro':               return renderPublisherIntro(s);
+      case 'title-page':                    return renderTitlePage(s);
+      case 'copyright-page':                return renderCopyrightPage(s);
       case 'frontmatter': case 'copyright': return renderFrontmatter(s);
       case 'toc':                           return renderToc(all);
       case 'chapter': case 'section':
@@ -411,11 +491,15 @@ export async function runFormattingAgent(project, manuscript, design, options = 
 
   let chCount = 0;
   const sectionsHtml = sections.map(s => {
-    if (CHAPTER_TYPES.has((s.designIntent?.layout || s.type || '').toLowerCase())) chCount++;
+    const layout = (s.designIntent?.layout || s.type || '').toLowerCase();
+    if (CHAPTER_TYPES.has(layout) && !NON_CHAPTER_PREFIX.has(layout)) chCount++;
     return route(s, chCount, sections);
   }).join('\n');
 
   const refsHtml    = renderReferences(citations);
+  const backCoverBlock = project.backCoverHtml
+    ? `<div class="back-cover-frame">${project.backCoverHtml}</div>`
+    : '';
   const coverBlock  = (includeCover && coverHtml) ? `<div class="cover-frame">${coverHtml}</div>` : '';
   const weakCount   = renderReport.sections.filter(s => s.issues?.length > 0).length;
   if (weakCount) renderReport.warnings.push(`${weakCount} section(s) flagged for feedback loop`);
@@ -477,6 +561,34 @@ export async function runFormattingAgent(project, manuscript, design, options = 
     .callout-stat-label { font-size:9pt; font-weight:600; text-transform:uppercase; letter-spacing:.10em; color:#888; margin-top:4pt; }
     .callout-stat-text { background:${pullBg}; border-left:3pt solid ${accent}; padding:10pt 14pt; margin:14pt 0; font-size:10.5pt; font-weight:600; }
 
+    .pg-imprint-sigil { min-height:7.2in; display:flex; align-items:center; justify-content:center; break-after:page; page-break-after:always; border-bottom:none; padding:0; }
+    .imprint-sigil-inner { text-align:center; width:100%; }
+    .imprint-sigil-logo { max-width:3.2in; max-height:3.2in; object-fit:contain; }
+    .imprint-sigil-text { font-family:${titleFont}; font-size:22pt; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:${pageFg}; }
+
+    .pg-publisher-intro { break-after:page; page-break-after:always; padding-top:0.6in; }
+    .publisher-intro-title { font-family:${titleFont}; font-size:18pt; font-weight:800; letter-spacing:.08em; text-transform:uppercase; text-align:center; margin:0 0 28pt; color:${accent}; }
+    .publisher-intro-body p { font-size:10.5pt; line-height:1.62; margin-bottom:10pt; text-align:justify; }
+
+    .pg-title-page { min-height:6.5in; display:flex; align-items:center; break-after:page; page-break-after:always; border-bottom:none; }
+    .title-page-inner { width:100%; text-align:center; }
+    .title-page-heading { font-family:${titleFont}; font-size:28pt; font-weight:700; line-height:1.08; margin:0 0 14pt; letter-spacing:-.02em; }
+    .title-page-line { font-size:12pt; color:#666; margin:0 0 8pt; }
+
+    .pg-copyright-page { break-after:page; page-break-after:always; padding-top:0.5in; border-bottom:none; }
+    .copyright-page-inner { max-width:4.5in; }
+    .copyright-body p { font-size:8.5pt; line-height:1.55; color:#555; margin-bottom:8pt; }
+
+    .back-cover-frame { width:100%; break-before:page; page-break-before:always; overflow:hidden; }
+    .back-cover-page { min-height:${pageH}in; padding:${margin}in; background:${pageBg}; color:${pageFg}; display:flex; align-items:flex-start; }
+    .back-cover-inner { width:100%; }
+    .back-cover-blurb { font-size:11pt; line-height:1.58; margin-bottom:14pt; }
+    .back-cover-bullets { margin:0 0 16pt 16pt; font-size:10pt; line-height:1.5; }
+    .back-cover-bullets li { margin-bottom:6pt; }
+    .back-cover-author { font-size:9pt; color:#666; margin-bottom:12pt; font-style:italic; }
+    .back-cover-publisher { font-size:8pt; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:${eyebrowClr}; }
+    .back-cover-barcode { margin-top:24pt; width:2in; height:1in; border:1pt dashed #ccc; display:flex; align-items:center; justify-content:center; font-size:7pt; color:#aaa; }
+
     .pg-frontmatter { min-height:5.8in; display:flex; align-items:center; break-after:page; page-break-after:always; }
     .frontmatter-inner { max-width:5in; }
     .fm-publisher { font-size:7.5pt; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:${eyebrowClr}; margin-bottom:18pt; }
@@ -500,13 +612,15 @@ export async function runFormattingAgent(project, manuscript, design, options = 
     .chapter-rule { width:100%; height:.5pt; background:${ruleColor}; margin:16pt 0 22pt; }
     .ch-image-band { width:100%; margin:0 0 22pt; break-inside:avoid; overflow:hidden; border-radius:4pt; }
     .ch-image { width:100%; max-height:2.4in; object-fit:cover; display:block; }
-    .drop-cap { float:left; font-family:${titleFont}; font-size:${t.drop}; line-height:.80; font-weight:700; color:${accent}; margin:4pt 7pt 0 0; }
+    .chapter-eyebrow { letter-spacing:.06em; }
     .chapter-body { clear:both; }
-    .chapter-body p { text-align:justify; }
+    .chapter-body p { text-align:justify; hyphens:auto; max-width:100%; }
     .chapter-body p:first-child { text-indent:0; }
-    .pull-quote { margin:24pt 0; padding:18pt 22pt; background:${pullBg}; border-top:2pt solid ${pullBorder}; border-bottom:2pt solid ${pullBorder}; text-align:center; break-inside:avoid; }
-    .pull-quote-mark { font-family:${titleFont}; font-size:46pt; line-height:.68; color:${pullBorder}; opacity:.32; margin-bottom:5pt; }
-    .pull-quote blockquote { font-family:${titleFont}; font-size:${t.pqSize}; font-style:${t.pqStyle}; line-height:1.45; color:${pageFg}; max-width:4.1in; margin:0 auto; }
+    .chapter-body p:first-child::first-letter {
+      float:left; font-family:${titleFont}; font-size:${t.drop}; line-height:.82;
+      font-weight:700; color:${accent}; margin:2pt 8pt 0 0; padding:0;
+    }
+    blockquote.chapter-pull { margin-top:18pt; break-inside:avoid; page-break-inside:avoid; }
 
     .check-list { list-style:none; margin:10pt 0 0; }
     .check-item { display:flex; align-items:flex-start; gap:10pt; padding:9pt 0; border-bottom:.5pt solid ${ruleColor}; break-inside:avoid; }
@@ -557,6 +671,7 @@ export async function runFormattingAgent(project, manuscript, design, options = 
   ${coverBlock}
   ${sectionsHtml}
   ${refsHtml}
+  ${backCoverBlock}
   <footer class="book-footer">${esc(copyright)} &nbsp;·&nbsp; ${esc(publisher)}</footer>
 </div>
 </body>

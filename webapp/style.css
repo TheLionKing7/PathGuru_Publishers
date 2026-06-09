@@ -347,6 +347,13 @@ select option { background: var(--surface-2); }
 
 .hidden { display: none !important; }
 
+.lib-group-heading {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: var(--text-primary, #fff);
+}
+
 .progress-track {
   height: 3px;
   background: var(--surface-3);

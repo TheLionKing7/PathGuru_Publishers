@@ -73,6 +73,7 @@ const State = (() => {
     error: null,
     result: null,
     selectedAssets: [],
+    importedManuscriptText: '',
     settings: loadSettings(),
   };
 
@@ -260,6 +261,35 @@ const UI = (() => {
       });
     }
 
+    /* Generation report */
+    const gr = r.generationReport;
+    const grEl = $('generationReport');
+    if (grEl && gr) {
+      grEl.innerHTML = '';
+      const budget = r.pageBudget || gr.pageBudget;
+      const pairs = [
+        ['Status', gr.passed ? 'Passed validation' : 'Needs review'],
+        ['Page budget', budget ? `${budget.targetPagesMin}–${budget.targetPagesMax} pages · ${budget.targetChapterCount} chapters` : ''],
+        ['Word count', gr.wordCount != null ? `${gr.wordCount} words` : ''],
+        ['Est. pages', gr.estimatedPages != null ? `~${gr.estimatedPages} pages` : ''],
+        ['Chapters', gr.chapterCount != null ? `${gr.chapterCount} chapters` : ''],
+        ['Feedback passes', gr.feedbackPass != null ? String(gr.feedbackPass) : ''],
+      ];
+      pairs.forEach(([k, v]) => {
+        if (!v) return;
+        const div = document.createElement('div');
+        div.className = 'strategy-item animate-in';
+        div.innerHTML = `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`;
+        grEl.appendChild(div);
+      });
+      if (gr.issues?.length) {
+        const div = document.createElement('div');
+        div.className = 'strategy-item animate-in';
+        div.innerHTML = `<dt>Issues</dt><dd>${esc(gr.issues.slice(0, 5).join('; '))}</dd>`;
+        grEl.appendChild(div);
+      }
+    }
+
     /* Proofreader notes */
     const notes = ms?.proofreaderNotes || [];
     const nl = $('proofreaderNotes');
@@ -295,8 +325,9 @@ const UI = (() => {
     }
 
     /* Enable download buttons */
-    $('downloadPdfBtn').disabled  = !r.pdfUrl && !r.html;
-    $('downloadEpubBtn').disabled = !r.epubUrl;
+    $('downloadPdfBtn').disabled  = !r.pdfUrl && !r.pdfBase64 && !r.html;
+    $('downloadEpubBtn').disabled = !r.epubUrl && !r.epubBase64;
+    $('downloadDocxBtn').disabled = !r.docxBase64 && !r.html;
     $('downloadHtmlBtn').disabled = !r.html;
     $('downloadJsonBtn').disabled = !r.manuscript;
   }
@@ -371,6 +402,26 @@ function getBackendUrl () {
 }
 
 /* ── API: Generate ──────────────────────────── */
+async function pollGenerateJob (jobId) {
+  const maxAttempts = 600; // ~40 min at 4s — standard books need 15–30 min
+  let tick = 0;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 4000));
+    const res = await fetch(`${getBackendUrl()}/api/generate/status/${jobId}`);
+    if (!res.ok) throw new Error(`Job poll failed: HTTP ${res.status}`);
+    const job = await res.json();
+    // Creep progress while running so the bar doesn't freeze at 15%
+    const base = Math.max(10, job.progress || 10);
+    const creep = job.status === 'running' ? Math.min(94, base + Math.floor(tick / 3)) : base;
+    tick++;
+    State.set('progress', creep);
+    State.set('statusMessage', job.message || 'Generating in background…');
+    if (job.status === 'complete' && job.result) return job.result;
+    if (job.status === 'failed') throw new Error(job.error || 'Generation failed');
+  }
+  throw new Error('Generation timed out — check backend logs');
+}
+
 async function runGenerate (formData) {
   State.set('isGenerating', true);
   State.set('error', null);
@@ -378,12 +429,13 @@ async function runGenerate (formData) {
   State.set('statusMessage', 'Connecting to PathGuru backend…');
 
   const steps = [
-    [15, 'Running Tavily research…'],
-    [35, 'Editorial agents drafting manuscript…'],
-    [60, 'Design agent applying layout…'],
-    [78, 'Formatting for KDP spec…'],
-    [90, 'Running compliance checks…'],
-    [97, 'Compiling output files…'],
+    [15, 'Running Tavily + Firecrawl research…'],
+    [30, 'Chunked editorial — outline + chapters…'],
+    [50, 'Applying PathFinda imprint pack…'],
+    [65, 'Design agent applying layout…'],
+    [80, 'Formatting for KDP spec…'],
+    [92, 'Validation + feedback loop…'],
+    [97, 'Compiling PDF / DOCX…'],
   ];
 
   let stepIndex = 0;
@@ -393,30 +445,41 @@ async function runGenerate (formData) {
       State.set('progress', pct);
       State.set('statusMessage', msg);
     }
-  }, 3200);
+  }, 4500);
 
   try {
+    const payload = {
+      ...formData,
+      async: formData.length !== 'concise',
+      assetBaseUrl: getBackendUrl(),
+    };
     const res = await fetch(`${getBackendUrl()}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(formData),
+      body: JSON.stringify(payload),
     });
 
-    clearInterval(ticker);
-
     if (!res.ok) {
+      clearInterval(ticker);
       const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       throw new Error(body.error || `Server returned ${res.status}`);
     }
 
-    const data = await res.json();
+    let data = await res.json();
+    if (data.async && data.jobId) {
+      clearInterval(ticker);
+      State.set('progress', 12);
+      State.set('statusMessage', 'Long-form generation running — this can take 15–30 minutes…');
+      data = await pollGenerateJob(data.jobId);
+    } else {
+      clearInterval(ticker);
+    }
     State.set('progress', 100);
     State.set('statusMessage', 'Draft complete!');
     State.set('result', data);
     State.set('activeTab', 'compile');
     toast('Draft generated successfully', 'success');
 
-    // Suggest asset keywords if research came back
     const topic = formData.title || formData.topic || '';
     if (topic) {
       document.getElementById('pexelsQuery').value = topic.split(' ').slice(0, 3).join(' ');
@@ -514,11 +577,29 @@ function selectAsset (img, role) {
 }
 
 /* ── Form helpers ───────────────────────────── */
+function libFolderSlug (folder) {
+  return String(folder || '').replace(/\//g, '--');
+}
+
+function getImportedManuscriptText () {
+  const paste = document.getElementById('manuscriptPaste')?.value?.trim() || '';
+  if (paste) return paste;
+  return State.get('importedManuscriptText') || '';
+}
+
 function collectFormData () {
   const get = id => document.getElementById(id)?.value?.trim() || '';
   const trimParts = get('trimSize').split('x');
+  const logoPreview = document.getElementById('logoPreview');
+  const logoFromUpload = logoPreview?.src?.startsWith('data:') ? logoPreview.src : '';
+  const bulletsRaw = document.getElementById('backCoverBullets')?.value || '';
+  const fmt = get('format');
+  const includeDocx = fmt === 'docx' || fmt === 'pdf+docx';
+  const jobMode = get('jobMode') || 'generate';
+  const manuscriptText = jobMode === 'refine' ? getImportedManuscriptText() : '';
 
   return {
+    jobMode,
     topic:              get('topic'),
     title:              get('title'),
     subtitle:           get('subtitle'),
@@ -532,16 +613,26 @@ function collectFormData () {
     publisher:          get('publisher') || 'PathGuru Publishers',
     publisherProfile:   get('publisherProfile'),
     copyright:          get('copyright') || `Copyright ${new Date().getFullYear()} ${get('author') || 'Author'}. All rights reserved.`,
-    format:             get('format'),
+    publishingIntent:   get('publishingIntent') || 'ebook',
+    ebookGenre:         get('ebookGenre') || 'non-fiction',
+    refineInstructions: get('refineInstructions'),
+    sourceManuscript:   manuscriptText ? { text: manuscriptText } : undefined,
+    manuscriptText:     manuscriptText || undefined,
+    format:             includeDocx && fmt === 'pdf+docx' ? 'pdf' : (fmt === 'docx' ? 'pdf' : fmt),
+    includeDocx,
     kdpFormat:          'paperback',
     trimWidthIn:        parseFloat(trimParts[0]) || 6,
     trimHeightIn:       parseFloat(trimParts[1]) || 9,
-    length:             get('length'),
-    brandLogoUrl:       State.get('settings').brandLogoUrl || '',
+    length:             get('length') || 'standard',
+    backCoverBlurb:     get('backCoverBlurb'),
+    backCoverBullets:   bulletsRaw.split('\n').map(s => s.trim()).filter(Boolean),
+    backCoverAuthorBio: get('backCoverAuthorBio'),
+    bisacCodes:         get('bisacCodes'),
+    keywords:           get('keywords'),
+    brandLogoUrl:       logoFromUpload || State.get('settings').brandLogoUrl || '',
     brandPrimaryColor:  State.get('settings').brandPrimaryColor || '',
     brandSecondaryColor:State.get('settings').brandSecondaryColor || '',
     brandFontStack:     State.get('settings').brandFontStack || '',
-    // Assets-tab palette: swatch-driven hidden input takes priority over settings
     brandPalette:       get('projBrandPalette') || '',
     selectedTemplate:   get('projTemplate') || '',
   };
@@ -565,7 +656,11 @@ function downloadJson () {
 function downloadPdf () {
   const r = State.get('result');
   if (r?.pdfUrl) { window.open(r.pdfUrl, '_blank'); return; }
-  // Fallback: print the preview iframe
+  if (r?.pdfBase64) {
+    const bytes = Uint8Array.from(atob(r.pdfBase64), c => c.charCodeAt(0));
+    triggerDownload(URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })), `pathguru-${Date.now()}.pdf`);
+    return;
+  }
   const frame = document.getElementById('previewFrame');
   if (frame?.contentWindow) {
     frame.contentWindow.print();
@@ -576,8 +671,39 @@ function downloadPdf () {
 
 function downloadEpub () {
   const r = State.get('result');
-  if (!r?.epubUrl) { toast('No EPUB available.', 'error'); return; }
-  window.open(r.epubUrl, '_blank');
+  if (r?.epubUrl) { window.open(r.epubUrl, '_blank'); return; }
+  if (r?.epubBase64) {
+    const bytes = Uint8Array.from(atob(r.epubBase64), c => c.charCodeAt(0));
+    triggerDownload(URL.createObjectURL(new Blob([bytes], { type: 'application/epub+zip' })), `pathguru-${Date.now()}.epub`);
+    return;
+  }
+  toast('No EPUB available.', 'error');
+}
+
+async function downloadDocx () {
+  const r = State.get('result');
+  if (r?.docxBase64) {
+    const bytes = Uint8Array.from(atob(r.docxBase64), c => c.charCodeAt(0));
+    triggerDownload(
+      URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })),
+      `pathguru-${Date.now()}.docx`,
+    );
+    return;
+  }
+  if (!r?.html) { toast('No manuscript HTML — generate a draft first.', 'error'); return; }
+  try {
+    toast('Building DOCX…', 'info');
+    const res = await fetch(`${getBackendUrl()}/api/docx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ html: r.html, project: r.project || {} }),
+    });
+    if (!res.ok) throw new Error(`DOCX export failed: HTTP ${res.status}`);
+    const blob = await res.blob();
+    triggerDownload(URL.createObjectURL(blob), `pathguru-${Date.now()}.docx`);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
 }
 
 function triggerDownload (href, filename) {
@@ -646,11 +772,153 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Publisher profile → imprint name sync
+  const profileEl = document.getElementById('publisherProfile');
+  const publisherEl = document.getElementById('publisher');
+  if (profileEl && publisherEl) {
+    const PROFILE_NAMES = {
+      pathfinda: 'PathFinda Publishers',
+      digitalNation: 'Digital Nation Inc.',
+    };
+    profileEl.addEventListener('change', () => {
+      const name = PROFILE_NAMES[profileEl.value];
+      if (name) publisherEl.value = name;
+    });
+  }
+
+  // Job mode — generate vs refine existing manuscript
+  const jobModeEl = document.getElementById('jobMode');
+  const importSection = document.getElementById('manuscriptImportSection');
+  const conceptSection = document.getElementById('bookConceptSection');
+  const topicRequired = document.getElementById('topicRequired');
+  const generateBtnLabel = document.querySelector('#generateBtn span');
+
+  function syncJobModeUi () {
+    const refine = jobModeEl?.value === 'refine';
+    importSection?.classList.toggle('hidden', !refine);
+    conceptSection?.classList.toggle('hidden', false);
+    topicRequired?.classList.toggle('hidden', refine);
+    document.getElementById('refineStyleHint')?.classList.toggle('hidden', !refine);
+    const topicLabel = document.querySelector('label[for="topic"]');
+    const topicField = document.getElementById('topic');
+    if (topicLabel) {
+      topicLabel.innerHTML = refine
+        ? 'Editorial brief <span class="field-hint">(optional)</span>'
+        : 'Topic prompt <span class="required" id="topicRequired">*</span>';
+    }
+    if (topicField) {
+      topicField.placeholder = refine
+        ? 'Optional: describe the book promise, angle, or what the finished edition should feel like.'
+        : 'Example: A conversion-focused guide for salon owners who want to use Instagram Reels to book more high-ticket clients — without dancing or going viral.';
+    }
+    if (generateBtnLabel) {
+      generateBtnLabel.textContent = refine ? 'Refine & Export Book' : 'Generate Draft';
+    }
+  }
+  jobModeEl?.addEventListener('change', syncJobModeUi);
+  syncJobModeUi();
+
+  // eBook genre sub-category
+  const intentEl = document.getElementById('publishingIntent');
+  const genreField = document.getElementById('ebookGenreField');
+  function syncEbookGenre () {
+    genreField?.classList.toggle('hidden', intentEl?.value !== 'ebook');
+  }
+  intentEl?.addEventListener('change', syncEbookGenre);
+  syncEbookGenre();
+
+  // Manuscript file upload → parse via API or read as text
+  (function wireManuscriptImport () {
+    const zone = document.getElementById('manuscriptZone');
+    const input = document.getElementById('manuscriptFile');
+    const paste = document.getElementById('manuscriptPaste');
+    const stats = document.getElementById('manuscriptStats');
+    const clear = document.getElementById('manuscriptClear');
+    if (!zone || !input) return;
+
+    async function applyManuscriptFile (file) {
+      if (!file) return;
+      zone.classList.add('has-file');
+      document.getElementById('manuscriptFilename').textContent = file.name;
+      const isText = /\.(txt|md|markdown)$/i.test(file.name) || file.type.startsWith('text/');
+
+      try {
+        if (isText) {
+          const text = await file.text();
+          State.set('importedManuscriptText', text);
+          if (paste) paste.value = text;
+        } else {
+          toast('Parsing manuscript…', 'info');
+          const res = await fetch(
+            `${getBackendUrl()}/api/manuscript/parse?filename=${encodeURIComponent(file.name)}`,
+            { method: 'POST', body: file },
+          );
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          const text = (data.sections || []).map(s => `${s.title}\n\n${s.body}`).join('\n\n') || '';
+          State.set('importedManuscriptText', text);
+          if (paste) paste.value = text;
+          if (!document.getElementById('title')?.value && data.title) {
+            document.getElementById('title').value = data.title;
+          }
+        }
+        updateStats();
+        toast('Manuscript loaded', 'success');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function updateStats () {
+      const text = getImportedManuscriptText();
+      if (!stats) return;
+      if (!text) { stats.textContent = ''; return; }
+      const words = text.split(/\s+/).filter(Boolean).length;
+      const chapters = (text.match(/^(?:chapter|part|section)\s+[\dIVX]+/gim) || []).length;
+      stats.textContent = `${words.toLocaleString()} words${chapters ? ` · ~${chapters} detected sections` : ''}`;
+    }
+
+    zone.addEventListener('click', e => {
+      if (clear && e.target === clear) return;
+      input.click();
+    });
+    input.addEventListener('change', () => applyManuscriptFile(input.files[0]));
+    paste?.addEventListener('input', () => {
+      State.set('importedManuscriptText', paste.value);
+      updateStats();
+    });
+    clear?.addEventListener('click', e => {
+      e.stopPropagation();
+      input.value = '';
+      if (paste) paste.value = '';
+      State.set('importedManuscriptText', '');
+      zone.classList.remove('has-file');
+      document.getElementById('manuscriptFilename').textContent = '';
+      updateStats();
+    });
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) applyManuscriptFile(file);
+    });
+  })();
+
   // Brief form submit
   document.getElementById('briefForm').addEventListener('submit', async e => {
     e.preventDefault();
     const fd = collectFormData();
-    if (!fd.topic) { toast('Please enter a topic prompt.', 'error'); return; }
+    if (fd.jobMode === 'refine') {
+      if (!fd.manuscriptText) {
+        toast('Upload or paste your manuscript first.', 'error');
+        return;
+      }
+    } else if (!fd.topic) {
+      toast('Please enter a topic prompt.', 'error');
+      return;
+    }
     if (!getBackendUrl().startsWith('http')) {
       toast('Configure your backend URL in Settings first.', 'error');
       document.getElementById('settingsModal').style.display = 'flex';
@@ -678,6 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('downloadJsonBtn').addEventListener('click', downloadJson);
   document.getElementById('downloadPdfBtn').addEventListener('click', downloadPdf);
   document.getElementById('downloadEpubBtn').addEventListener('click', downloadEpub);
+  document.getElementById('downloadDocxBtn').addEventListener('click', downloadDocx);
 
   // Settings modal
   document.getElementById('settingsBtn').addEventListener('click', () => {
@@ -879,7 +1148,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── Assets tab: learning library — 3 persistent folders ─────────────────
   (function wireLibrary () {
-    const FOLDERS = ['playbooks', 'research', 'case-studies'];
+    const FOLDERS = [
+      'playbooks', 'research', 'case-studies', 'frameworks',
+      'ebook/non-fiction', 'ebook/fiction', 'ebook/back-cover',
+    ];
 
     function fmtSize (bytes) {
       if (!bytes) return '';
@@ -896,7 +1168,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Show a status message inside the folder card — persists until replaced
     function setStatus (folder, msg, type) {
-      const el = document.getElementById(`libStatus-${folder}`);
+      const el = document.getElementById(`libStatus-${libFolderSlug(folder)}`);
       if (!el) return;
       el.textContent = msg;
       el.className   = 'lib-folder-status' + (type ? ' lib-status-' + type : '');
@@ -904,7 +1176,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render the file list for a folder given an array of file objects
     function renderFiles (folder, files) {
-      const listEl = document.getElementById(`libList-${folder}`);
+      const listEl = document.getElementById(`libList-${libFolderSlug(folder)}`);
       if (!listEl) return;
       if (!files.length) {
         listEl.innerHTML = '<div class="library-empty">No examples yet — upload PDFs to train the agent.</div>';
@@ -943,18 +1215,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch the file list from the server and render it
     async function loadFolder (folder, keepStatus) {
-      const listEl = document.getElementById(`libList-${folder}`);
+      const listEl = document.getElementById(`libList-${libFolderSlug(folder)}`);
       if (!listEl) return;
       if (!keepStatus) setStatus(folder, '', '');
       listEl.innerHTML = '<div class="library-empty lib-loading">Loading…</div>';
       try {
-        const res = await fetch(`/api/library/${folder}`);
+        const res = await fetch(`/api/library/${encodeURIComponent(folder)}`);
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data  = await res.json();
         const files = data.files || [];
         renderFiles(folder, files);
         // Update the folder header badge
-        const badge = document.getElementById(`libCount-${folder}`);
+        const badge = document.getElementById(`libCount-${libFolderSlug(folder)}`);
         if (badge) badge.textContent = files.length ? `${files.length} file${files.length > 1 ? 's' : ''}` : '';
       } catch (e) {
         listEl.innerHTML = `<div class="library-empty lib-error">⚠ Could not load files: ${e.message}</div>`;
@@ -969,7 +1241,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const label = document.querySelector(`label[for="libUpload-${folder}"]`);
+      const label = document.querySelector(`label[for="libUpload-${libFolderSlug(folder)}"]`);
       if (label) { label.style.opacity = '0.5'; label.style.pointerEvents = 'none'; }
 
       const succeeded = [];
@@ -980,7 +1252,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setStatus(folder, `Uploading ${i + 1} of ${pdfs.length}: "${file.name}"…`, 'uploading');
         try {
           const res = await fetch(
-            `/api/library/${folder}/upload?filename=${encodeURIComponent(file.name)}`,
+            `/api/library/${encodeURIComponent(folder)}/upload?filename=${encodeURIComponent(file.name)}`,
             { method: 'POST', body: file, headers: { 'Content-Type': 'application/pdf' } }
           );
           const data = await res.json().catch(() => ({}));
@@ -1011,7 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     FOLDERS.forEach(folder => {
-      const input = document.getElementById(`libUpload-${folder}`);
+      const input = document.getElementById(`libUpload-${libFolderSlug(folder)}`);
       if (!input) return;
       input.addEventListener('change', async () => {
         const files = Array.from(input.files);
