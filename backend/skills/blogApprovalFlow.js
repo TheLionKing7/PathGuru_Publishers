@@ -15,14 +15,22 @@ export async function executeApprovedBlogPublish(payload = {}) {
   if (!topic) throw new Error('Approved blog payload missing topic / proposedTitle');
 
   const researchBrief = payload.researchBrief || '';
+  const caveats = Array.isArray(payload.bossCaveats) ? payload.bossCaveats : [];
+  const caveatBlock = caveats.length
+    ? `BOSS APPROVAL CAVEATS (mandatory — apply exactly):\n${caveats.map((c, i) => `${i + 1}. ${c}`).join('\n')}`
+    : '';
+
   const rawContent = await aether.produceContent('blog post', topic, {
     audience:       payload.audience || 'business professionals',
-    voiceNotes:     payload.recommendedTone || payload.tone || '',
+    voiceNotes:     [payload.recommendedTone || payload.tone || '', caveatBlock].filter(Boolean).join('\n'),
     callToAction:     payload.ctaGoal || 'Book a free strategy session at digitafusion.com/agency/booking',
     wordCount:        payload.estimatedWordCount || payload.wordCount || 1400,
     stdcStage:        'THINK — consideration and authority-building',
     researchBrief,
     frameworkId:    payload.frameworkId || 'c2c',
+    bossCaveats:    caveats,
+    outline:        payload.outline || [],
+    proposedTitle:  payload.proposedTitle || topic,
   });
 
   const siteUrl = (process.env.DIGIFUSION_API_URL || 'https://www.digitafusion.com').replace(/\/$/, '');

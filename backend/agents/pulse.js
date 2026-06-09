@@ -197,6 +197,13 @@ export class Pulse extends AgentBase {
     nexus.sendSessionReminders().catch(e =>
       console.warn('[Pulse] Session reminder error:', e.message));
 
+    // ── Engagement retune (Mondays only — client blueprint adjustments) ───
+    if (now.getDay() === 1 && this._shouldAlert('engagementRetune')) {
+      nexus.retuneEngagements().catch(e =>
+        console.warn('[Pulse] Engagement retune error:', e.message));
+      this._markAlerted('engagementRetune');
+    }
+
     console.log(`[Pulse] Sweep complete — health: ${report.health}, alerts: ${alerts.length}, dispatched: ${dispatchResult.dispatched}`);
     return report;
   }

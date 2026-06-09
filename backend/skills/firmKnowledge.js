@@ -15,6 +15,7 @@ import {
   buildAriaFrameworkContext,
   frameworkNamesLine,
   ENGAGEMENT_MODEL_DOCTRINE,
+  refreshPromotedFrameworks,
 } from './firmFrameworks.js';
 
 export {
@@ -27,7 +28,11 @@ export {
   buildAriaFrameworkContext,
   frameworkNamesLine,
   ENGAGEMENT_MODEL_DOCTRINE,
+  refreshPromotedFrameworks,
 };
+
+// Warm promoted-framework cache at startup
+refreshPromotedFrameworks().catch(() => {});
 
 /** Internal agent-DNA documents (Synthesizer + agents, not sold standalone) */
 export function getOperatingFrameworks() {

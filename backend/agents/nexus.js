@@ -34,6 +34,10 @@ import {
   checkContentCadence,
   loadOpsContext,
 } from '../skills/nexusCeoOps.js';
+import { runIpFactory } from '../skills/ipFactory.js';
+import { buildClientBlueprint, listClientBlueprints, getClientBlueprint } from '../skills/clientBlueprint.js';
+import { buildPillarClusterPlan, enqueueC2cCalendar, derivePlaybookTeasers } from '../skills/c2cGrowthEngine.js';
+import { retuneOpenEngagements } from '../skills/engagementMonitor.js';
 
 const NEXUS_SYSTEM = `You are Nexus — Digital CEO of the DigiFusion Intelligence Network.
 
@@ -368,6 +372,50 @@ export class Nexus extends AgentBase {
   async orchestrate(instruction, options = {}) {
     const { priority = 3, researchBrief = null, nextStep = null } = options;
     const db = getSupabase();
+
+    // ── IP Factory: synthesize original framework from resource pool ─────────
+    if (options.ipFactory || /synthesi[sz]e.*(framework|playbook|blueprint|ip)/i.test(instruction)) {
+      const result = await runIpFactory({
+        title:              options.title || instruction.slice(0, 120),
+        domain:             options.domain || 'business_development',
+        sources:            options.sources || [],
+        instruction,
+        promote:            options.promote ?? false,
+        promoteAsOperating: options.promoteAsOperating ?? false,
+        tagline:            options.tagline || '',
+      });
+      return { type: 'ip_factory_complete', ...result };
+    }
+
+    // ── Client Blueprint: multi-agent engagement pack for Boss ───────────────
+    if (options.clientBlueprint || /client blueprint|engagement blueprint|action plan for client/i.test(instruction)) {
+      const result = await buildClientBlueprint({
+        clientName:   options.clientName,
+        company:      options.company,
+        industry:     options.industry || 'general',
+        track:        options.track || 'integrated',
+        goals:        options.goals || instruction,
+        painPoints:   options.painPoints || '',
+        budget:       options.budget,
+        timeline:     options.timeline,
+        leadId:       options.leadId,
+        researchBrief: options.researchBrief || researchBrief,
+      }, this);
+      return { type: 'client_blueprint_ready', ...result };
+    }
+
+    // ── C2C Growth: pillar + cluster calendar ────────────────────────────────
+    if (options.c2cPlan || /pillar.*cluster|c2c (plan|calendar)|content-to-capital plan/i.test(instruction)) {
+      const plan = await buildPillarClusterPlan({
+        pillarTopic: options.pillarTopic || instruction.slice(0, 120),
+        sector:      options.sector || 'sme',
+        audience:    options.audience,
+      });
+      const queued = options.enqueue !== false
+        ? await enqueueC2cCalendar(plan)
+        : { queued: 0 };
+      return { type: 'c2c_plan_ready', plan, ...queued };
+    }
 
     // ── PHASE 2: User has chosen what to do with research results ────────────
     if (researchBrief && nextStep) {
@@ -1046,6 +1094,76 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     return syncNotionCeoDashboard({ period, snap: ops });
   }
 
+  /** IP Factory — synthesize + optionally promote to agent DNA */
+  async runIpSynthesis(input = {}) {
+    return runIpFactory(input);
+  }
+
+  /** Client Blueprint — Orion + Atlas/Nova/Aether → Boss implementation pack */
+  async createClientBlueprint(input = {}) {
+    return buildClientBlueprint(input, this);
+  }
+
+  async listClientBlueprints() {
+    return listClientBlueprints();
+  }
+
+  async getClientBlueprint(id) {
+    return getClientBlueprint(id);
+  }
+
+  /** C2C Growth — pillar/cluster plan + editorial queue */
+  async planC2cGrowth(input = {}) {
+    const plan = await buildPillarClusterPlan(input);
+    const queued = input.enqueue !== false ? await enqueueC2cCalendar(plan) : { queued: 0 };
+    return { plan, ...queued };
+  }
+
+  async derivePlaybookBlogTeasers(playbookSlug, count = 3) {
+    return derivePlaybookTeasers(playbookSlug, count);
+  }
+
+  /** Engagement retune — Pulse cron calls this weekly */
+  async retuneEngagements() {
+    return retuneOpenEngagements(this);
+  }
+
+  /** Session reminders for booked strategy sessions (Pulse sweep hook) */
+  async sendSessionReminders() {
+    const db = getSupabase();
+    if (!db) return { sent: 0 };
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayAfter = new Date();
+    dayAfter.setDate(dayAfter.getDate() + 2);
+
+    let bookings = [];
+    try {
+      const res = await db.from('bookings')
+        .select('id, client_name, scheduled_at, status')
+        .eq('status', 'confirmed')
+        .gte('scheduled_at', tomorrow.toISOString())
+        .lte('scheduled_at', dayAfter.toISOString())
+        .limit(5);
+      bookings = res.data || [];
+    } catch {
+      bookings = [];
+    }
+
+    if (!bookings.length) return { sent: 0 };
+
+    for (const b of bookings) {
+      await this.notify(
+        'Strategy session reminder',
+        `${b.client_name || 'Client'} session tomorrow. Prep brief is in Notion.`,
+        'info',
+        'dashboard',
+      ).catch(() => {});
+    }
+    return { sent: bookings.length };
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // CHAT — overrides agentBase.chat() to execute real actions, not just talk
   // ══════════════════════════════════════════════════════════════════════════
@@ -1060,6 +1178,42 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
         return `Boss, workflow spec drafted (${result.quality.grade} quality). Logged to Notion and Nova has a build task queued.\n\n${result.spec.slice(0, 1200)}${result.spec.length > 1200 ? '…' : ''}`;
       } catch (e) {
         return `Workflow design failed — ${e.message}`;
+      }
+    }
+
+    // ── ACTION: Client blueprint ───────────────────────────────────────────
+    if (/client blueprint|build blueprint for|engagement plan for/.test(lower)) {
+      try {
+        const result = await this.createClientBlueprint({
+          clientName: message.replace(/client blueprint|build blueprint for|engagement plan for/gi, '').trim().slice(0, 80) || 'Client',
+          goals:      message,
+        });
+        const bp = result.blueprint;
+        return `Boss, client blueprint ready (${result.quality?.grade || 'B'}). ID: ${result.blueprintId}\n\nPhase: ${bp.engagement?.current_phase}\nBoss tasks:\n${(bp.bossTasks || []).slice(0, 4).map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+      } catch (e) {
+        return `Blueprint failed — ${e.message}`;
+      }
+    }
+
+    // ── ACTION: IP synthesis ───────────────────────────────────────────────
+    if (/synthesi[sz]e (framework|playbook|ip)|ip factory/i.test(lower)) {
+      try {
+        const title = message.replace(/synthesi[sz]e|framework|playbook|ip factory/gi, '').trim() || 'New Framework';
+        const result = await this.runIpSynthesis({ title, instruction: message, domain: 'business_development' });
+        return `IP synthesized, Boss. Slug: ${result.slug} (${result.quality?.grade}). ${result.promotion ? 'Promoted to agent DNA.' : 'Stored in agency IP.'}`;
+      } catch (e) {
+        return `IP synthesis failed — ${e.message}`;
+      }
+    }
+
+    // ── ACTION: C2C pillar plan ────────────────────────────────────────────
+    if (/c2c plan|pillar plan|content calendar/i.test(lower)) {
+      try {
+        const topic = message.replace(/c2c plan|pillar plan|content calendar/gi, '').trim() || 'AI automation for SMEs';
+        const result = await this.planC2cGrowth({ pillarTopic: topic });
+        return `C2C plan queued, Boss. Pillar: "${result.plan?.pillar?.title}". ${result.queued || 0} items in editorial calendar (approval path).`;
+      } catch (e) {
+        return `C2C plan failed — ${e.message}`;
       }
     }
 

@@ -768,6 +768,7 @@ RETURN ONLY a valid JSON object with this exact schema:
     const {
       audience, voiceNotes = '', callToAction = '', wordCount, stdcStage = '',
       researchBrief = '', playbookTitle = '', playbookExcerpt = '', frameworkId = '',
+      bossCaveats = [], outline = [], proposedTitle = '',
     } = options;
 
     const knowledge = await synthesizer.answer(
@@ -792,14 +793,17 @@ ${advocateBlock}
 ${knowledge ? `## Intelligence Base\n${knowledge.slice(0, 1500)}\n\n---\n\n` : ''}
 ## Content Production: ${contentType.toUpperCase()}
 
-Topic: ${topic}
+Topic: ${proposedTitle || topic}
 Audience: ${audience || 'business professionals in digital transformation, automation, or media'}
 STDC Stage: ${stdcStage || 'THINK — consideration and authority-building'}
 ${voiceNotes ? `Voice direction: ${voiceNotes}` : ''}
 ${callToAction ? `CTA: ${callToAction}` : ''}
 ${wordCount ? `Target length: ${wordCount} words` : ''}
+${outline?.length ? `Approved outline (follow structure):\n${outline.map((h, i) => `${i + 1}. ${h}`).join('\n')}` : ''}
+${bossCaveats?.length ? `BOSS CAVEATS (non-negotiable):\n${bossCaveats.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : ''}
 
 You are Aether — globally rated digital media strategist. Produce ${contentType} that a senior operator would forward to their team.
+Never mention AI agents or internal automation — write as DigiFusion specialist consultants.
 
 Produce the full content piece now.`;
 

@@ -1334,43 +1334,22 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && path === '/api/agents/atlas/synthesize-playbook') {
     try {
       const body = await readBody(req);
-      const { title, domain = 'business_development', type = 'playbook',
-              sources = [], tagline = '', access = 'premium', instruction = '' } = body;
-      if (!title) { err(res, 'title is required', 400); return; }
-
-      // Build a URL-safe slug from title if not provided
-      const slug = (body.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''))
-        + '-' + Date.now().toString(36);
-
-      // Compose the hybridisation instruction from the guideline's Phase 2 template
-      const hybridInstruction = [
-        instruction,
-        sources.length
-          ? `Synthesise logic from: ${sources.join(', ')}.`
-          : '',
-        `Phase 1 (Audit/Diagnostic): Extract the assessment logic.`,
-        `Phase 2 (Setup/Infrastructure): Define the technical and structural approach.`,
-        `Phase 3 (Execution): Detail the implementation and iteration process.`,
-        `Include: Actionable Checklists for each phase, a Scorecard / Maturity Matrix,`,
-        `Diagnostic Questions (5–10), Deliverables per Phase, and a Visual Structure Description.`,
-        `Write in a professional consultant-grade tone. This is proprietary DigiFusion IP.`,
-      ].filter(Boolean).join(' ');
-
-      // Route to the right specialist:
-      // digital_media → Aether (C2C Pipeline framework)
-      // all others    → Atlas  (BCG/AWS/IBM consulting framework)
-      let content;
-      if (domain === 'digital_media') {
-        content = await aether.buildDigitalMediaFramework(title, {
-          domain, instruction: hybridInstruction, targetAudience: body.audience || '', industry: body.industry || '',
-        });
-      } else {
-        content = await atlas.buildFramework(title, domain, hybridInstruction);
-      }
-      if (!content) { err(res, 'Agent returned no content', 500); return; }
-
-      const entry = await saveAgencyPlaybook({ slug, title, domain, type, content, sources, tagline, access });
-      json(res, { ok: true, entry, preview: content.slice(0, 500) });
+      if (!body.title) { err(res, 'title is required', 400); return; }
+      const { runIpFactory } = await import('./skills/ipFactory.js');
+      const result = await runIpFactory({
+        title:              body.title,
+        domain:             body.domain || 'business_development',
+        type:               body.type || 'playbook',
+        sources:            body.sources || [],
+        instruction:        body.instruction || '',
+        tagline:            body.tagline || '',
+        access:             body.access || 'premium',
+        promote:            body.promote === true,
+        promoteAsOperating: body.promoteAsOperating === true,
+        audience:           body.audience,
+        industry:           body.industry,
+      });
+      json(res, { ok: true, entry: result.entry, slug: result.slug, quality: result.quality, promotion: result.promotion, preview: result.preview });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -1996,7 +1975,10 @@ const server = createServer(async (req, res) => {
                 const { executeApprovedBlogPublish } = await import('./skills/blogApprovalFlow.js');
                 const blogResult = await executeApprovedBlogPublish(approval.payload);
                 const url = blogResult?.url || (blogResult?.slug ? `https://www.digitafusion.com/blog/${blogResult.slug}` : '');
-                reply = `✅ Approved and published.\n\n${blogResult.topic || 'Blog post'} is live${url ? `:\n${url}` : ''}.`;
+                const caveatNote = approval.caveats?.length
+                  ? `\n\n(Applied your notes: ${approval.caveats.join('; ').slice(0, 200)})`
+                  : '';
+                reply = `✅ Approved and published.${caveatNote}\n\n${blogResult.topic || 'Blog post'} is live${url ? `:\n${url}` : ''}.`;
               } catch (blogErr) {
                 console.error('[WhatsApp] Blog execution after approval failed:', blogErr.message);
                 reply = `✅ Approved, but publishing hit an error: ${blogErr.message.slice(0, 120)}. Check PathGuru logs.`;
@@ -2317,6 +2299,87 @@ const server = createServer(async (req, res) => {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
     try {
       json(res, await AGENTS.nexus.processDueScheduledContent());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/cron/engagement-retune — weekly client blueprint adjustments
+  if (req.method === 'GET' && path === '/api/cron/engagement-retune') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.retuneEngagements());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── IP Factory ───────────────────────────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/ip-factory/synthesize') {
+    try {
+      const body = await readBody(req);
+      const { runIpFactory } = await import('./skills/ipFactory.js');
+      json(res, await runIpFactory(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/ip-factory/catalog') {
+    try {
+      const { getIpFactoryCatalog } = await import('./skills/ipFactory.js');
+      json(res, await getIpFactoryCatalog());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/ip-factory/promote') {
+    try {
+      const body = await readBody(req);
+      const { promoteFrameworkToDna } = await import('./skills/ipFactory.js');
+      if (!body.slug || !body.title) { err(res, 'slug and title required', 400); return; }
+      json(res, await promoteFrameworkToDna(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── Client Blueprint ─────────────────────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/client-blueprint') {
+    try {
+      const body = await readBody(req);
+      json(res, await AGENTS.nexus.createClientBlueprint(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/client-blueprint') {
+    try {
+      json(res, await AGENTS.nexus.listClientBlueprints());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path.startsWith('/api/client-blueprint/')) {
+    try {
+      const id = path.slice('/api/client-blueprint/'.length);
+      const bp = await AGENTS.nexus.getClientBlueprint(id);
+      if (!bp) { err(res, 'Blueprint not found', 404); return; }
+      json(res, bp);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── C2C Growth Engine ────────────────────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/c2c/pillar-plan') {
+    try {
+      const body = await readBody(req);
+      json(res, await AGENTS.nexus.planC2cGrowth(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/c2c/playbook-teasers') {
+    try {
+      const body = await readBody(req);
+      if (!body.playbookSlug) { err(res, 'playbookSlug required', 400); return; }
+      json(res, { teasers: await AGENTS.nexus.derivePlaybookBlogTeasers(body.playbookSlug, body.count || 3) });
     } catch (e) { err(res, e.message, 500); }
     return;
   }

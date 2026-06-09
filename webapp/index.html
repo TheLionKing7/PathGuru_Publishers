@@ -1901,6 +1901,35 @@
         <!-- ── TEAM WORKFLOW ── -->
         <section class="tab-panel" id="tab-agents-workflow" aria-label="Team Workflow">
           <div class="nexus-workflow-body">
+            <p class="nexus-ops-intro">Client blueprints (multi-agent action plans) and process workflows. Nexus coordinates; you implement; Pulse retunes weekly.</p>
+
+            <div class="ip-synthesizer-card" style="margin-bottom:20px">
+              <h3 class="ip-synth-title">Client Blueprint</h3>
+              <p class="ip-synth-sub">Orion research → Atlas / Nova / Aether → structured engagement pack for Boss implementation</p>
+              <div class="nexus-workflow-meta">
+                <div class="nexus-workflow-field">
+                  <label class="form-label" for="blueprintClientInput">Client name</label>
+                  <input type="text" id="blueprintClientInput" class="form-input" placeholder="Acme Ltd">
+                </div>
+                <div class="nexus-workflow-field">
+                  <label class="form-label" for="blueprintTrackInput">Track</label>
+                  <select id="blueprintTrackInput" class="form-input">
+                    <option value="integrated">Integrated (all three)</option>
+                    <option value="automation">Automation (Nova / AVE)</option>
+                    <option value="business_development">BD (Atlas / Deal Engine)</option>
+                    <option value="digital_media">Digital Media (Aether / C2C)</option>
+                  </select>
+                </div>
+              </div>
+              <label class="form-label" for="blueprintGoalsInput">Goals &amp; context</label>
+              <textarea id="blueprintGoalsInput" class="form-textarea" rows="3" placeholder="What outcome does the client need? Pain points, budget, timeline…"></textarea>
+              <div class="ip-synth-actions" style="margin-top:12px">
+                <button class="btn-console-run" id="btnClientBlueprint" type="button">Build Client Blueprint</button>
+                <span class="ip-synth-status" id="blueprintStatus"></span>
+              </div>
+              <pre id="blueprintOutput" class="ip-output-body" style="display:none;margin-top:12px;max-height:320px;overflow:auto;font-size:12px"></pre>
+            </div>
+
             <p class="nexus-ops-intro">Map a client process to DigiFusion frameworks. Nexus designs the workflow; Nova receives the build task.</p>
             <div class="nexus-workflow-form">
               <label class="form-label" for="workflowProcessInput">Process description</label>
@@ -2126,6 +2155,11 @@
                 <div class="ip-field">
                   <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional — guide the synthesis)</span></label>
                   <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost tools…"></textarea>
+                </div>
+
+                <div class="ip-field" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
+                  <label class="ip-source-check"><input type="checkbox" id="ipPromoteLibrary" /> Save to Intelligence Library (paywalled product)</label>
+                  <label class="ip-source-check"><input type="checkbox" id="ipPromoteDna" /> Promote to agent operating DNA</label>
                 </div>
 
                 <div class="ip-synth-actions">

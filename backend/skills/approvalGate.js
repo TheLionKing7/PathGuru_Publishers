@@ -130,15 +130,57 @@ export async function findPendingApproval() {
  * @param {string} text — Raw reply from Boss
  * @returns {{ decision: 'approved'|'rejected'|null, feedback: string }}
  */
+/**
+ * Parse Boss WhatsApp reply — supports plain YES/NO and conditional approval with caveats.
+ * e.g. "YES but shorten the intro" → approved + caveats[]
+ */
 export function parseApprovalReply(text) {
-  const t = (text || '').trim().toLowerCase();
+  const raw = (text || '').trim();
+  const t = raw.toLowerCase();
 
-  const approved = /^(yes|yep|yup|approve[d]?|go ahead|proceed|confirm[ed]?|ok|okay|do it|publish|send it|looks good|fire it|go|green light|✅|👍)/i.test(t);
-  const rejected = /^(no|nope|reject[ed]?|cancel|stop|don'?t|hold|wait|not yet|abort|pause|skip|❌|👎|change|revise|redo)/i.test(t);
+  const rejected = /^(no|nope|reject[ed]?|cancel|stop|don'?t|hold|wait|not yet|abort|pause|skip|❌|👎)\b/i.test(t)
+    || /^change\b/i.test(t) || /^revise\b/i.test(t) || /^redo\b/i.test(t);
 
-  if (approved) return { decision: 'approved',  feedback: text };
-  if (rejected) return { decision: 'rejected',  feedback: text };
-  return          { decision: null,             feedback: text };
+  if (rejected) return { decision: 'rejected', feedback: raw, caveats: [] };
+
+  const approvedLead = /^(yes|yep|yup|approve[d]?|go ahead|proceed|confirm[ed]?|ok|okay|do it|publish|send it|looks good|fire it|go|green light|✅|👍)\b/i.test(t)
+    || /\b(yes|approve[d]?|go ahead|proceed|publish)\b/i.test(t);
+
+  if (!approvedLead) {
+    return { decision: null, feedback: raw, caveats: [] };
+  }
+
+  const caveats = extractCaveats(raw);
+  return {
+    decision:  'approved',
+    feedback:  raw,
+    caveats,
+    conditional: caveats.length > 0,
+  };
+}
+
+/** Pull Boss edit instructions from "YES but …", "approve with …", etc. */
+export function extractCaveats(text = '') {
+  const raw = String(text).trim();
+  const patterns = [
+    /\b(?:yes|yep|approve[d]?|ok|go ahead|proceed)[,.]?\s+(?:but|however|except|with caveat[s]?:?|only if|just)\s+(.+)/i,
+    /\bapprove\s+with\s+(.+)/i,
+    /\bwith\s+(?:these\s+)?changes?:\s*(.+)/i,
+    /\bcaveat[s]?:\s*(.+)/i,
+  ];
+  for (const pat of patterns) {
+    const m = raw.match(pat);
+    if (m?.[1]?.trim()) return [m[1].trim()];
+  }
+  if (/\b(but|however)\b/i.test(raw) && approvedWithoutLead(raw)) {
+    const after = raw.split(/\b(?:but|however)\b/i)[1];
+    if (after?.trim()) return [after.trim()];
+  }
+  return [];
+}
+
+function approvedWithoutLead(raw) {
+  return /\b(yes|approve|ok|proceed|publish|go ahead)\b/i.test(raw);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,24 +241,30 @@ export async function handleApprovalReply(replyText) {
   const pending = await findPendingApproval();
   if (!pending) return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
 
-  const { decision, feedback } = parseApprovalReply(replyText);
+  const { decision, feedback, caveats = [], conditional = false } = parseApprovalReply(replyText);
   if (!decision) {
-    // Boss said something but it's not clearly yes/no — don't consume the message
-    return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
+    return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText, caveats: [] };
   }
 
-  // Resolve in DB
   await resolveApproval(pending.id, decision, feedback);
 
   const input = typeof pending.input === 'string' ? JSON.parse(pending.input) : (pending.input || {});
+  const payload = {
+    ...(input.payload || {}),
+    bossFeedback:   feedback,
+    bossCaveats:    caveats,
+    conditionalApproval: conditional,
+  };
 
   return {
     handled:      true,
     decision,
     approvalId:   pending.id,
     approvalType: input.approvalType || null,
-    payload:      input.payload      || null,
+    payload,
     subject:      input.subject      || pending.title,
     feedback,
+    caveats,
+    conditional,
   };
 }

@@ -179,6 +179,33 @@ export function getFrameworkById(id) {
   return FIRM_IP_FRAMEWORKS.find(f => f.id === id) || null;
 }
 
+/** Runtime-promoted frameworks (loaded async from R2 — see ipFactory.js). */
+let _promotedCache = [];
+let _promotedLoadedAt = 0;
+const PROMOTED_TTL_MS = 5 * 60 * 1000;
+
+export function setPromotedFrameworks(list = []) {
+  _promotedCache = Array.isArray(list) ? list : [];
+  _promotedLoadedAt = Date.now();
+}
+
+export async function refreshPromotedFrameworks() {
+  try {
+    const { loadPromotedFrameworks } = await import('./ipFactory.js');
+    setPromotedFrameworks(await loadPromotedFrameworks());
+  } catch {
+    setPromotedFrameworks([]);
+  }
+  return _promotedCache;
+}
+
+function getPromotedForAgent(agentId) {
+  if (Date.now() - _promotedLoadedAt > PROMOTED_TTL_MS) {
+    refreshPromotedFrameworks().catch(() => {});
+  }
+  return _promotedCache.filter(f => f.agent === agentId || agentId === 'nexus' || agentId === 'assistant');
+}
+
 export function getFrameworksForAgent(agentId) {
   const map = {
     nova:        ['ave', 'engagement-model'],
@@ -190,7 +217,19 @@ export function getFrameworksForAgent(agentId) {
     synthesizer: FRAMEWORK_IDS,
   };
   const ids = map[agentId] || FRAMEWORK_IDS;
-  return FIRM_IP_FRAMEWORKS.filter(f => ids.includes(f.id));
+  const base = FIRM_IP_FRAMEWORKS.filter(f => ids.includes(f.id));
+  const promoted = getPromotedForAgent(agentId).map(p => ({
+    id:       p.id,
+    name:     p.name,
+    oneLiner: p.oneLiner,
+    agent:    p.agent,
+    kind:     p.kind || 'synthesized',
+  }));
+  const seen = new Set(base.map(f => f.id));
+  for (const p of promoted) {
+    if (!seen.has(p.id)) base.push(p);
+  }
+  return base;
 }
 
 export function buildFrameworksListBlock() {

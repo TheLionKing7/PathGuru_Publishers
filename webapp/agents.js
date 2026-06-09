@@ -300,6 +300,38 @@
   function wireWorkflowTab () {
     if (wireWorkflowTab._wired) return;
     wireWorkflowTab._wired = true;
+
+    $('btnClientBlueprint')?.addEventListener('click', async () => {
+      const clientName = $('blueprintClientInput')?.value.trim();
+      const track = $('blueprintTrackInput')?.value || 'integrated';
+      const goals = $('blueprintGoalsInput')?.value.trim();
+      const status = $('blueprintStatus');
+      const out = $('blueprintOutput');
+      if (!clientName) { alert('Enter a client name.'); return; }
+      const btn = $('btnClientBlueprint');
+      if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+      status.textContent = 'Nexus coordinating Orion + specialists…';
+      try {
+        const base = getBackendUrl();
+        const res = await fetch(`${base}/api/client-blueprint`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientName, track, goals, industry: $('workflowIndustryInput')?.value || 'general' }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        status.textContent = `✓ Blueprint ${data.blueprintId} (${data.quality?.grade || 'B'})`;
+        if (out) {
+          out.style.display = 'block';
+          out.textContent = JSON.stringify(data.blueprint, null, 2);
+        }
+      } catch (e) {
+        status.textContent = `✗ ${e.message}`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Build Client Blueprint'; }
+      }
+    });
+
     $('workflowDesignBtn')?.addEventListener('click', async () => {
       let processDescription = $('workflowProcessInput')?.value.trim();
       const clientName = $('workflowClientInput')?.value.trim() || 'Internal';
@@ -2116,26 +2148,25 @@
       }
     });
 
-    /* ── Generate Content Calendar via Nexus ── */
+    /* ── C2C Pillar + cluster calendar (approval path) ── */
     $('genCalendarBtn')?.addEventListener('click', async () => {
-      const sectors = [
-        'Financial Institutions','Government & Ministry','Large Enterprise',
-        'SME & Scale-Ups','Pharmaceutical','Hotel & Hospitality','Commodity & Exchange',
-      ];
+      const pillarTopic = prompt('Pillar topic for 90-day C2C calendar:', 'AI automation for African SMEs without enterprise budgets');
+      if (!pillarTopic) return;
       $('genCalendarBtn').disabled = true;
-      $('genCalendarBtn').textContent = 'Generating…';
+      $('genCalendarBtn').textContent = 'Building C2C plan…';
       try {
         const base = getBackendUrl();
-        const res  = await fetch(`${base}/api/agents/nexus/chat`, {
+        const res  = await fetch(`${base}/api/c2c/pillar-plan`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: `Create a content calendar for these sectors: ${sectors.join(', ')}. Generate 2 article ideas per sector.` }),
+          body: JSON.stringify({ pillarTopic, sector: 'sme', enqueue: true }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || res.statusText);
+        alert(`C2C plan queued: ${data.queued || 0} items. Nexus will route each through your WhatsApp approval gate.`);
         await loadContentCalendar();
       } catch (e) {
-        alert(`Calendar generation failed: ${e.message}`);
+        alert(`C2C calendar failed: ${e.message}`);
       } finally {
         $('genCalendarBtn').disabled = false;
         $('genCalendarBtn').innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Generate Content Calendar`;
@@ -2263,12 +2294,17 @@ async function synthesizePlaybook() {
   if (wrap) wrap.style.display = 'none';
 
   try {
+    const promote = document.getElementById('ipPromoteLibrary')?.checked === true;
+    const promoteAsOperating = document.getElementById('ipPromoteDna')?.checked === true;
+
     const res = await window._agentApiFetch('/api/agents/atlas/synthesize-playbook', {
-      method: 'POST', body: { title, type, domain, access, tagline, instruction, sources },
+      method: 'POST',
+      body: { title, type, domain, access, tagline, instruction, sources, promote, promoteAsOperating },
     });
 
-    if (res.ok && res.entry) {
-      status.textContent = `✓ Saved as "${res.entry.slug}"`;
+    if (res.ok && (res.entry || res.slug)) {
+      const slug = res.entry?.slug || res.slug;
+      status.textContent = `✓ Saved as "${slug}"${res.promotion ? ' · promoted to agent DNA' : ''}${res.quality ? ` · ${res.quality.grade}` : ''}`;
       status.style.color = '#22c55e';
 
       // Show preview
