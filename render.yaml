@@ -6,7 +6,7 @@ services:
     # pandoc: system binary for DOCX/PDF generation from markdown (consulting docs)
     buildCommand: apt-get install -y pandoc && npm install && npx playwright install --with-deps chromium
     startCommand: npm start
-    healthCheckPath: /health
+    healthCheckPath: /ping
     envVars:
       - key: NODE_ENV
         value: production
@@ -84,6 +84,10 @@ services:
 
       # ── Agent network ─────────────────────────────
       - key: CALENDLY_BOOKING_URL
+        sync: false
+
+      # ── External cron (UptimeRobot keep-alive + CEO scheduled jobs) ─────
+      - key: CRON_SECRET
         sync: false
 
       # ── Notifications ─────────────────────────────

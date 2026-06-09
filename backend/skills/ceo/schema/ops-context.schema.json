@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NexusOpsContext",
+  "description": "Internal CEO operations state — not required for client engagements.",
+  "type": "object",
+  "properties": {
+    "lastMorningBriefing": { "type": ["string", "null"], "format": "date-time" },
+    "lastEveningBriefing": { "type": ["string", "null"], "format": "date-time" },
+    "lastNotionSync": { "type": ["string", "null"], "format": "date-time" },
+    "lastBlogPublishAt": { "type": ["string", "null"], "format": "date-time" },
+    "lastCadenceCheck": { "type": ["string", "null"], "format": "date-time" },
+    "pendingApprovalCount": { "type": "integer", "minimum": 0 },
+    "blogCadenceDays": { "type": "integer", "minimum": 1, "maximum": 14 },
+    "contentScheduleQueued": { "type": "integer", "minimum": 0 },
+    "stuckTaskCount": { "type": "integer", "minimum": 0 },
+    "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

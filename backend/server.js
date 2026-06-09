@@ -7,7 +7,8 @@ try { const { createRequire } = await import('node:module'); createRequire(impor
  * GET  /              → web app UI
  * GET  /style.css     → webapp styles
  * GET  /app.js        → webapp logic
- * GET  /health        → status
+ * GET  /ping            → lightweight keep-alive (UptimeRobot — use this, not /health)
+ * GET  /health          → full status (+ font diagnostics)
  * POST /api/generate  → book pipeline
  * GET  /api/assets    → Pexels image search
  * POST /api/upload-assets → R2 upload
@@ -72,7 +73,7 @@ import {
   getFirmIpDownloadUrl,
   getFirmIpDocumentBytes,
 } from './cloudflareR2.js';
-import { getSupabase } from './supabaseClient.js';
+import { verifyCronAuth, cronAuthFail, isCronAuthRequired } from './http/cronAuth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
@@ -180,7 +181,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // ── Health ──────────────────────────────────────
+  // ── Ping (lightweight — point UptimeRobot here, 60s timeout) ─────────────
+  if (path === '/ping' || path === '/api/cron/ping') {
+    json(res, { ok: true, service: 'pathguru-publishers', ts: new Date().toISOString() });
+    return;
+  }
+
+  // ── Health (full diagnostics — Render dashboard; avoid for 5-min keep-alive) ──
   if (path === '/health') {
     const fonts = await describeEmbeddedFonts().catch(() => []);
     json(res, { status: 'ok', service: 'PathGuru Publishers', version: '3.0', ts: new Date().toISOString(),
@@ -2127,8 +2134,51 @@ ent.refundOrder(shopRefundMatch[1], body);
 
   // POST /api/agents/nexus/daily-briefing  — generate morning briefing
   if (req.method === 'POST' && path === '/api/agents/nexus/daily-briefing') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
     try {
       json(res, await AGENTS.nexus.generateDailyBriefing());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/cron/morning-briefing — external cron (cron-job.org, GitHub Actions)
+  if (req.method === 'GET' && path === '/api/cron/morning-briefing') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const briefing = await AGENTS.nexus.generateDailyBriefing();
+      const { sendImmediate } = await import('./skills/notifier.js');
+      await sendImmediate('DigiFusion Daily Briefing', briefing?.summary || 'Daily briefing ready.', 'whatsapp');
+      json(res, briefing);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/cron/evening-briefing
+  if (req.method === 'GET' && path === '/api/cron/evening-briefing') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const briefing = await AGENTS.nexus.generateEveningBriefing();
+      const { sendImmediate } = await import('./skills/notifier.js');
+      await sendImmediate('DigiFusion Evening Briefing', briefing?.summary || 'Evening briefing ready.', 'whatsapp');
+      json(res, briefing);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/cron/content-cadence — blog cadence check (every 12h recommended)
+  if (req.method === 'GET' && path === '/api/cron/content-cadence') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.runContentCadenceCheck());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/cron/process-scheduled-content — due calendar items → approval gate
+  if (req.method === 'GET' && path === '/api/cron/process-scheduled-content') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.processDueScheduledContent());
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -2137,6 +2187,42 @@ ent.refundOrder(shopRefundMatch[1], body);
   if (req.method === 'GET' && path === '/api/agents/nexus/pipeline') {
     try {
       json(res, await AGENTS.nexus.getPipelineView());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/nexus/ceo-ops — Digital CEO dashboard (cadence, approvals, queue)
+  if (req.method === 'GET' && path === '/api/agents/nexus/ceo-ops') {
+    try {
+      json(res, await AGENTS.nexus.getCeoOpsStatus());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/evening-briefing
+  if (req.method === 'POST' && path === '/api/agents/nexus/evening-briefing') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.generateEveningBriefing());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/design-workflow  body: { processDescription, clientName?, industry? }
+  if (req.method === 'POST' && path === '/api/agents/nexus/design-workflow') {
+    try {
+      const body = await readBody(req);
+      if (!body.processDescription) { err(res, 'processDescription required', 400); return; }
+      json(res, await AGENTS.nexus.designWorkflow(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/content-cadence-check — trigger cadence pipeline if due
+  if (req.method === 'POST' && path === '/api/agents/nexus/content-cadence-check') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.runContentCadenceCheck());
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -2559,7 +2645,17 @@ server.listen(PORT, () => {
   │   POST /api/agents/nexus/daily-briefing          │
   │   POST /api/agents/nexus/research                │
   │   POST /api/agents/nexus/escalate                │
-  │   GET  /api/agents/nexus/pipeline                │
+  │   GET  /ping                                     │
+  │   GET  /health                                   │
+  │   GET  /api/cron/ping                            │
+  │   GET  /api/cron/morning-briefing                │
+  │   GET  /api/cron/evening-briefing                │
+  │   GET  /api/cron/content-cadence                 │
+  │   GET  /api/cron/process-scheduled-content       │
+  │   GET  /api/agents/nexus/ceo-ops                 │
+  │   POST /api/agents/nexus/evening-briefing        │
+  │   POST /api/agents/nexus/design-workflow         │
+  │   POST /api/agents/nexus/content-cadence-check   │
   │   GET  /api/agents/nexus/check-escalations       │
   │   POST /api/agents/researcher/research           │
   │   POST /api/agents/synthesizer/ingest            │
@@ -2598,16 +2694,25 @@ async function startup() {
       if (seed.seeded) console.log('[FirmIP] Seeded Engagement Model into knowledge_base');
     }
   } catch (e) { console.warn('[FirmIP] Engagement Model seed skipped:', e.message); }
+  if (isCronAuthRequired()) {
+    console.log('[Cron] CRON_SECRET set — external /api/cron/* routes require auth');
+  } else {
+    console.warn('[Cron] CRON_SECRET not set — /api/cron/* and CEO POST routes are open. Set on Render for production.');
+  }
   const PULSE_SWEEP_INTERVAL_MS = parseInt(process.env.PULSE_SWEEP_INTERVAL_MS || '300000', 10);
   setInterval(async () => {
     try { await AGENTS.pulse.sweep(); } catch(e) { console.warn('[Pulse] sweep error:', e.message); }
   }, PULSE_SWEEP_INTERVAL_MS);
   scheduleDailyBriefing();
+  scheduleEveningBriefing();
+  scheduleContentCadenceCheck();
   scheduleWeeklyNewsletterProposal();
-  // Check content schedule every hour
+  // Process due scheduled content — every 6 hours (approval path only, never auto-publish)
   setInterval(async () => {
-    try { await processContentSchedule(); } catch(e) { console.warn('[Content] schedule error:', e.message); }
-  }, 60 * 60 * 1000);
+    try {
+      await AGENTS.nexus.processDueScheduledContent();
+    } catch (e) { console.warn('[Nexus CEO] scheduled content error:', e.message); }
+  }, 6 * 60 * 60 * 1000);
   // NOTE: checkEscalationTriggers() is NOT called on startup — it runs inside
   // generateDailyBriefing() at 7am only. Calling it on every restart caused
   // a Chrome notification flood on every Render deploy/spin-up.
@@ -2631,6 +2736,40 @@ function scheduleDailyBriefing() {
   }, msUntil7am());
 }
 
+function scheduleEveningBriefing() {
+  function msUntil6pm() {
+    const now = new Date();
+    const next = new Date(now);
+    next.setHours(18, 0, 0, 0);
+    if (next <= now) next.setDate(next.getDate() + 1);
+    return next - now;
+  }
+  setTimeout(async function run() {
+    try {
+      const briefing = await AGENTS.nexus.generateEveningBriefing();
+      const { sendImmediate } = await import('./skills/notifier.js');
+      await sendImmediate('DigiFusion Evening Briefing', briefing?.summary || 'Evening briefing ready.', 'whatsapp');
+    } catch (e) { console.warn('[Nexus] Evening briefing error:', e.message); }
+    setTimeout(run, 24 * 60 * 60 * 1000);
+  }, msUntil6pm());
+}
+
+function scheduleContentCadenceCheck() {
+  const intervalMs = 12 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const result = await AGENTS.nexus.runContentCadenceCheck();
+      if (result.action === 'approval_sent') {
+        console.log('[Nexus CEO] Blog cadence triggered approval for:', result.topic);
+      }
+    } catch (e) { console.warn('[Nexus CEO] Cadence check error:', e.message); }
+  }, intervalMs);
+  // First check 30 min after startup (avoid deploy flood with briefings)
+  setTimeout(async () => {
+    try { await AGENTS.nexus.runContentCadenceCheck(); } catch (e) { /* ignore */ }
+  }, 30 * 60 * 1000);
+}
+
 function scheduleWeeklyNewsletterProposal() {
   // Fire every Monday at 8am Lagos time (UTC+1)
   function msUntilNextMonday8am() {
@@ -2649,35 +2788,7 @@ function scheduleWeeklyNewsletterProposal() {
   }, msUntilNextMonday8am());
 }
 
+/** @deprecated Use AGENTS.nexus.processDueScheduledContent() — approval gate only */
 async function processContentSchedule() {
-  try {
-    const schedule = (await getJsonCache('cache/content-schedule.json')) || [];
-    const now = new Date();
-    const due = schedule.filter(a => a.status === 'queued' && new Date(a.scheduledFor) <= now);
-    if (due.length === 0) return;
-    for (const article of due) {
-      console.log(`[Content] Auto-publishing scheduled article: ${article.topic}`);
-      try {
-        const researchResult = await AGENTS.researcher.research({ topic: article.topic, forAgent: 'aether', depth: 'standard', mergeWithKB: true });
-        const writePrompt = `Write a complete, publication-ready article for DigiFusion's blog on: "${article.topic}"${article.sector ? ` (sector: ${article.sector})` : ''}${article.angle ? `. Angle: ${article.angle}` : ''}.
-
-Research context: ${researchResult.brief?.slice(0, 2000) || ''}
-
-Requirements: 1,200-1,600 words, strong opening, clear H2 sections, concrete takeaways, DigiFusion perspective, CTA. Markdown format.`;
-        const content = await AGENTS.aether.chat(writePrompt);
-        const titleMatch = content.match(/^#\s+(.+)$/m);
-        const title = titleMatch?.[1] || article.topic;
-        const { generateAndPublishBlogPost: publish } = await import('./blogPublisher.js');
-        await publish({ title, content, sector: article.sector || 'business', tags: [article.sector, 'digifusion'].filter(Boolean), status: 'published', authorName: 'DigiFusion Intelligence' });
-        article.status = 'published';
-        article.publishedAt = new Date().toISOString();
-        console.log(`[Content] Published: ${title}`);
-      } catch(e) {
-        article.status = 'failed';
-        article.error = e.message;
-        console.error(`[Content] Failed to publish "${article.topic}":`, e.message);
-      }
-    }
-    await putJsonCache('cache/content-schedule.json', schedule);
-  } catch(e) { console.warn('[Content] processContentSchedule error:', e.message); }
+  return AGENTS.nexus.processDueScheduledContent();
 }

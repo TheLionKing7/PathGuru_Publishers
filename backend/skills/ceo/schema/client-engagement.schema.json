@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DigiFusionClientEngagementContext",
+  "description": "Structured handoff for client work — mapped to Engagement Model + firm IP (not generic consulting).",
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "client_name": { "type": "string" },
+        "industry": { "type": "string" },
+        "track": { "type": "string", "enum": ["automation", "business_development", "digital_media", "integrated"] },
+        "currency": { "type": "string", "default": "USD" }
+      },
+      "required": ["client_name", "industry"]
+    },
+    "engagement_model": {
+      "type": "object",
+      "properties": {
+        "current_phase": { "type": "string", "enum": ["discovery_audit", "gap_analysis", "solution_design", "build_deploy_measure"] },
+        "cost_of_inaction_12mo": { "type": "number" },
+        "roi_payback_days": { "type": "integer" },
+        "mece_buckets": { "type": "array", "items": { "type": "string" }, "maxItems": 5 }
+      },
+      "required": ["current_phase"]
+    },
+    "ave_output": {
+      "type": "object",
+      "properties": {
+        "bottlenecks": { "type": "array", "items": { "type": "string" } },
+        "automation_orchestrator": { "type": "string" },
+        "ave_phase": { "type": "string", "enum": ["diagnose", "architect", "build", "deploy", "scale"] }
+      }
+    },
+    "deal_engine_output": {
+      "type": "object",
+      "properties": {
+        "economic_buyer": { "type": "string" },
+        "technical_gatekeeper": { "type": "string" },
+        "internal_champion": { "type": "string" },
+        "pricing_model": { "type": "string", "enum": ["value_based", "retainer_performance", "savings_share"] }
+      }
+    },
+    "c2c_output": {
+      "type": "object",
+      "properties": {
+        "stdc_stage": { "type": "string", "enum": ["see", "think", "do", "care"] },
+        "pillar_topic": { "type": "string" },
+        "conversion_asset": { "type": "string" }
+      }
+    }
+  },
+  "required": ["metadata", "engagement_model"]
+}

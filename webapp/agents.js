@@ -14,8 +14,8 @@
     {
       id: 'nexus',
       name: 'Nexus',
-      role: 'CEO & Coordinator',
-      desc: 'Command layer of the agent network. Reports directly to Ola. Decomposes instructions, dispatches Researcher for knowledge gaps, escalates decisions, and runs daily briefings.',
+      role: 'Digital CEO',
+      desc: 'Digital CEO of the firm. Morning & evening briefings, blog cadence (Boss approval), workflow design, Notion sync, and agent orchestration via Engagement Model + firm IP.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
       color: '#c9a84c',
       actions: ['orchestrate'],

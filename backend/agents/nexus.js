@@ -12,8 +12,10 @@
  *   3. Knowledge gap mgmt  — detects gaps, dispatches Orion → Synthesizer pipeline
  *   4. Escalation          — surfaces decisions and alerts directly to Boss
  *   5. Lifecycle bridge    — syncs client milestones to Notion
- *   6. Daily briefing      — morning operational summary for Boss
- *   7. Team chat           — direct line between Boss and the agent network
+ *   6. Daily briefings     — morning + evening operational summaries for Boss
+ *   7. Content cadence     — blog every 2–3 days via approval gate (never auto-publish)
+ *   8. Workflow design     — AVE-aligned specs delegated to Nova
+ *   9. Team chat           — direct line between Boss and the agent network
  */
 
 import { AgentBase }      from './agentBase.js';
@@ -23,9 +25,17 @@ import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';
 import { scoreResearchBrief, formatQualityBadge } from '../skills/researchQualityGate.js';
-import { ENGAGEMENT_MODEL_DOCTRINE } from '../skills/firmKnowledge.js';
+import { buildNexusCeoPromptBlock, resolveCeoModule, BLOG_CADENCE_DAYS } from '../skills/nexusCeoDoctrine.js';
+import { scoreCeoOutput, formatCeoQualityBadge } from '../skills/ceoQualityGate.js';
+import {
+  buildOpsSnapshot,
+  syncNotionCeoDashboard,
+  processDueScheduledContent,
+  checkContentCadence,
+  loadOpsContext,
+} from '../skills/nexusCeoOps.js';
 
-const NEXUS_SYSTEM = `You are Nexus — CEO of the DigiFusion Intelligence Network.
+const NEXUS_SYSTEM = `You are Nexus — Digital CEO of the DigiFusion Intelligence Network.
 
 You report directly to your principal (address them as "Boss" — never by name). You run a team of 7 specialist agents and are responsible for everything they produce.
 
@@ -63,8 +73,7 @@ HONESTY RULES — violation of these is a critical failure:
 - "The task is moving forward as planned" is forbidden if you have no data proving it.
 - When uncertain: be short and honest. "I can't verify that without checking" is always correct.
 
-YOUR DELIVERY ARCHITECTURE — DigiFusion Engagement Model (apply to every orchestration):
-${ENGAGEMENT_MODEL_DOCTRINE}`;
+${buildNexusCeoPromptBlock()}`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
 // Agent display names for human-readable output
@@ -109,7 +118,7 @@ export class Nexus extends AgentBase {
     super({
       id:           'nexus',
       displayName:  'Nexus',
-      role:         'Project Manager & Task Coordinator',
+      role:         'Digital CEO & Operational Commander',
       systemPrompt: NEXUS_SYSTEM,
       domains:      ['general', 'business_development', 'automation', 'digital_media'],
     });
@@ -818,6 +827,7 @@ Return ONLY a JSON array with fields: title, description, agent_id, type (resear
 
   async generateDailyBriefing() {
     const status = await this.getNetworkStatus();
+    const ops    = await buildOpsSnapshot();
     const db = getSupabase();
 
     let recentLeads = [];
@@ -841,9 +851,15 @@ Return ONLY a JSON array with fields: title, description, agent_id, type (resear
       recentCompleted = data || [];
     }
 
-    const briefingPrompt = `You are Nexus. Generate the morning operational briefing for the DigiFusion team.
+    const briefingPrompt = `You are Nexus, Digital CEO. Generate the MORNING operational briefing for Boss.
 
 TODAY: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+
+CEO OPS:
+— Blog cadence: ${ops.blogCadenceDays} days | Last publish: ${ops.daysSinceLastBlog ?? 'unknown'} days ago | Due: ${ops.cadenceDue ? 'YES — action needed' : 'on track'}
+— Pending Boss approvals: ${ops.pendingApprovals}
+— Stuck tasks (>48h): ${ops.stuckTasks}
+— Content queue: ${ops.contentSchedule.queued} queued, ${ops.contentSchedule.pending} pending approval
 
 AGENT NETWORK STATUS:
 ${status.agents.map(a => `- ${a.display_name || a.id}: ${a.status}${a.current_task_id ? ' (on task)' : ''}`).join('\n') || 'Status unavailable'}
@@ -860,24 +876,166 @@ ${recentLeads.map(l => `- ${l.name || l.email}: score ${l.lead_score}, status ${
 PENDING ALERTS (${status.pendingAlerts.length}):
 ${status.pendingAlerts.map(a => `- [${a.severity?.toUpperCase()}] ${a.title}`).join('\n') || 'None'}
 
-Write a direct morning briefing covering: what got done, what's active, pipeline pulse, anything needing attention, and one focus line per active agent. Be direct. No fluff.`;
+Write a direct morning CEO briefing: lead with today's top priority, then pipeline pulse, approvals needed, content cadence, one focus line per active agent. Max 6 sentences unless Boss asked for detail. Apply Minto Pyramid — recommendation first.`;
 
-    // Run escalation checks in parallel with briefing generation
-    const [briefing, escalations] = await Promise.all([
+    const [briefingRaw, escalations] = await Promise.all([
       callAiProvider(this.provider, briefingPrompt, this.systemPrompt, { json: false }),
       this.checkEscalationTriggers().catch(() => []),
     ]);
 
-    notion.logTask({
+    let briefing = briefingRaw;
+    const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
+    if (!quality.passed) {
+      const rewrite = await callAiProvider(this.provider,
+        `Rewrite this CEO briefing to pass quality gate. Lead with recommendation. Remove platitudes. Reference firm IP where relevant.\n\n${briefing}`,
+        this.systemPrompt, { json: false });
+      briefing = rewrite;
+    }
+
+    await syncNotionCeoDashboard({ period: 'morning', briefingExcerpt: briefing, snap: ops });
+
+    return {
+      briefing,
+      summary:     briefing.slice(0, 500),
+      quality,
+      ops,
+      escalations,
+      period:      'morning',
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Evening CEO briefing — what shipped, what's blocked, tomorrow's focus */
+  async generateEveningBriefing() {
+    const status = await this.getNetworkStatus();
+    const ops    = await buildOpsSnapshot();
+    const db     = getSupabase();
+
+    let completedToday = [];
+    if (db) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const { data } = await db.from('tasks')
+        .select('title, agent_id, completed_at')
+        .eq('status', 'completed')
+        .gte('completed_at', start.toISOString())
+        .order('completed_at', { ascending: false })
+        .limit(12);
+      completedToday = data || [];
+    }
+
+    const prompt = `You are Nexus, Digital CEO. Generate the EVENING wrap-up for Boss.
+
+TODAY: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+
+SHIPPED TODAY (${completedToday.length}):
+${completedToday.map(t => `- ${t.title} [${t.agent_id}]`).join('\n') || 'Nothing marked complete today'}
+
+STILL ACTIVE (${status.activeTasks.length}):
+${status.activeTasks.slice(0, 6).map(t => `- ${t.title} → ${t.agent_id}`).join('\n') || 'Clear'}
+
+CEO OPS:
+— Blog cadence due: ${ops.cadenceDue}
+— Pending approvals: ${ops.pendingApprovals}
+— Stuck >48h: ${ops.stuckTasks}
+
+Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first.`;
+
+    let briefing = await callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+    const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
+
+    await syncNotionCeoDashboard({ period: 'evening', briefingExcerpt: briefing, snap: ops });
+
+    return {
+      briefing,
+      summary:     briefing.slice(0, 500),
+      quality,
+      ops,
+      period:      'evening',
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  /** Live CEO ops dashboard for API / UI */
+  async getCeoOpsStatus() {
+    const [ops, ctx, status] = await Promise.all([
+      buildOpsSnapshot(),
+      loadOpsContext(),
+      this.getNetworkStatus(),
+    ]);
+    return {
+      role:            'Digital CEO',
+      blogCadenceDays: BLOG_CADENCE_DAYS,
+      ops,
+      context:         ctx,
+      agentSummary:    status.agents?.map(a => ({ id: a.id, status: a.status })) || [],
+      activeTaskCount: status.activeTasks?.length || 0,
+      generatedAt:     new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Design/analyze a workflow — Engagement Model Phase 01 + AVE → Nova
+   */
+  async designWorkflow({ processDescription, clientName = 'Internal', industry = 'general' } = {}) {
+    if (!processDescription) throw new Error('processDescription is required');
+
+    const ceoModule = resolveCeoModule(processDescription);
+    const designPrompt = `You are Nexus Digital CEO. Design a workflow specification using DigiFusion firm IP only.
+
+PROCESS: ${processDescription}
+CLIENT: ${clientName} | INDUSTRY: ${industry}
+PRIMARY FRAMEWORK: ${ceoModule.framework} → delegate execution to ${ceoModule.agent}
+
+Deliver:
+1. Engagement Model phase this sits in
+2. As-is bottleneck map (manual touchpoints, cost of inaction estimate)
+3. Target state — AVE phases if automation, Deal Engine if BD, C2C if content
+4. Integration map: source of truth DB, triggers, error/dead-letter path, human-in-the-loop nodes (Boss approval only)
+5. 2-week sprint outline with acceptance criteria
+
+No generic TOGAF/SAP language. Use DigiFusion framework names.`;
+
+    let spec = await this.runLLM(designPrompt, { knowledgeQuery: processDescription });
+    const quality = scoreCeoOutput({ text: spec, outputType: 'workflow' });
+
+    await notion.logTask({
       agentId:   'nexus',
-      agentName: 'Nexus',
-      taskTitle: `Daily Briefing — ${new Date().toLocaleDateString()}`,
-      taskType:  'briefing',
-      outcome:   'complete',
-      notes:     briefing.slice(0, 500),
+      agentName: 'Nexus (Digital CEO)',
+      taskTitle: `Workflow design: ${processDescription.slice(0, 80)}`,
+      taskType:  'workflow_design',
+      outcome:   quality.passed ? 'complete' : 'needs_revision',
+      notes:     `${formatCeoQualityBadge(quality)}\n\n${spec.slice(0, 1500)}`,
     }).catch(() => {});
 
-    return { briefing, escalations, generatedAt: new Date().toISOString() };
+    const db = getSupabase();
+    if (db) {
+      await db.from('tasks').insert({
+        title:       `[Nova] Implement workflow: ${processDescription.slice(0, 60)}`,
+        description: spec.slice(0, 4000),
+        agent_id:    'nova',
+        created_by:  'nexus',
+        status:      'pending',
+        priority:    3,
+        type:        'analysis',
+        input:       JSON.stringify({ workflowSpec: spec, framework: 'ave' }),
+      }).catch(() => {});
+    }
+
+    return { spec, quality, delegatedTo: 'nova', framework: ceoModule.framework };
+  }
+
+  async processDueScheduledContent() {
+    return processDueScheduledContent(this);
+  }
+
+  async runContentCadenceCheck() {
+    return checkContentCadence(this);
+  }
+
+  async syncCeoNotionDashboard(period = 'manual') {
+    const ops = await buildOpsSnapshot();
+    return syncNotionCeoDashboard({ period, snap: ops });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -886,6 +1044,35 @@ Write a direct morning briefing covering: what got done, what's active, pipeline
 
   async chat(message, history = []) {
     const lower = message.toLowerCase();
+
+    // ── ACTION: Workflow design ────────────────────────────────────────────
+    if (/design workflow|analyze workflow|structure workflow|workflow spec|map process/.test(lower)) {
+      try {
+        const result = await this.designWorkflow({ processDescription: message });
+        return `Boss, workflow spec drafted (${result.quality.grade} quality). Logged to Notion and Nova has a build task queued.\n\n${result.spec.slice(0, 1200)}${result.spec.length > 1200 ? '…' : ''}`;
+      } catch (e) {
+        return `Workflow design failed — ${e.message}`;
+      }
+    }
+
+    // ── ACTION: CEO ops snapshot ───────────────────────────────────────────
+    if (/ceo ops|ceo status|cadence status|content cadence/.test(lower)) {
+      const ops = await this.getCeoOpsStatus();
+      const o = ops.ops;
+      return `CEO ops, Boss: Blog last ${o.daysSinceLastBlog ?? '?'}d ago (cadence ${o.blogCadenceDays}d, due: ${o.cadenceDue ? 'yes' : 'no'}). Pending approvals: ${o.pendingApprovals}. Stuck tasks: ${o.stuckTasks}. Queue: ${o.contentSchedule.queued} queued, ${o.contentSchedule.pending} awaiting your YES.`;
+    }
+
+    // ── ACTION: Evening briefing on demand ─────────────────────────────────
+    if (/evening briefing|end of day|eod briefing|wrap up today/.test(lower)) {
+      const { briefing, quality } = await this.generateEveningBriefing();
+      return `${formatCeoQualityBadge(quality)}\n\n${briefing}`;
+    }
+
+    // ── ACTION: Sync Notion CEO dashboard ──────────────────────────────────
+    if (/sync notion|notion dashboard|update notion/.test(lower)) {
+      await this.syncCeoNotionDashboard('manual');
+      return 'Notion CEO dashboard synced, Boss.';
+    }
 
     // ── ACTION: Log to Notion ──────────────────────────────────────────────
     // Detects "log [X] to notion", "add [X] to notion", "log meeting"
@@ -1138,6 +1325,18 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
         return this.publishSectorArticle(payload);
       case 'create_content_calendar':
         return this.createContentCalendar(payload);
+      case 'design_workflow':
+        return this.designWorkflow(payload);
+      case 'content_cadence_check':
+        return this.runContentCadenceCheck();
+      case 'process_scheduled_content':
+        return this.processDueScheduledContent();
+      case 'ceo_ops':
+        return this.getCeoOpsStatus();
+      case 'evening_briefing':
+        return this.generateEveningBriefing();
+      case 'sync_notion_ceo':
+        return this.syncCeoNotionDashboard(payload?.period || 'manual');
       default:
         return this.orchestrate(JSON.stringify(task));
     }
@@ -1155,7 +1354,7 @@ For each article provide:
 - angle: unique insight or hook
 - keyword: primary SEO keyword
 - audience: target reader
-- scheduledFor: ISO date string, one per day starting tomorrow
+- scheduledFor: ISO date string, spaced every ${BLOG_CADENCE_DAYS} days starting tomorrow (blog cadence — Boss approves before publish)
 - rationale: why it drives DigiFusion enquiries
 
 Output ONLY a valid JSON array: [{ headline, sector, topic, angle, keyword, audience, scheduledFor, rationale }]
@@ -1172,13 +1371,22 @@ Practitioner-grade topics only. No generic listicles.`;
     }
 
     const existing = (await getJsonCache('cache/content-schedule.json').catch(() => null)) || [];
-    const fresh = ideas.map(a => ({ ...a, status: 'queued' }));
+    const fresh = ideas.map((a, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1 + i * BLOG_CADENCE_DAYS);
+      return {
+        ...a,
+        topic:        a.headline || a.topic,
+        status:       'queued',
+        scheduledFor: a.scheduledFor || d.toISOString(),
+      };
+    });
     await putJsonCache('cache/content-schedule.json', [...fresh, ...existing].slice(0, 20));
 
     return { calendar: fresh, totalQueued: fresh.length + existing.length };
   }
 
-  // Researcher -> Aether pipeline for a single sector article
+  // Researcher -> Aether pipeline — approval gate only (never direct publish)
   async publishSectorArticle({ sector, topic, angle }) {
     if (!topic) throw new Error('topic is required');
 
@@ -1188,24 +1396,24 @@ Practitioner-grade topics only. No generic listicles.`;
       depth: 'standard',
     });
 
-    const db = getSupabase();
-    if (db) {
-      await db.from('tasks').insert({
-        title:       `Write + publish: ${topic.slice(0, 80)}`,
-        description: `Write and publish a full ${sector || 'business'} article on: "${topic}"${angle ? `. Angle: ${angle}` : ''}.`,
-        agent_id:    'aether',
-        created_by:  'nexus',
-        status:      'pending',
-        priority:    4,
-        type:        'content',
-        input:       JSON.stringify({ topic, sector, angle, researchBrief: research?.brief }),
-      }).catch(() => {});
+    if (!research?.brief) {
+      return { topic, sector, error: 'Research failed — no brief produced' };
     }
 
+    const orch = await this.orchestrate(topic, {
+      researchBrief: research.brief,
+      nextStep:      'blog',
+      priority:      4,
+    });
+
     return {
-      topic, sector,
-      researchReady: Boolean(research?.brief),
-      message: `Researcher complete. Aether briefed to write "${topic}". POST /api/content/publish to trigger immediately.`,
+      topic,
+      sector,
+      type:       orch.type,
+      approvalId: orch.approvalId,
+      message:    orch.type === 'pending_boss_approval'
+        ? `Blog brief sent for Boss approval via WhatsApp. Nothing publishes until you reply YES.`
+        : orch.message || 'Pipeline completed',
     };
   }
 

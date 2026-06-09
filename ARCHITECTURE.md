@@ -34,7 +34,7 @@ PathGuru is one system with **five departments** (offices). Each department owns
 | **Atlas** | `atlas` | Business Development — Deal Engine, segment blueprints, BD playbooks |
 | **Nova** | `nova` | AI & Systems Engineering — Automation Velocity Engine |
 | **Aether** | `aether` | Digital Media & Content Strategy — C2C Pipeline, blog derivatives |
-| **Nexus** | `nexus` | Command & coordination — **Engagement Model** delivery architecture on every orchestration |
+| **Nexus** | `nexus` | **Digital CEO** — Engagement Model on every orchestration; morning/evening briefings; blog cadence; workflow design; Notion sync |
 | **Synthesizer** | `synthesizer` | Knowledge engine — PDF ingest, KB queries |
 | **Pulse** | `pulse` | Monitoring & alerts |
 | **Aria** | `assistant` | DigiFusion visitor VA (runs on API, not PathGuru UI) |
@@ -50,7 +50,7 @@ firmFrameworks.js  (canonical registry — definitions only)
 firmKnowledge.js   (unified layer — catalog, seeding, agent exports)
         │
         ├──► agentBase.js      → injects getFrameworksForAgent() into every agent prompt
-        ├──► nexus.js          → ENGAGEMENT_MODEL_DOCTRINE woven into CEO system prompt
+        ├──► nexus.js          → Digital CEO doctrine (nexusCeoDoctrine.js) + ops engine (nexusCeoOps.js)
         ├──► assistant.js      → buildAriaFrameworkContext() for visitor chat
         ├──► synthesizer.js    → ingest, query, framework probe
         └──► server.js         → GET /api/firm-ip/library, /api/agents/synthesizer/frameworks
@@ -63,7 +63,27 @@ firmKnowledge.js   (unified layer — catalog, seeding, agent exports)
 | `GET /api/firm-ip/library` | Unified catalog: operating frameworks + Intelligence Library products |
 | `GET /api/agents/synthesizer/frameworks` | KB backing status per framework |
 | `POST /api/agents/synthesizer/query` | Agent knowledge retrieval |
-| `GET /api/blueprints` | Paywalled blueprint catalog (DigiFusion storefront) |
+| `GET /api/blueprints` | Paywalled blueprint catalog (DigiFusion products) |
+
+## Nexus Digital CEO
+
+Nexus is the **Digital CEO**, not a task router. Executive craft is in `backend/skills/nexusCeoDoctrine.js` (mapped to firm IP — no generic McKinsey/TOGAF operating logic). Quality enforced by `ceoQualityGate.js`. Ops in `nexusCeoOps.js`.
+
+| Schedule | Action |
+|---|---|
+| 7:00 daily | Morning briefing → WhatsApp + Notion CEO dashboard |
+| 18:00 daily | Evening briefing → WhatsApp + Notion |
+| Every 12h | Blog cadence check (default every 3 days) → Orion → Aether **brief** → Boss YES |
+| Every 6h | Due scheduled content → approval path only (**never auto-publish**) |
+
+| API | Purpose |
+|---|---|
+| `GET /api/agents/nexus/ceo-ops` | Cadence, approvals, content queue, stuck tasks |
+| `POST /api/agents/nexus/evening-briefing` | On-demand evening wrap-up |
+| `POST /api/agents/nexus/design-workflow` | AVE-aligned workflow spec → Nova task + Notion |
+| `POST /api/agents/nexus/content-cadence-check` | Manual cadence trigger |
+
+Env: `BLOG_CADENCE_DAYS=3` (2 or 3 recommended).
 
 ### Operating frameworks (agent DNA — internal)
 
