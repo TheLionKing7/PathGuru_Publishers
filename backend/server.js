@@ -5,8 +5,10 @@ try { const { createRequire } = await import('node:module'); createRequire(impor
  * PathGuru Publishers — API Server (Phase 3)
  *
  * GET  /              → web app UI
- * GET  /style.css     → webapp styles
- * GET  /app.js        → webapp logic
+ * GET  /style.css              → webapp styles
+ * GET  /css/...css             → webapp/css (auto-served)
+ * GET  /js/...js               → webapp/js (auto-served)
+ * GET  /app.js                 → webapp logic
  * GET  /ping            → lightweight keep-alive (UptimeRobot — use this, not /health)
  * GET  /health          → full status (+ font diagnostics)
  * POST /api/generate  → book pipeline
@@ -123,6 +125,18 @@ function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
+
+function serveWebappFile(res, filePath, mime) {
+  if (!existsSync(filePath)) return false;
+  res.writeHead(200, {
+    'Content-Type': mime,
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+  res.end(readFileSync(filePath));
+  return true;
 }
 function json(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -244,18 +258,31 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // ── Static (webapp) ─────────────────────────────
+  // ── Static (webapp) — /css/* and /js/* auto-served from webapp folders ──
+  if (req.method === 'GET' && path.startsWith('/css/')) {
+    const rel = decodeURIComponent(path.slice(5)).replace(/\\/g, '/').replace(/\.\./g, '');
+    if (rel && rel.endsWith('.css') && !rel.startsWith('/')) {
+      const filePath = join(WEBAPP, 'css', rel);
+      if (serveWebappFile(res, filePath, 'text/css; charset=utf-8')) return;
+      err(res, `Not found: ${path}`, 404);
+      return;
+    }
+  }
+
+  if (req.method === 'GET' && path.startsWith('/js/')) {
+    const rel = decodeURIComponent(path.slice(4)).replace(/\\/g, '/').replace(/\.\./g, '');
+    if (rel && rel.endsWith('.js') && !rel.startsWith('/')) {
+      const filePath = join(WEBAPP, 'js', rel);
+      if (serveWebappFile(res, filePath, 'application/javascript; charset=utf-8')) return;
+      err(res, `Not found: ${path}`, 404);
+      return;
+    }
+  }
+
   if (req.method === 'GET' && STATIC[path]) {
     const { file, mime } = STATIC[path];
-    if (existsSync(file)) {
-      res.writeHead(200, {
-        'Content-Type': mime,
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-      });
-      res.end(readFileSync(file));
-    } else err(res, `Not found: ${path}`, 404);
+    if (serveWebappFile(res, file, mime)) return;
+    err(res, `Not found: ${path}`, 404);
     return;
   }
 
