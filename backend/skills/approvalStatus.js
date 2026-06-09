@@ -20,7 +20,7 @@ export async function buildApprovalStatusReply() {
     const title = payload.proposedTitle || input.subject || pending.title || 'Blog post';
     lines.push(`⏸ **Still waiting on your YES**, Boss.`);
     lines.push(`Pending: *${String(title).slice(0, 80)}*`);
-    lines.push(`Reply YES on WhatsApp to publish (or NO to cancel). You can add caveats: "YES but shorten the intro".`);
+    lines.push(`Reply YES on WhatsApp, Nexus chat, or use **Approve & Publish** in Command Center. Caveats OK: "YES but shorten the intro".`);
     lines.push(`Ref: ${pending.id?.slice(0, 8) || 'n/a'}`);
     return lines.join('\n');
   }

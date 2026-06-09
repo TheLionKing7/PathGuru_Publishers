@@ -1891,10 +1891,27 @@
         <section class="tab-panel active" id="tab-agents-command" aria-label="Nexus Command Center">
           <div class="nexus-ops-body">
             <p class="nexus-ops-intro">Unified operations view — cadence, approvals, content queue, and agent status. Boss approval gates all publishing.</p>
+            <div class="nexus-approval-panel" id="nexusApprovalPanel" hidden>
+              <h3 class="nexus-ops-agents-title">Pending blog approval</h3>
+              <p class="nexus-ops-intro" id="nexusApprovalDetail"></p>
+              <textarea class="form-input" id="nexusApprovalCaveats" rows="2" placeholder="Optional caveats (e.g. shorten the intro)"></textarea>
+              <div class="header-actions" style="margin-top:10px">
+                <button class="btn-primary btn-sm" id="nexusApproveBtn">Approve &amp; Publish</button>
+                <button class="btn-secondary btn-sm" id="nexusRejectBtn">Reject</button>
+              </div>
+              <p class="nexus-ops-intro" id="nexusApprovalResult" style="margin-top:8px"></p>
+            </div>
             <div class="nexus-ops-grid" id="ceoOpsGrid">
               <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>
             </div>
             <div class="nexus-ops-agents" id="ceoOpsAgents"></div>
+            <div class="nexus-funnel-panel" id="nexusFunnelPanel">
+              <h3 class="nexus-ops-agents-title">C2C Funnel — Lead magnet → Email → Nurture → Attribution</h3>
+              <p class="nexus-ops-intro">Captures from digitafusion.com forms via <code>POST /api/funnel/capture</code>. Nurture cron: <code>GET /api/cron/nurture</code>.</p>
+              <div class="nexus-ops-grid" id="funnelKpiGrid"></div>
+              <div class="analytics-section" id="funnelByContent"></div>
+              <div class="analytics-section" id="funnelRecentCaptures"></div>
+            </div>
           </div>
         </section>
 

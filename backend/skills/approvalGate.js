@@ -101,23 +101,34 @@ export async function createApprovalRequest({ approvalType, subject, detail, pay
  *
  * @returns {object|null} Supabase task row or null
  */
-export async function findPendingApproval() {
+/** Extract 8-char ref from Boss message, e.g. "Ref: ad49f245" */
+export function extractApprovalRef(text = '') {
+  const m = String(text).match(/\b(?:ref[:\s#]*)?([a-f0-9]{8})\b/i);
+  return m?.[1]?.toLowerCase() || null;
+}
+
+export async function findPendingApproval(refPrefix = null) {
   const db = getSupabase();
   if (!db) return null;
 
-  const { data, error } = await db.from('tasks')
+  let q = db.from('tasks')
     .select('*')
     .eq('type',   APPROVAL_TASK_TYPE)
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
-    .limit(1);
+    .limit(refPrefix ? 20 : 1);
+
+  const { data, error } = await q;
 
   if (error) {
     console.error('[ApprovalGate] findPendingApproval error:', error.message);
     return null;
   }
 
-  return data?.[0] || null;
+  if (!refPrefix) return data?.[0] || null;
+
+  const hit = (data || []).find(row => String(row.id || '').toLowerCase().startsWith(refPrefix.toLowerCase()));
+  return hit || data?.[0] || null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,11 +150,13 @@ export function parseApprovalReply(text) {
   const t = raw.toLowerCase();
 
   const rejected = /^(no|nope|reject[ed]?|cancel|stop|don'?t|hold|wait|not yet|abort|pause|skip|❌|👎)\b/i.test(t)
-    || /^change\b/i.test(t) || /^revise\b/i.test(t) || /^redo\b/i.test(t);
+    || /^change\b/i.test(t) || /^revise\b/i.test(t) || /^redo\b/i.test(t)
+    || /\b(don'?t publish|do not publish|hold off)\b/i.test(t);
 
   if (rejected) return { decision: 'rejected', feedback: raw, caveats: [] };
 
-  const approvedLead = /^(yes|yep|yup|approve[d]?|go ahead|proceed|confirm[ed]?|ok|okay|do it|publish|send it|looks good|fire it|go|green light|✅|👍)\b/i.test(t)
+  const approvedLead = /^(yes|yep|yup|yeah|approve[d]?|go ahead|proceed|confirm[ed]?|ok|okay|do it|publish|send it|looks good|fire it|go|green light|sure|affirmative|✅|👍)\b/i.test(t)
+    || /\b(i approve|you have my approval|my approval|please publish|go for it|sounds good|that'?s fine|you can publish)\b/i.test(t)
     || /\b(yes|approve[d]?|go ahead|proceed|publish)\b/i.test(t);
 
   if (!approvedLead) {
@@ -238,7 +251,8 @@ export async function resolveApproval(approvalId, decision, feedback = '') {
  * }}
  */
 export async function handleApprovalReply(replyText) {
-  const pending = await findPendingApproval();
+  const refPrefix = extractApprovalRef(replyText);
+  const pending = await findPendingApproval(refPrefix);
   if (!pending) return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
 
   const { decision, feedback, caveats = [], conditional = false } = parseApprovalReply(replyText);

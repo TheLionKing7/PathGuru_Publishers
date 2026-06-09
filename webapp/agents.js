@@ -257,12 +257,108 @@
   /* ═══════════════════════════════════════════════════════════════
      NEXUS COMMAND CENTER
   ═══════════════════════════════════════════════════════════════ */
+  async function loadApprovalPanel () {
+    const panel = $('nexusApprovalPanel');
+    const detail = $('nexusApprovalDetail');
+    const resultEl = $('nexusApprovalResult');
+    if (!panel) return;
+    try {
+      const data = await apiFetch('/api/agents/nexus/approval-status');
+      const reply = data.reply || '';
+      const pending = /still waiting/i.test(reply);
+      panel.hidden = !pending;
+      if (detail) detail.textContent = reply.replace(/\*\*/g, '');
+      if (resultEl) resultEl.textContent = '';
+    } catch (e) {
+      panel.hidden = true;
+    }
+  }
+
+  async function resolvePendingApproval (decision) {
+    const caveats = $('nexusApprovalCaveats')?.value.trim() || '';
+    const feedback = decision === 'approved'
+      ? (caveats ? `YES but ${caveats}` : 'YES — approved via Command Center')
+      : 'NO — rejected via Command Center';
+    const btnA = $('nexusApproveBtn');
+    const btnR = $('nexusRejectBtn');
+    const resultEl = $('nexusApprovalResult');
+    if (btnA) btnA.disabled = true;
+    if (btnR) btnR.disabled = true;
+    if (resultEl) resultEl.textContent = decision === 'approved' ? 'Publishing… (may take 1–2 min)' : 'Cancelling…';
+    try {
+      const base = getBackendUrl();
+      const res = await fetch(`${base}/api/agents/nexus/resolve-approval`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, feedback }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      if (resultEl) resultEl.textContent = data.reply || 'Done.';
+      await loadCeoOps();
+    } catch (e) {
+      if (resultEl) resultEl.textContent = e.message;
+    } finally {
+      if (btnA) btnA.disabled = false;
+      if (btnR) btnR.disabled = false;
+    }
+  }
+
+  async function loadFunnelAttribution () {
+    const kpiGrid = $('funnelKpiGrid');
+    const byContent = $('funnelByContent');
+    const recent = $('funnelRecentCaptures');
+    if (!kpiGrid) return;
+    kpiGrid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div></div>';
+    try {
+      const data = await apiFetch('/api/funnel/attribution?range=30d');
+      const f = data.funnel || {};
+      const cards = [
+        { label: 'Magnet captures', value: String(f.captures ?? 0), hint: 'Last 30 days' },
+        { label: 'Nurture active', value: String(f.nurtureActive ?? 0), hint: 'In sequence' },
+        { label: 'Nurture completed', value: String(f.nurtureCompleted ?? 0), hint: 'Finished 5-step' },
+        { label: 'Bookings', value: String(f.bookings ?? 0), hint: 'Strategy sessions' },
+        { label: 'Converted leads', value: String(f.converted ?? 0), hint: 'Closed deals' },
+      ];
+      kpiGrid.innerHTML = cards.map(c => `
+        <div class="nexus-ops-card">
+          <span class="nexus-ops-card-label">${esc(c.label)}</span>
+          <span class="nexus-ops-card-value">${esc(c.value)}</span>
+          <span class="nexus-ops-card-hint">${esc(c.hint)}</span>
+        </div>
+      `).join('');
+
+      if (byContent) {
+        const rows = (data.byContent || []).map(r => `<tr><td>${esc(r.label)}</td><td>${r.count}</td></tr>`).join('')
+          || '<tr><td colspan="2">No attributed content yet</td></tr>';
+        byContent.innerHTML = `<div class="analytics-section-title">Top content → captures</div>
+          <table class="analytics-table"><thead><tr><th>Content</th><th>Captures</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      if (recent) {
+        const rows = (data.recentCaptures || []).map(c => `
+          <tr>
+            <td>${esc(c.email)}</td>
+            <td>${esc(c.magnet_slug || '—')}</td>
+            <td>${esc(c.content_slug || '—')}</td>
+            <td>${esc(c.utm_source || '—')}</td>
+          </tr>`).join('') || '<tr><td colspan="4">No captures yet — wire DigiFusion forms to POST /api/funnel/capture</td></tr>';
+        recent.innerHTML = `<div class="analytics-section-title">Recent captures</div>
+          <table class="analytics-table"><thead><tr><th>Email</th><th>Magnet</th><th>Content</th><th>UTM</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+    } catch (err) {
+      kpiGrid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run supabase/009_lead_magnet_funnel.sql if tables are missing.</div>`;
+    }
+  }
+
   async function loadCeoOps () {
     const grid = $('ceoOpsGrid');
     const agentsEl = $('ceoOpsAgents');
     if (!grid) return;
     grid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>';
     if (agentsEl) agentsEl.innerHTML = '';
+    await loadApprovalPanel();
+    loadFunnelAttribution();
     try {
       const data = await apiFetch('/api/agents/nexus/ceo-ops');
       const ops = data.ops || {};
@@ -1937,6 +2033,8 @@
     /* Refresh button — Network */
     $('agentsRefreshBtn')?.addEventListener('click', loadNetworkStatus);
     $('ceoOpsRefreshBtn')?.addEventListener('click', loadCeoOps);
+    $('nexusApproveBtn')?.addEventListener('click', () => resolvePendingApproval('approved'));
+    $('nexusRejectBtn')?.addEventListener('click', () => resolvePendingApproval('rejected'));
     $('ceoNotionSyncBtn')?.addEventListener('click', async () => {
       const btn = $('ceoNotionSyncBtn');
       if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }

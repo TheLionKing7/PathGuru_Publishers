@@ -39,6 +39,14 @@ import { buildClientBlueprint, listClientBlueprints, getClientBlueprint } from '
 import { buildPillarClusterPlan, enqueueC2cCalendar, derivePlaybookTeasers } from '../skills/c2cGrowthEngine.js';
 import { retuneOpenEngagements } from '../skills/engagementMonitor.js';
 import { buildApprovalStatusReply } from '../skills/approvalStatus.js';
+import {
+  processBossApprovalMessage,
+  isApprovalStatusQuery,
+  isWhatsAppApprovalQuery,
+  buildApprovalChannelGuidance,
+  getNotionCapabilityReply,
+} from '../skills/approvalActions.js';
+import { findPendingApproval } from '../skills/approvalGate.js';
 
 const CHAT_TIMEOUT_MS = Number(process.env.NEXUS_CHAT_TIMEOUT_MS || 25000);
 
@@ -83,6 +91,8 @@ Tone: decisive, direct, confident. You are the most capable operator in the room
 
 HONESTY RULES — violation of these is a critical failure:
 - You can ONLY confirm things that appear in the LIVE SYSTEM STATE block above your response.
+- EXCEPTION: Boss approvals — if PENDING APPROVAL appears in LIVE SYSTEM STATE, tell Boss to type YES in this chat or use Command Center; WhatsApp replies are ingested via webhook when configured.
+- EXCEPTION: Notion — if NOTION STATUS appears in LIVE SYSTEM STATE, describe those capabilities accurately.
 - If a fact is not in LIVE SYSTEM STATE, say "I don't have visibility into that right now."
 - NEVER say "I've confirmed X" unless X appears in the data passed to you.
 - NEVER say "I've updated", "I've logged", "I've notified" unless code in this session actually ran those functions.
@@ -1128,7 +1138,14 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
   async planC2cGrowth(input = {}) {
     const plan = await buildPillarClusterPlan(input);
     const queued = input.enqueue !== false ? await enqueueC2cCalendar(plan) : { queued: 0 };
-    return { plan, ...queued };
+    let leadMagnet = null;
+    try {
+      const { createLeadMagnetFromPlan } = await import('../skills/leadMagnetFunnel.js');
+      leadMagnet = await createLeadMagnetFromPlan(plan);
+    } catch (e) {
+      console.warn('[Nexus] Lead magnet creation skipped:', e.message);
+    }
+    return { plan, leadMagnet, ...queued };
   }
 
   async derivePlaybookBlogTeasers(playbookSlug, count = 3) {
@@ -1229,8 +1246,32 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     }
 
-    // ── ACTION: Approval / blog publish status (fast — no LLM) ─────────────
-    if (/approval|approved|gotten the approval|blog.*publish|waiting.*yes|pending.*blog|did you (get|receive)/i.test(lower)) {
+    // ── ACTION: Boss YES/NO on pending approval (chat + WhatsApp parity) ───
+    try {
+      const approvalResult = await processBossApprovalMessage(message);
+      if (approvalResult.handled && approvalResult.reply) {
+        return approvalResult.reply;
+      }
+    } catch (e) {
+      console.warn('[Nexus] Approval message handling failed:', e.message);
+    }
+
+    // ── ACTION: WhatsApp / approval channel guidance (fast — no LLM) ───────
+    if (isWhatsAppApprovalQuery(message) || (isApprovalStatusQuery(message) && /whatsapp|got it|got my|via wa/i.test(lower))) {
+      try {
+        return await buildApprovalChannelGuidance(/notion/i.test(lower));
+      } catch (e) {
+        return `I could not read approval status right now: ${e.message}. Type YES here to approve, or use Command → Approve & Publish.`;
+      }
+    }
+
+    // ── ACTION: Notion capability (fast — no LLM) ─────────────────────────
+    if (/notion/.test(lower) && /access|operate|work within|can you|do you|integrat/i.test(lower) && !/log|sync|add/i.test(lower)) {
+      return getNotionCapabilityReply();
+    }
+
+    // ── ACTION: Approval status query (fast — no LLM) ─────────────────────
+    if (isApprovalStatusQuery(message)) {
       try {
         return await buildApprovalStatusReply();
       } catch (e) {
@@ -1313,14 +1354,24 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     const db = getSupabase();
     let liveContext = '';
     if (db) {
-      const [tasksRes, leadsRes] = await Promise.all([
+      const [tasksRes, leadsRes, pendingApproval] = await Promise.all([
         db.from('tasks').select('title, agent_id, status').order('created_at', { ascending: false }).limit(5),
         db.from('leads').select('name, status, lead_score').order('created_at', { ascending: false }).limit(3),
+        findPendingApproval(),
       ]);
       const tasks = tasksRes.data || [];
       const leads = leadsRes.data || [];
       if (tasks.length) liveContext += `\nRECENT TASKS:\n${tasks.map(t => `- ${t.title?.slice(0,60)} (${t.agent_id}, ${t.status})`).join('\n')}`;
       if (leads.length) liveContext += `\nRECENT LEADS:\n${leads.map(l => `- ${l.name || 'Unknown'} [${l.status}, score ${l.lead_score}]`).join('\n')}`;
+      if (pendingApproval) {
+        const inp = typeof pendingApproval.input === 'string' ? JSON.parse(pendingApproval.input) : (pendingApproval.input || {});
+        liveContext += `\nPENDING APPROVAL: ${inp.subject || pendingApproval.title} (ref ${String(pendingApproval.id).slice(0, 8)}). Boss can type YES in this chat to publish.`;
+      } else {
+        liveContext += '\nPENDING APPROVAL: none';
+      }
+      const notionOk = !!(process.env.NOTION_API_KEY && process.env.NOTION_TASKS_DB_ID);
+      liveContext += `\nNOTION STATUS: ${notionOk ? 'connected (log tasks, sync CEO dashboard)' : 'not configured'}`;
+      liveContext += '\nBOSS APPROVAL CHANNELS: Nexus chat YES, WhatsApp webhook, Command Center Approve button';
     }
 
     const episodic = await this.recallEpisodic(3).catch(() => '');
@@ -1338,6 +1389,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     // Hard honesty enforcement: the LLM can ONLY assert facts visible in LIVE SYSTEM STATE above
     const chatSystem = this.systemPrompt +
       '\n\nYOU CAN ONLY CONFIRM FACTS VISIBLE IN THE LIVE SYSTEM STATE BLOCK ABOVE.' +
+      ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about WhatsApp, explain replies are ingested via webhook — check whether approval is still pending in LIVE SYSTEM STATE.' +
       ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
       ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 

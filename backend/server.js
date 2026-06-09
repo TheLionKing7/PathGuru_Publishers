@@ -1962,37 +1962,12 @@ const server = createServer(async (req, res) => {
       // resolve it and execute the approved action rather than passing to chat.
       let reply;
       try {
-        const { handleApprovalReply } = await import('./skills/approvalGate.js');
-        const approval = await handleApprovalReply(msgBody);
+        const { processBossApprovalMessage } = await import('./skills/approvalActions.js');
+        const result = await processBossApprovalMessage(msgBody);
 
-        if (approval.handled) {
-          if (approval.decision === 'approved') {
-            console.log(`[WhatsApp] Boss approved: ${approval.approvalType} (${approval.approvalId?.slice(0,8)})`);
-
-            // Execute the approved action
-            if (approval.approvalType === 'blog_post' && approval.payload) {
-              try {
-                const { executeApprovedBlogPublish } = await import('./skills/blogApprovalFlow.js');
-                const blogResult = await executeApprovedBlogPublish(approval.payload);
-                const url = blogResult?.url || (blogResult?.slug ? `https://www.digitafusion.com/blog/${blogResult.slug}` : '');
-                const caveatNote = approval.caveats?.length
-                  ? `\n\n(Applied your notes: ${approval.caveats.join('; ').slice(0, 200)})`
-                  : '';
-                reply = `✅ Approved and published.${caveatNote}\n\n${blogResult.topic || 'Blog post'} is live${url ? `:\n${url}` : ''}.`;
-              } catch (blogErr) {
-                console.error('[WhatsApp] Blog execution after approval failed:', blogErr.message);
-                reply = `✅ Approved, but publishing hit an error: ${blogErr.message.slice(0, 120)}. Check PathGuru logs.`;
-              }
-            } else {
-              reply = `✅ Approved. I'll proceed with: ${approval.subject || approval.approvalType}.`;
-            }
-          } else {
-            // Rejected
-            console.log(`[WhatsApp] Boss rejected: ${approval.approvalType} (${approval.approvalId?.slice(0,8)})`);
-            reply = `❌ Understood. ${approval.approvalType === 'blog_post' ? 'Blog post' : 'Request'} cancelled. Let me know if you want to revisit or change direction.`;
-          }
-
-          // No Nexus chat needed — approval was handled
+        if (result.handled) {
+          console.log(`[WhatsApp] Approval resolved: ${result.approval?.decision} (${result.approval?.approvalId?.slice(0, 8)})`);
+          reply = result.reply;
           const safe = (reply || '').length > 1550 ? reply.slice(0, 1547) + '…' : reply;
           res.writeHead(200, { 'Content-Type': 'text/xml' });
           res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${safe.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Message></Response>`);
@@ -2048,6 +2023,14 @@ const server = createServer(async (req, res) => {
           notes:            (inv.questions_and_answers?.map(q => `${q.question}: ${q.answer}`).join('\n')) || null,
         }).select().single();
         if (data) {
+          const db2 = getDb();
+          if (db2) {
+            db2.from('content_attribution_events').insert({
+              event_type: 'booking',
+              email:      inv.email,
+              metadata:   { bookingId: data.id, source: 'calendly', startTime: evt.start_time },
+            }).catch(() => {});
+          }
           nexus.escalateToOwner({
             subject:  `Calendly booking — ${inv.name}`,
             body:     `${inv.name} (${inv.email}) booked a session for ${evt.start_time}`,
@@ -2257,6 +2240,74 @@ const server = createServer(async (req, res) => {
     try {
       const { buildApprovalStatusReply } = await import('./skills/approvalStatus.js');
       json(res, { reply: await buildApprovalStatusReply(), timestamp: new Date().toISOString() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/resolve-approval — Boss YES/NO from UI (bypasses WhatsApp webhook)
+  //   body: { decision: 'approved'|'rejected', feedback?: string }
+  if (req.method === 'POST' && path === '/api/agents/nexus/resolve-approval') {
+    try {
+      const body = await readBody(req);
+      const decision = (body.decision || 'approved').toLowerCase();
+      const publishTimeoutMs = Number(process.env.BLOG_PUBLISH_TIMEOUT_MS || 180000);
+      const { forceResolvePendingApproval } = await import('./skills/approvalActions.js');
+      const result = await Promise.race([
+        forceResolvePendingApproval(
+          decision === 'rejected' ? 'rejected' : 'approved',
+          body.feedback || `Manual ${decision} via PathGuru UI`,
+        ),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Publish timed out — check logs; approval may still be processing.')), publishTimeoutMs),
+        ),
+      ]);
+      if (!result.handled) { err(res, result.error || 'No pending approval', 404); return; }
+      json(res, { reply: result.reply, approval: result.approval, timestamp: new Date().toISOString() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── C2C Funnel: lead magnet → email → nurture → attribution ───────────────
+  if (req.method === 'GET' && path === '/api/funnel/lead-magnets') {
+    try {
+      const { listLeadMagnets } = await import('./skills/leadMagnetFunnel.js');
+      json(res, await listLeadMagnets());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/funnel/lead-magnet') {
+    try {
+      const body = await readBody(req);
+      const { createLeadMagnet } = await import('./skills/leadMagnetFunnel.js');
+      json(res, await createLeadMagnet(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/funnel/capture') {
+    try {
+      const body = await readBody(req);
+      const { captureLeadMagnet } = await import('./skills/leadMagnetFunnel.js');
+      json(res, await captureLeadMagnet(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/funnel/attribution') {
+    try {
+      const range = url.searchParams.get('range') || '30d';
+      const { getAttributionDashboard } = await import('./skills/attributionDashboard.js');
+      json(res, await getAttributionDashboard(range));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/cron/nurture') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { processNurtureQueue } = await import('./skills/leadMagnetFunnel.js');
+      json(res, await processNurtureQueue());
     } catch (e) { err(res, e.message, 500); }
     return;
   }
