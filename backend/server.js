@@ -2149,7 +2149,10 @@ ent.refundOrder(shopRefundMatch[1], body);
       const { sendImmediate } = await import('./skills/notifier.js');
       await sendImmediate('DigiFusion Daily Briefing', briefing?.summary || 'Daily briefing ready.', 'whatsapp');
       json(res, briefing);
-    } catch (e) { err(res, e.message, 500); }
+    } catch (e) {
+      console.error('[Cron] morning-briefing failed:', e.message);
+      err(res, e.message, 500);
+    }
     return;
   }
 

@@ -102,6 +102,9 @@ const AGENT_CAPABILITIES = {
 const RESEARCH_REQUIRED_TYPES = ['research', 'analysis', 'competitive_intelligence', 'market_research', 'content_research'];
 
 // ── Client lifecycle stage sequence ──────────────────────────────────────────
+/** CEO briefings must survive a pinned provider outage (e.g. Gemini billing). */
+const CEO_LLM_OPTS = { json: false, fallback: true };
+
 const LIFECYCLE_STAGES = [
   'discovery',
   'intake_complete',
@@ -879,7 +882,7 @@ ${status.pendingAlerts.map(a => `- [${a.severity?.toUpperCase()}] ${a.title}`).j
 Write a direct morning CEO briefing: lead with today's top priority, then pipeline pulse, approvals needed, content cadence, one focus line per active agent. Max 6 sentences unless Boss asked for detail. Apply Minto Pyramid — recommendation first.`;
 
     const [briefingRaw, escalations] = await Promise.all([
-      callAiProvider(this.provider, briefingPrompt, this.systemPrompt, { json: false }),
+      callAiProvider(this.provider, briefingPrompt, this.systemPrompt, CEO_LLM_OPTS),
       this.checkEscalationTriggers().catch(() => []),
     ]);
 
@@ -888,11 +891,13 @@ Write a direct morning CEO briefing: lead with today's top priority, then pipeli
     if (!quality.passed) {
       const rewrite = await callAiProvider(this.provider,
         `Rewrite this CEO briefing to pass quality gate. Lead with recommendation. Remove platitudes. Reference firm IP where relevant.\n\n${briefing}`,
-        this.systemPrompt, { json: false });
+        this.systemPrompt, CEO_LLM_OPTS);
       briefing = rewrite;
     }
 
-    await syncNotionCeoDashboard({ period: 'morning', briefingExcerpt: briefing, snap: ops });
+    await syncNotionCeoDashboard({ period: 'morning', briefingExcerpt: briefing, snap: ops }).catch((e) => {
+      console.warn('[Nexus CEO] Notion/R2 ops sync failed (briefing still returned):', e.message);
+    });
 
     return {
       briefing,
@@ -941,10 +946,12 @@ CEO OPS:
 
 Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first.`;
 
-    let briefing = await callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+    let briefing = await callAiProvider(this.provider, prompt, this.systemPrompt, CEO_LLM_OPTS);
     const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
 
-    await syncNotionCeoDashboard({ period: 'evening', briefingExcerpt: briefing, snap: ops });
+    await syncNotionCeoDashboard({ period: 'evening', briefingExcerpt: briefing, snap: ops }).catch((e) => {
+      console.warn('[Nexus CEO] Notion/R2 ops sync failed (briefing still returned):', e.message);
+    });
 
     return {
       briefing,

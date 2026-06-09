@@ -13,7 +13,7 @@ services:
 
       # ── AI Provider ──────────────────────────────
       - key: AI_PROVIDER
-        value: gemini            # gemini | claude | deepseek | cerebras | perplexity
+        value: deepseek          # gemini | claude | deepseek | cerebras | perplexity
       - key: AI_MAX_TOKENS
         value: "65536"
 
