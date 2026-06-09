@@ -21,17 +21,23 @@ const MODULE_OF_TAB = {
   // Analytics department
   analytics: 'analytics',
   // Network + Intelligence Studio (shared agents shell, different tabs)
-  'agents-network': 'agents', 'agents-console': 'agents',
-  'agents-tasks': 'agents',   'agents-leads': 'agents',
-  'agents-ip': 'agents',      'agents-content': 'agents',
+  'agents-command': 'agents', 'agents-workflow': 'agents',
+  'agents-activity': 'agents', 'agents-network': 'agents',
+  'agents-console': 'agents', 'agents-tasks': 'agents',
+  'agents-leads': 'agents', 'agents-ip': 'agents',
+  'agents-content': 'agents',
 };
 const DEFAULT_TAB_OF_MODULE = {
   publishing: 'brief',
   blog: 'blog',
   shop: 'shop-products',
   analytics: 'analytics',
-  agents: 'agents-network',
+  agents: 'agents-command',
 };
+
+function notifyTabChange (tab, mod) {
+  document.dispatchEvent(new CustomEvent('pg:tab-change', { detail: { tab, module: mod } }));
+}
 
 /** Called by shell.js for cross-department navigation */
 function setActiveTab (tab, moduleOverride) {
@@ -48,6 +54,7 @@ function setActiveTab (tab, moduleOverride) {
   if (window.PathGuruShell) {
     window.PathGuruShell.updateChrome(tab, mod);
   }
+  notifyTabChange(tab, mod);
 }
 
 function _dataDirectSet (key, value) {
@@ -93,6 +100,7 @@ const State = (() => {
         if (window.PathGuruShell) {
           window.PathGuruShell.updateChrome(value, _data.activeModule);
         }
+        notifyTabChange(value, _data.activeModule);
       }
       if (key === 'activeModule' && window.PathGuruShell) {
         window.PathGuruShell.updateChrome(_data.activeTab, value);

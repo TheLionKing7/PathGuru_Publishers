@@ -355,9 +355,139 @@ body.pg-shell-v3 [data-module="publishing"].module-shell.active .panel-eyebrow  
 body.pg-shell-v3 [data-module="agents"].module-shell.active .panel-eyebrow[data-intel],
 body.pg-shell-v3 #tab-agents-ip.active ~ * .panel-eyebrow { color: var(--dept-intelligence); }
 
+/* ── Intelligence route nav (Playbooks | Schedule | Blog-room) ── */
+.dept-route-nav {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 0 24px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.dept-route-nav.is-visible {
+  display: flex;
+}
+
+.dept-route-tab {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.dept-route-tab:hover { color: var(--text-primary); }
+.dept-route-tab.active {
+  color: var(--dept-intelligence);
+  border-bottom-color: var(--dept-intelligence);
+}
+
+/* Intelligence: dept route owns navigation — hide duplicate agent topnav */
+body.pg-dept-intelligence #module-agents .module-topnav { display: none !important; }
+
 /* ── Department-scoped agent tabs ── */
 body.pg-dept-network #module-agents .dept-intel-only { display: none !important; }
 body.pg-dept-intelligence #module-agents .dept-network-only { display: none !important; }
+
+/* Network ops panels */
+.nexus-ops-intro {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+.nexus-ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.nexus-ops-card {
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nexus-ops-card-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.nexus-ops-card-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+.nexus-ops-card-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.nexus-ops-agents-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.nexus-ops-agent-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.nexus-ops-chip {
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  text-transform: capitalize;
+}
+.nexus-ops-chip-running { border-color: rgba(62,207,142,.4); color: var(--green); }
+.nexus-workflow-body { max-width: 900px; }
+.nexus-workflow-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.nexus-workflow-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.nexus-workflow-meta .form-input { flex: 1; min-width: 140px; }
+.nexus-workflow-spec {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  max-height: 480px;
+  overflow-y: auto;
+}
+.nexus-workflow-meta-result {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+}
+
+/* Products: prevent topnav from forcing page-wide horizontal scroll */
+body.pg-dept-products #module-shop .module-topnav {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+body.pg-dept-products #module-shop .module-body {
+  overflow-x: hidden;
+}
 
 /* ── Responsive ── */
 @media (max-width: 900px) {

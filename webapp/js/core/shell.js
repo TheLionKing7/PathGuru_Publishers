@@ -3,9 +3,6 @@
  * =========================
  * Single registry for all "offices" — each department maps to an existing
  * module shell but owns its own default tab and breadcrumb label.
- *
- * Publisher is the original core (KDP-ready PDF from Vektor prompts).
- * Other departments were added later and must not feel monolithic.
  */
 (function () {
   'use strict';
@@ -19,7 +16,7 @@
       defaultTab:   'brief',
       sections: {
         brief:   'Brief & Research',
-        assets:  'Project Assets',
+        assets:  'Publishing Repository',
         compile: 'Compile & Export',
       },
     },
@@ -32,22 +29,22 @@
       sections: {
         'agents-ip':      'Blueprint Library',
         'agents-content': 'Content Schedule',
-        blog:             'Blog Derivatives',
-        'blog-assets':    'Derivative Assets',
+        blog:             'Blog-room',
+        'blog-assets':    'Blog Assets',
       },
     },
     products: {
       id:           'products',
       label:        'Products & Tools',
-      tagline:      'Tools, SaaS & templates',
+      tagline:      'Firm SaaS, tools & catalog',
       module:       'shop',
       defaultTab:   'shop-products',
       sections: {
-        'shop-products':    'Products',
-        'shop-services':    'Services',
-        'shop-payments':    'Orders & Payments',
-        'shop-analytics':   'Revenue',
-        'shop-settings':    'Settings',
+        'shop-products':    'Product Catalog',
+        'shop-services':    'Consulting & Bookings',
+        'shop-payments':    'Revenue & Payments',
+        'shop-analytics':   'Revenue Analytics',
+        'shop-settings':    'Commerce Settings',
       },
     },
     network: {
@@ -55,49 +52,59 @@
       label:        'Agent Network',
       tagline:      'Operations & coordination',
       module:       'agents',
-      defaultTab:   'agents-network',
+      defaultTab:   'agents-command',
       sections: {
-        'agents-network': 'Agent Roster',
-        'agents-console': 'Agent Console',
-        'agents-tasks':   'Task History',
-        'agents-leads':   'Lead Pipeline',
+        'agents-command':  'Nexus Command Center',
+        'agents-workflow': 'Team Workflow',
+        'agents-activity': 'Activity Timeline',
+        'agents-network':  'Agent Roster',
+        'agents-console':  'Agent Console',
+        'agents-tasks':    'Task History',
+        'agents-leads':    'Lead Pipeline',
       },
     },
     analytics: {
       id:           'analytics',
       label:        'Analytics',
-      tagline:      'Site performance',
+      tagline:      'DigiFusion visitor footprint',
       module:       'analytics',
       defaultTab:   'analytics',
       sections: {
-        analytics: 'Visitor Footprint',
+        analytics: 'Site Analytics',
       },
     },
   };
 
-  // Backward compat: old sidebar dept id
   DEPARTMENTS.storefront = DEPARTMENTS.products;
 
-  /** Tabs that belong to Intelligence Library (not Network) */
   const INTELLIGENCE_TABS = new Set([
     'agents-ip', 'agents-content', 'blog', 'blog-assets',
   ]);
 
-  /** Intelligence tabs that live in the blog module shell */
   const BLOG_MODULE_TABS = new Set(['blog', 'blog-assets']);
 
-  /** Map any sub-tab → department id */
+  const NETWORK_TABS = new Set([
+    'agents-command', 'agents-workflow', 'agents-activity',
+    'agents-network', 'agents-console', 'agents-tasks', 'agents-leads',
+  ]);
+
   const TAB_TO_DEPT = {};
   Object.values(DEPARTMENTS).forEach(dept => {
     Object.keys(dept.sections).forEach(tab => {
       TAB_TO_DEPT[tab] = dept.id;
     });
   });
-  // Intelligence tabs override agents module default
   INTELLIGENCE_TABS.forEach(tab => { TAB_TO_DEPT[tab] = 'intelligence'; });
+  NETWORK_TABS.forEach(tab => { TAB_TO_DEPT[tab] = 'network'; });
 
   function deptForTab(tab) {
     return DEPARTMENTS[TAB_TO_DEPT[tab] || 'publisher'];
+  }
+
+  function moduleForTab(tab, dept) {
+    if (BLOG_MODULE_TABS.has(tab)) return 'blog';
+    const d = dept || deptForTab(tab);
+    return d?.module || 'publishing';
   }
 
   function deptForModule(module, activeTab) {
@@ -105,11 +112,30 @@
       return DEPARTMENTS.intelligence;
     }
     if (module === 'blog') return DEPARTMENTS.intelligence;
+    if (module === 'agents' && activeTab && NETWORK_TABS.has(activeTab)) {
+      return DEPARTMENTS.network;
+    }
+    if (module === 'agents') return DEPARTMENTS.network;
     return Object.values(DEPARTMENTS).find(d => d.module === module) || DEPARTMENTS.publisher;
   }
 
   function sectionLabel(dept, tab) {
     return dept.sections[tab] || tab;
+  }
+
+  function syncDeptRouteNav(dept, activeTab) {
+    const nav = document.getElementById('deptRouteNav');
+    if (!nav) return;
+    const show = dept.id === 'intelligence';
+    nav.hidden = !show;
+    nav.classList.toggle('is-visible', show);
+    if (!show) return;
+    nav.querySelectorAll('[data-dept-tab]').forEach(btn => {
+      const match = btn.dataset.deptTab === activeTab
+        || (btn.dataset.deptTab === 'blog' && activeTab === 'blog-assets');
+      btn.classList.toggle('active', match);
+      btn.setAttribute('aria-selected', match ? 'true' : 'false');
+    });
   }
 
   function updateChrome(activeTab, activeModule) {
@@ -121,22 +147,15 @@
     if (deptEl)    deptEl.textContent    = dept.label;
     if (sectionEl) sectionEl.textContent = section;
 
-    // Body class drives which agent sub-tabs are visible
-    document.body.classList.remove('pg-dept-network', 'pg-dept-intelligence');
-    if (dept.id === 'network')     document.body.classList.add('pg-dept-network');
+    document.body.classList.remove('pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products');
+    if (dept.id === 'network')      document.body.classList.add('pg-dept-network');
     if (dept.id === 'intelligence') document.body.classList.add('pg-dept-intelligence');
+    if (dept.id === 'products')     document.body.classList.add('pg-dept-products');
 
-    // Highlight correct sidebar button (two departments share `agents` module)
+    syncDeptRouteNav(dept, activeTab);
+
     document.querySelectorAll('.nav-btn[data-dept]').forEach(btn => {
-      const btnDept = btn.dataset.dept;
-      let active = btnDept === dept.id;
-      if (activeModule === 'agents' && !INTELLIGENCE_TABS.has(activeTab)) {
-        active = btnDept === 'network';
-      }
-      if (activeModule === 'blog') {
-        active = btnDept === 'intelligence';
-      }
-      btn.classList.toggle('active', active);
+      btn.classList.toggle('active', btn.dataset.dept === dept.id);
     });
   }
 
@@ -144,18 +163,20 @@
     const dept = DEPARTMENTS[deptId];
     if (!dept) return;
     const tab    = tabOverride || dept.defaultTab;
-    const module = BLOG_MODULE_TABS.has(tab) ? 'blog' : dept.module;
+    const module = moduleForTab(tab, dept);
     if (typeof window.__pgSetTab === 'function') {
       window.__pgSetTab(tab, module);
     }
   }
 
-  // Expose globally for cross-department links
   window.PathGuruShell = {
     DEPARTMENTS,
     INTELLIGENCE_TABS,
+    NETWORK_TABS,
+    BLOG_MODULE_TABS,
     deptForTab,
     deptForModule,
+    moduleForTab,
     updateChrome,
     navigateToDepartment,
   };
@@ -163,7 +184,6 @@
   document.addEventListener('DOMContentLoaded', () => {
     document.body.classList.add('pg-shell-v3');
 
-    // Department nav buttons
     document.querySelectorAll('.nav-btn[data-dept]').forEach(btn => {
       btn.addEventListener('click', () => {
         const deptId = btn.dataset.dept;
@@ -171,13 +191,13 @@
         if (!dept) return;
         const remembered = localStorage.getItem(`pg_lastTab_${deptId}`);
         const tab = remembered && dept.sections[remembered] ? remembered : dept.defaultTab;
+        const module = moduleForTab(tab, dept);
         if (typeof window.__pgSetTab === 'function') {
-          window.__pgSetTab(tab, dept.module);
+          window.__pgSetTab(tab, module);
         }
       });
     });
 
-    // Cross-department links
     document.querySelectorAll('[data-goto-dept]').forEach(el => {
       el.addEventListener('click', e => {
         e.preventDefault();
@@ -185,13 +205,10 @@
       });
     });
 
-    // Intelligence → Blog Derivatives (separate module shell)
-    const derivBtn = document.getElementById('gotoBlogDerivativesTab');
-    if (derivBtn) {
-      derivBtn.addEventListener('click', e => {
-        e.preventDefault();
-        navigateToDepartment('intelligence', 'blog');
+    document.querySelectorAll('#deptRouteNav [data-dept-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigateToDepartment('intelligence', btn.dataset.deptTab);
       });
-    }
+    });
   });
 })();

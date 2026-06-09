@@ -606,7 +606,7 @@
         </div>
         <span class="prod-price">${price}</span>
         <span class="prod-status-pill ${active ? 'active' : 'archived'}">${statusLbl}</span>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div class="prod-row-actions">
           ${active ? `<button class="btn-sm btn-secondary prod-edit-btn" data-id="${esc(p.id)}">Edit</button>` : ''}
           ${active ? `<button class="btn-sm btn-danger prod-archive-btn" data-id="${esc(p.id)}">Archive</button>` : ''}
         </div>

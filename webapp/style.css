@@ -2689,7 +2689,7 @@ select option { background: var(--surface-2); }
 /* ── Product rows ── */
 .prod-row {
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
+  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr) auto auto minmax(120px, max-content);
   align-items: center;
   gap: 12px;
   padding: 12px 24px;
@@ -2697,6 +2697,13 @@ select option { background: var(--surface-2); }
   transition: background 0.12s;
 }
 .prod-row:hover { background: var(--surface-2); }
+.prod-row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
 
 .prod-name {
   font-size: 14px;
@@ -3072,9 +3079,14 @@ select option { background: var(--surface-2); }
 
   /* Product rows stack more gracefully */
   .prod-row {
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
   }
+  .prod-row > div:first-child { grid-column: 1; grid-row: 1; }
+  .prod-row .prod-name { grid-column: 1 / -1; grid-row: 2; }
+  .prod-row .prod-price { grid-column: 1; grid-row: 3; }
+  .prod-row .prod-status-pill { grid-column: 2; grid-row: 3; align-self: center; }
+  .prod-row-actions { grid-column: 1 / -1; grid-row: 4; justify-content: flex-start; margin-top: 4px; }
   .prod-row .prod-price,
   .prod-row .prod-type-badge,
   .prod-row .prod-status-pill { font-size: 11px; }
@@ -4625,8 +4637,8 @@ select option { background: var(--surface-2); }
   position: sticky;
   top: 0;
   z-index: 3;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
+  overflow-x: visible;
 }
 
 .prod-toolbar input[type="search"] {

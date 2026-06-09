@@ -2636,7 +2636,14 @@ Write the full article now.`;
   // GET /api/content/calendar — view the content schedule
   if (req.method === 'GET' && path === '/api/content/calendar') {
     try {
-      const schedule = (await getJsonCache('cache/content-schedule.json')) || [];
+      let schedule = [];
+      try {
+        schedule = (await getJsonCache('cache/content-schedule.json')) || [];
+      } catch (cacheErr) {
+        console.warn('[content/calendar] cache miss:', cacheErr.message);
+        schedule = [];
+      }
+      if (!Array.isArray(schedule)) schedule = [];
       json(res, { calendar: schedule, total: schedule.length });
     } catch (e) { err(res, e.message, 500); }
     return;

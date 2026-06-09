@@ -255,6 +255,120 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
+     NEXUS COMMAND CENTER
+  ═══════════════════════════════════════════════════════════════ */
+  async function loadCeoOps () {
+    const grid = $('ceoOpsGrid');
+    const agentsEl = $('ceoOpsAgents');
+    if (!grid) return;
+    grid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>';
+    if (agentsEl) agentsEl.innerHTML = '';
+    try {
+      const data = await apiFetch('/api/agents/nexus/ceo-ops');
+      const ops = data.ops || {};
+      const sched = ops.contentSchedule || {};
+      const cards = [
+        { label: 'Blog cadence', value: ops.cadenceDue ? 'Due' : 'On track', hint: ops.daysSinceLastBlog != null ? `${ops.daysSinceLastBlog}d since last post` : 'No posts yet' },
+        { label: 'Pending approvals', value: String(ops.pendingApprovals ?? 0), hint: 'Boss YES required' },
+        { label: 'Stuck tasks', value: String(ops.stuckTasks ?? 0), hint: '>48h without progress' },
+        { label: 'Content queue', value: String(sched.queued ?? 0), hint: `${sched.pending ?? 0} awaiting approval` },
+        { label: 'Active tasks', value: String(data.activeTaskCount ?? 0), hint: 'Across agent network' },
+      ];
+      grid.innerHTML = cards.map(c => `
+        <div class="nexus-ops-card">
+          <span class="nexus-ops-card-label">${esc(c.label)}</span>
+          <span class="nexus-ops-card-value">${esc(c.value)}</span>
+          <span class="nexus-ops-card-hint">${esc(c.hint)}</span>
+        </div>
+      `).join('');
+
+      if (agentsEl && data.agentSummary?.length) {
+        agentsEl.innerHTML = `
+          <h3 class="nexus-ops-agents-title">Agent status</h3>
+          <div class="nexus-ops-agent-chips">
+            ${data.agentSummary.map(a => `<span class="nexus-ops-chip nexus-ops-chip-${esc(a.status || 'idle')}">${esc(a.id)} · ${esc(a.status || 'idle')}</span>`).join('')}
+          </div>`;
+      }
+    } catch (err) {
+      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TEAM WORKFLOW
+  ═══════════════════════════════════════════════════════════════ */
+  function wireWorkflowTab () {
+    if (wireWorkflowTab._wired) return;
+    wireWorkflowTab._wired = true;
+    $('workflowDesignBtn')?.addEventListener('click', async () => {
+      const processDescription = $('workflowProcessInput')?.value.trim();
+      const clientName = $('workflowClientInput')?.value.trim() || 'Internal';
+      const industry = $('workflowIndustryInput')?.value.trim() || 'general';
+      const out = $('workflowResult');
+      if (!processDescription) {
+        alert('Describe the process to design a workflow.');
+        return;
+      }
+      const btn = $('workflowDesignBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Designing…'; }
+      if (out) { out.hidden = false; out.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Nexus is designing workflow…</span></div>'; }
+      try {
+        const base = getBackendUrl();
+        const res = await fetch(`${base}/api/agents/nexus/design-workflow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ processDescription, clientName, industry }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        const grade = data.quality?.grade || '—';
+        if (out) {
+          out.innerHTML = `
+            <div class="nexus-workflow-meta-result">
+              <span>Quality: <strong>${esc(grade)}</strong></span>
+              <span>Delegated to: <strong>${esc(data.delegatedTo || 'nova')}</strong></span>
+              <span>Framework: <strong>${esc(data.framework || '—')}</strong></span>
+            </div>
+            <pre class="nexus-workflow-spec">${esc(data.spec || '')}</pre>`;
+        }
+      } catch (e) {
+        if (out) out.innerHTML = `<div class="content-empty content-empty-err">${esc(e.message)}</div>`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Design workflow'; }
+      }
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ACTIVITY TIMELINE (recent tasks)
+  ═══════════════════════════════════════════════════════════════ */
+  async function loadActivityTimeline () {
+    const tbody = $('activityTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="agents-table-empty">Loading activity…</td></tr>';
+    try {
+      const data = await fetchTasks('', '');
+      const tasks = (data.tasks || data || []).slice(0, 25);
+      if (!tasks.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="agents-table-empty">No recent activity.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tasks.map(t => {
+        const agent = AGENTS.find(a => a.id === t.agent_id) || { name: t.agent_id, color: '#888' };
+        return `
+          <tr>
+            <td><span class="task-agent-chip" style="--agent-color:${agent.color}">${esc(agent.name || t.agent_id)}</span></td>
+            <td class="task-title-cell">${esc(t.title || t.description || '—')}</td>
+            <td>${statusBadge(t.status)}</td>
+            <td class="task-date-cell">${relTime(t.created_at)}</td>
+          </tr>`;
+      }).join('');
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="4" class="agents-table-empty agents-table-error">${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
      CONSOLE TAB — two-panel layout
   ═══════════════════════════════════════════════════════════════ */
   let _activeConsoleAgent = null;
@@ -1761,6 +1875,8 @@
 
     /* Refresh button — Network */
     $('agentsRefreshBtn')?.addEventListener('click', loadNetworkStatus);
+    $('ceoOpsRefreshBtn')?.addEventListener('click', loadCeoOps);
+    $('activityRefreshBtn')?.addEventListener('click', loadActivityTimeline);
 
     /* Refresh — Tasks */
     $('tasksRefreshBtn')?.addEventListener('click', loadTasks);
@@ -1832,30 +1948,33 @@
 
     /* Auto-load when each sub-tab becomes active.
        Piggyback on the sidebar nav-btn clicks + module-tab clicks. */
-    document.querySelectorAll('.nav-btn[data-module]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (btn.dataset.module === 'agents') {
-          loadNetworkStatus();
-          buildConsoleNav();
-        }
-      });
-    });
+    function onAgentsTabActivated (tab) {
+      if (tab === 'agents-command')  loadCeoOps();
+      if (tab === 'agents-workflow') wireWorkflowTab();
+      if (tab === 'agents-activity') loadActivityTimeline();
+      if (tab === 'agents-network') loadNetworkStatus();
+      if (tab === 'agents-tasks')   loadTasks();
+      if (tab === 'agents-leads')   loadLeads();
+      if (tab === 'agents-console') buildConsoleNav();
+      if (tab === 'agents-ip')      { loadFirmIpCatalog(); loadIPLibrary(); }
+      if (tab === 'agents-content') { loadContentCalendar(); wireContentTab(); }
+    }
 
     document.querySelectorAll('.module-tab[data-subtab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.subtab;
-        if (tab === 'agents-network') loadNetworkStatus();
-        if (tab === 'agents-tasks')   loadTasks();
-        if (tab === 'agents-leads')   loadLeads();
-        if (tab === 'agents-console') buildConsoleNav();
-        if (tab === 'agents-ip')      { loadFirmIpCatalog(); loadIPLibrary(); }
-        if (tab === 'agents-content') { loadContentCalendar(); wireContentTab(); }
-      });
+      btn.addEventListener('click', () => onAgentsTabActivated(btn.dataset.subtab));
+    });
+
+    document.addEventListener('pg:tab-change', (e) => {
+      const { tab, module } = e.detail || {};
+      if (module === 'agents' || tab?.startsWith('agents-')) onAgentsTabActivated(tab);
     });
 
     /* Auto-load if agents is the active module on page load */
     if (document.getElementById('module-agents')?.classList.contains('active')) {
-      loadNetworkStatus();
+      const activeTab = document.querySelector('.tab-panel.active')?.id?.replace('tab-', '');
+      if (activeTab === 'agents-command') loadCeoOps();
+      else if (activeTab === 'agents-activity') loadActivityTimeline();
+      else if (activeTab === 'agents-network') loadNetworkStatus();
     }
   }
 
@@ -2025,7 +2144,7 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
 
-      const items = Array.isArray(data) ? data : (data.items || data.articles || []);
+      const items = Array.isArray(data) ? data : (data.calendar || data.items || data.articles || []);
       if (!items.length) {
         body.innerHTML = '<div class="content-empty">No articles queued. Use "Generate Content Calendar" or schedule one manually.</div>';
         return;

@@ -78,6 +78,13 @@
       </div>
     </header>
 
+    <!-- Intelligence dept route (Playbooks | Schedule | Blog-room) — not duplicated on Network -->
+    <nav class="dept-route-nav" id="deptRouteNav" role="tablist" aria-label="Intelligence sections" hidden>
+      <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="blog" role="tab" aria-selected="false">Blog-room</button>
+    </nav>
+
   <main class="main-panel" role="main">
 
     <!-- ══════════════════════════════════════════════
@@ -96,7 +103,7 @@
         <header class="panel-header" data-for="assets">
           <div>
             <p class="panel-eyebrow">Publishing</p>
-            <h1 class="panel-title">Project assets</h1>
+            <h1 class="panel-title">Publishing Repository</h1>
           </div>
         </header>
         <header class="panel-header" data-for="compile">
@@ -315,15 +322,15 @@
       <div class="assets-subnav" role="tablist" aria-label="Publishing asset categories">
         <button class="assets-subtab active" data-asubtab="pa-branding"  role="tab" aria-selected="true">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-          Brand &amp; Media
+          Media Repository
         </button>
         <button class="assets-subtab" data-asubtab="pa-templates" role="tab" aria-selected="false">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          PDF Templates
+          Layout Samples
         </button>
         <button class="assets-subtab" data-asubtab="pa-library" role="tab" aria-selected="false">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Learning Library
+          Format Library
         </button>
       </div>
 
@@ -334,8 +341,8 @@
 
           <!-- Section 1: Brand Identity -->
           <p class="assets-section-eyebrow">Identity</p>
-          <h2 class="assets-section-heading">Brand identity</h2>
-          <p class="assets-section-desc">Your publisher logo and colour palette — applied to the cover, chapter openers, and callout boxes.</p>
+          <h2 class="assets-section-heading">Job media repository</h2>
+          <p class="assets-section-desc">Brand marks, cover art, and scene references for this publishing job — browse uploads like a project folder.</p>
 
           <div class="brand-grid">
             <!-- Logo upload -->
@@ -453,9 +460,9 @@
 
         <!-- ── PDF TEMPLATES sub-panel ── -->
         <div class="assets-subpanel" id="pa-templates">
-          <p class="assets-section-eyebrow">Design system</p>
-          <h2 class="assets-section-heading">PDF templates</h2>
-          <p class="assets-section-desc">Predefined layout templates that guide the agent on typography, chapter openers, and visual rhythm. Select one to anchor this project's design language.</p>
+          <p class="assets-section-eyebrow">Layout samples</p>
+          <h2 class="assets-section-heading">PDF structure templates</h2>
+          <p class="assets-section-desc">Reference PDFs that teach the publisher how to structure chapters, typography, and visual rhythm — browse and select like files in a project folder.</p>
           <div class="template-grid" id="templateGrid">
             <div class="template-card" data-template="modern-business">
               <div class="template-thumb" style="background:linear-gradient(135deg,#1a2236,#263047)"></div>
@@ -490,9 +497,9 @@
 
         <!-- ── LEARNING LIBRARY sub-panel ── -->
         <div class="assets-subpanel" id="pa-library">
-          <p class="assets-section-eyebrow">Agent training</p>
-          <h2 class="assets-section-heading">Learning library</h2>
-          <p class="assets-section-desc">Upload PDF examples into each folder. The publishing agent studies these to match your design language, structure, and editorial standards when generating each output type.</p>
+          <p class="assets-section-eyebrow">Format library</p>
+          <h2 class="assets-section-heading">Output format samples</h2>
+          <p class="assets-section-desc">Upload PDF examples per output type (playbooks, research, case studies). The publisher studies these folders to match structure and quality — browse uploads like Windows Explorer.</p>
 
           <!-- ── PLAYBOOKS folder ── -->
           <div class="lib-folder" data-folder="playbooks">
@@ -620,7 +627,7 @@
         <header class="panel-header active" data-for="blog">
           <div>
             <p class="panel-eyebrow">Intelligence Library</p>
-            <h1 class="panel-title">Blog Derivatives</h1>
+            <h1 class="panel-title">Blog-room</h1>
           </div>
 
         </header>
@@ -646,7 +653,7 @@
       <div class="module-body">
 
     <!-- ── BLOG: COMPOSE — derivative teasers from premium IP ── -->
-    <section class="tab-panel" id="tab-blog" aria-label="Blog Derivatives">
+    <section class="tab-panel" id="tab-blog" aria-label="Blog-room">
       <div class="deprecated-notice">
         <strong>Derivative workflow only.</strong> Premium playbooks are authored in
         <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library → Blueprint Library</a>.
@@ -1148,22 +1155,22 @@
       <!-- Per-tab headers -->
       <div class="module-headers">
         <header class="panel-header active" data-for="shop-products">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Products</h1></div>
+          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Product Catalog</h1></div>
           <div class="header-actions">
             <button class="btn-primary btn-sm" id="shopProductAddBtn">+ Add Product</button>
           </div>
         </header>
         <header class="panel-header" data-for="shop-services">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Services &amp; Bookings</h1></div>
+          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Consulting &amp; Bookings</h1></div>
         </header>
         <header class="panel-header" data-for="shop-payments">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Payments &amp; Subscriptions</h1></div>
+          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Revenue &amp; Payments</h1></div>
         </header>
         <header class="panel-header" data-for="shop-analytics">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Sales Analytics</h1></div>
+          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Revenue Analytics</h1></div>
         </header>
         <header class="panel-header" data-for="shop-settings">
-          <div><p class="panel-eyebrow">Intelligence &amp; Products</p><h1 class="panel-title">Settings</h1></div>
+          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Commerce Settings</h1></div>
         </header>
       </div>
 
@@ -1554,7 +1561,31 @@
 
       <!-- Per-tab headers -->
       <div class="module-headers">
-        <header class="panel-header active" data-for="agents-network">
+        <header class="panel-header active" data-for="agents-command">
+          <div>
+            <p class="panel-eyebrow">Agent Network</p>
+            <h1 class="panel-title">Nexus Command Center</h1>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary btn-sm" id="ceoOpsRefreshBtn">Refresh</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-workflow">
+          <div>
+            <p class="panel-eyebrow">Agent Network</p>
+            <h1 class="panel-title">Team Workflow</h1>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-activity">
+          <div>
+            <p class="panel-eyebrow">Agent Network</p>
+            <h1 class="panel-title">Activity Timeline</h1>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary btn-sm" id="activityRefreshBtn">Refresh</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="agents-network">
           <div>
             <p class="panel-eyebrow">Agent Network</p>
             <h1 class="panel-title">Agent Roster</h1>
@@ -1632,9 +1663,21 @@
       </div><!-- /.module-headers -->
 
       <div class="module-topnav" role="tablist" aria-label="Agents sections">
-        <button class="module-tab dept-network-only active" data-subtab="agents-network" role="tab" aria-selected="true">
+        <button class="module-tab dept-network-only active" data-subtab="agents-command" role="tab" aria-selected="true">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/></svg>
+          Command
+        </button>
+        <button class="module-tab dept-network-only" data-subtab="agents-workflow" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="9" y="15" width="6" height="6"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/><path d="M15 9V6"/></svg>
+          Workflow
+        </button>
+        <button class="module-tab dept-network-only" data-subtab="agents-activity" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Activity
+        </button>
+        <button class="module-tab dept-network-only" data-subtab="agents-network" role="tab" aria-selected="false">
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><circle cx="5" cy="17" r="2"/><circle cx="19" cy="17" r="2"/><path d="M5 15V11a7 7 0 0 1 14 0v4"/></svg>
-          Network
+          Roster
         </button>
         <button class="module-tab dept-network-only" data-subtab="agents-console" role="tab" aria-selected="false">
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -1648,24 +1691,61 @@
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Leads
         </button>
-        <button class="module-tab dept-intel-only" data-subtab="agents-ip" role="tab" aria-selected="false">
-          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          Playbooks
-        </button>
-        <button class="module-tab dept-intel-only" data-subtab="agents-content" role="tab" aria-selected="false">
-          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Schedule
-        </button>
-        <button class="module-tab dept-intel-only" data-subtab="blog" role="tab" aria-selected="false" type="button" id="gotoBlogDerivativesTab">
-          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Derivatives
-        </button>
       </div><!-- /.module-topnav -->
 
       <div class="module-body">
 
-        <!-- ── NETWORK TAB ── -->
-        <section class="tab-panel active" id="tab-agents-network" aria-label="Agent Network">
+        <!-- ── NEXUS COMMAND CENTER ── -->
+        <section class="tab-panel active" id="tab-agents-command" aria-label="Nexus Command Center">
+          <div class="nexus-ops-body">
+            <p class="nexus-ops-intro">Unified operations view — cadence, approvals, content queue, and agent status. Boss approval gates all publishing.</p>
+            <div class="nexus-ops-grid" id="ceoOpsGrid">
+              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>
+            </div>
+            <div class="nexus-ops-agents" id="ceoOpsAgents"></div>
+          </div>
+        </section>
+
+        <!-- ── TEAM WORKFLOW ── -->
+        <section class="tab-panel" id="tab-agents-workflow" aria-label="Team Workflow">
+          <div class="nexus-workflow-body">
+            <p class="nexus-ops-intro">Map a client process to DigiFusion frameworks. Nexus designs the workflow; Nova receives the build task.</p>
+            <div class="nexus-workflow-form">
+              <label class="form-label" for="workflowProcessInput">Process description</label>
+              <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding — intake form → Notion CRM → kickoff deck → delivery sprint"></textarea>
+              <div class="nexus-workflow-meta">
+                <input type="text" id="workflowClientInput" class="form-input" placeholder="Client name (optional)">
+                <input type="text" id="workflowIndustryInput" class="form-input" placeholder="Industry (optional)">
+                <button type="button" class="btn-primary" id="workflowDesignBtn">Design workflow</button>
+              </div>
+            </div>
+            <div class="nexus-workflow-result" id="workflowResult" hidden></div>
+          </div>
+        </section>
+
+        <!-- ── ACTIVITY TIMELINE ── -->
+        <section class="tab-panel" id="tab-agents-activity" aria-label="Activity Timeline">
+          <div class="agents-tasks-body">
+            <div class="agents-table-wrap">
+              <table class="agents-table" id="activityTable">
+                <thead>
+                  <tr>
+                    <th>Agent</th>
+                    <th>Activity</th>
+                    <th>Status</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody id="activityTableBody">
+                  <tr><td colspan="4" class="agents-table-empty">Loading activity…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ── AGENT ROSTER ── -->
+        <section class="tab-panel" id="tab-agents-network" aria-label="Agent Network">
           <div class="agents-network-body">
             <div class="agents-grid" id="agentsGrid">
               <!-- Agent cards rendered by agents.js -->
@@ -1746,7 +1826,7 @@
                 <span class="flow-arrow">→</span>
                 <span>Intelligence Library (gated)</span>
                 <span class="flow-arrow">→</span>
-                <a href="#" data-goto-dept="intelligence" data-goto-tab="blog">Blog teasers</a>
+                <a href="#" data-goto-dept="intelligence" data-goto-tab="blog">Blog-room</a>
               </div>
             </div>
 
