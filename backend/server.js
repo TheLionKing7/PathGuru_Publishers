@@ -2007,7 +2007,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && path === '/api/bookings/calendly-webhook') {
     try {
       const body = await readBody(req);
-      const db = getDb();
+      const db = getSupabase();
       if (db && body.event === 'invitee.created') {
         const inv = body.payload?.invitee || {};
         const evt = body.payload?.event   || {};
@@ -2023,7 +2023,7 @@ const server = createServer(async (req, res) => {
           notes:            (inv.questions_and_answers?.map(q => `${q.question}: ${q.answer}`).join('\n')) || null,
         }).select().single();
         if (data) {
-          const db2 = getDb();
+          const db2 = getSupabase();
           if (db2) {
             db2.from('content_attribution_events').insert({
               event_type: 'booking',
@@ -2308,6 +2308,191 @@ const server = createServer(async (req, res) => {
     try {
       const { processNurtureQueue } = await import('./skills/leadMagnetFunnel.js');
       json(res, await processNurtureQueue());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GEM Lattice / Synthesizer crystallization ───────────────────────────
+  if (req.method === 'POST' && path === '/api/agents/synthesizer/crystallize') {
+    try {
+      const body = await readBody(req);
+      json(res, await synthesizer.crystallize(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/agents/synthesizer/gems') {
+    try {
+      const q = url.searchParams.get('q') || '';
+      const domain = url.searchParams.get('domain') || 'general';
+      json(res, { gems: await synthesizer.mineGems(q, [domain]) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/agents/synthesizer/crystallizations') {
+    try {
+      const db = getSupabase();
+      if (!db) { json(res, { items: [] }); return; }
+      const { data } = await db.from('gem_crystallizations').select('*').order('created_at', { ascending: false }).limit(20);
+      json(res, { items: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── Engagement Delivery OS ──────────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/engagements') {
+    try {
+      const status = url.searchParams.get('status') || undefined;
+      const { listEngagements } = await import('./skills/engagementDelivery.js');
+      json(res, await listEngagements({ status }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path.startsWith('/api/engagements/') && path.split('/').length === 4) {
+    try {
+      const id = path.split('/')[3];
+      const { getEngagementDetail } = await import('./skills/engagementDelivery.js');
+      json(res, await getEngagementDetail(id));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path.match(/^\/api\/engagements\/[^/]+\/milestones\/[^/]+\/signoff$/)) {
+    try {
+      const parts = path.split('/');
+      const milestoneId = parts[5];
+      const body = await readBody(req);
+      const { signOffMilestone } = await import('./skills/engagementDelivery.js');
+      json(res, await signOffMilestone(milestoneId, body.signedOffBy || 'Boss'));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'PATCH' && path.match(/^\/api\/engagements\/deliverables\/[^/]+$/)) {
+    try {
+      const id = path.split('/')[4];
+      const body = await readBody(req);
+      const { updateDeliverable } = await import('./skills/engagementDelivery.js');
+      json(res, await updateDeliverable(id, body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── Partner economics ─────────────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/ops/economics') {
+    try {
+      const { getEconomicsDashboard } = await import('./skills/partnerEconomics.js');
+      json(res, await getEconomicsDashboard());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'PATCH' && path.match(/^\/api\/engagements\/[^/]+\/economics$/)) {
+    try {
+      const engagementId = path.split('/')[3];
+      const body = await readBody(req);
+      const { updateEngagementEconomics } = await import('./skills/partnerEconomics.js');
+      json(res, await updateEngagementEconomics(engagementId, body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── Client 360 ────────────────────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/clients') {
+    try {
+      const { listClientAccounts } = await import('./skills/client360.js');
+      json(res, await listClientAccounts());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path.startsWith('/api/clients/') && path.split('/').length === 4) {
+    try {
+      const id = path.split('/')[3];
+      const { getClient360 } = await import('./skills/client360.js');
+      json(res, await getClient360(id));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── Utilization ───────────────────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/ops/utilization') {
+    try {
+      const { computeCurrentUtilization } = await import('./skills/utilization.js');
+      json(res, await computeCurrentUtilization());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── NPS ───────────────────────────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/ops/nps') {
+    try {
+      const { getNpsDashboard } = await import('./skills/npsSurvey.js');
+      json(res, await getNpsDashboard());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/nps/respond') {
+    try {
+      const id = url.searchParams.get('id');
+      const score = url.searchParams.get('score');
+      const comment = url.searchParams.get('comment') || '';
+      if (!id || score == null) { err(res, 'id and score required', 400); return; }
+      const { recordNpsResponse } = await import('./skills/npsSurvey.js');
+      await recordNpsResponse(id, score, comment);
+      res.writeHead(302, { Location: 'https://www.digitafusion.com/?nps=thanks' });
+      res.end();
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── ERP / invoices ────────────────────────────────────────────────────
+  if (req.method === 'POST' && path === '/api/invoices') {
+    try {
+      const body = await readBody(req);
+      const { createInvoice } = await import('./skills/erpHooks.js');
+      json(res, await createInvoice(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/webhooks/erp') {
+    try {
+      const body = await readBody(req);
+      const { handleErpWebhook } = await import('./skills/erpHooks.js');
+      json(res, await handleErpWebhook(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/cron/engagement-drift') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { checkEngagementDrift } = await import('./skills/engagementDelivery.js');
+      const drift = await checkEngagementDrift();
+      if (drift.overdue?.length) {
+        const { sendImmediate } = await import('./skills/notifier.js');
+        await sendImmediate('Engagement drift', drift.overdue.map(o => `${o.client}: ${o.milestone}`).join('\n'), 'whatsapp');
+      }
+      json(res, drift);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/cron/ops-snapshot') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { snapshotUtilization } = await import('./skills/utilization.js');
+      const { checkOverdueInvoices } = await import('./skills/erpHooks.js');
+      const { processDueNpsSurveys } = await import('./skills/npsSurvey.js');
+      json(res, {
+        utilization: await snapshotUtilization(),
+        invoices: await checkOverdueInvoices(),
+        nps: await processDueNpsSurveys(),
+      });
     } catch (e) { err(res, e.message, 500); }
     return;
   }

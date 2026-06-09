@@ -143,7 +143,18 @@ export async function buildClientBlueprint(input = {}, nexusAgent = null) {
     }
   }
 
-  return { blueprintId, blueprint: record, quality };
+  let engagement = null;
+  try {
+    const { createEngagementFromBlueprint } = await import('./engagementDelivery.js');
+    const result = await createEngagementFromBlueprint(record);
+    engagement = result.engagement;
+    record.engagementId = engagement?.id;
+    await persistBlueprint(record);
+  } catch (e) {
+    console.warn('[ClientBlueprint] Engagement OS create skipped:', e.message);
+  }
+
+  return { blueprintId, blueprint: record, quality, engagementId: engagement?.id };
 }
 
 async function runSpecialistPasses(ctx) {

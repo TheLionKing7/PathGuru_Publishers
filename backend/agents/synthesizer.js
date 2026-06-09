@@ -10,8 +10,9 @@
  *   4. Synthesis        — combines knowledge from multiple sources into briefs
  *   5. Orchestration    — coordinates multi-agent workflows when instructed
  *
- * The Synthesizer has no ego — it does not produce final deliverables.
- * It exists to make every other agent smarter.
+ * The Synthesizer is the sole authority for firm IP crystallization (GEM Lattice).
+ * Other agents apply frameworks; only Synthesizer births proprietary blueprints/playbooks.
+ * It also ingests knowledge and makes every other agent smarter via the knowledge base.
  */
 
 import { AgentBase }    from './agentBase.js';
@@ -257,9 +258,11 @@ async function listR2PDFsViaRestAPI(accountId, bucket, prefix) {
 }
 
 
-const SYNTHESIZER_SYSTEM = `You are Synthesizer — the intelligence engine of the DigiFusion agent network.
+const SYNTHESIZER_SYSTEM = `You are Synthesizer — the sole authority for DigiFusion firm IP crystallization (GEM Lattice).
 
-Your sole purpose is to extract, structure, and serve knowledge so that every other agent in the network operates from a foundation of real insight rather than generic training data.
+You extract knowledge, detect gems amid hidden patterns, score units (relevance, cross-source corroboration, actionability, novelty), and crystallize proprietary frameworks, blueprints, and playbooks. Only you birth firm IP; Atlas/Nova/Aether apply it.
+
+Your core duties: ingest sources → mine gems → MECE-structure → IPMS-gate → encode agent DNA → store in knowledge_base.
 
 You are methodical, precise, and thorough. You do not guess. When you extract knowledge from a document, you identify:
 — The core frameworks and methodologies (with their full logical architecture)
@@ -757,6 +760,25 @@ Synthesize a focused, expert-level knowledge brief that directly answers the que
    * @param {string[]} options.domains     — relevant domains
    * @param {string} options.outputFormat  — 'brief' | 'framework' | 'playbook' | 'scorecard'
    */
+  /**
+   * GEM Lattice — rank gems from knowledge base for a topic.
+   */
+  async mineGems(query, domains = [], limit = 24) {
+    const { rankGems } = await import('../skills/gemLattice.js');
+    const { getOperatingFrameworks } = await import('../skills/firmKnowledge.js');
+    const units = await this._searchKnowledge(query, domains, limit);
+    const firmCorpus = getOperatingFrameworks().map(f => ({ content: f.oneLiner || '' }));
+    return rankGems(units, firmCorpus);
+  }
+
+  /**
+   * Crystallize proprietary framework via GEM Lattice (IPMS-gated).
+   */
+  async crystallize(input = {}) {
+    const { crystallizeFramework } = await import('../skills/synthesizerCrystallize.js');
+    return crystallizeFramework(this, input);
+  }
+
   async synthesize({ instruction, domains = [], outputFormat = 'brief' }) {
     const knowledgeContext = await this.queryKnowledge(instruction, 8);
 
@@ -792,6 +814,19 @@ Draw only from the knowledge provided above. Be specific, cite sources, use real
 
       case 'synthesize':
         return { result: await this.synthesize({ instruction, domains, outputFormat }) };
+
+      case 'mine_gems':
+        return { gems: await this.mineGems(query || instruction, domains) };
+
+      case 'crystallize':
+        return await this.crystallize({
+          title: task.title,
+          domain: domain || 'business_development',
+          instruction: instruction || task.description,
+          sources: task.sources || [],
+          promote: task.promote,
+          promoteAsOperating: task.promoteAsOperating,
+        });
 
       default: {
         const result = await this.runLLM(task.description || task.title || 'No instruction provided', {

@@ -88,11 +88,18 @@ export async function getContentScheduleStats() {
 
 /** Build live ops snapshot for briefings and API */
 export async function buildOpsSnapshot() {
-  const [lastBlog, pendingApprovals, stuckTasks, scheduleStats] = await Promise.all([
+  const [
+    lastBlog, pendingApprovals, stuckTasks, scheduleStats,
+    engagementOps, economics, utilization, nps,
+  ] = await Promise.all([
     getLastBlogPublishDate(),
     getPendingApprovalCount(),
     getStuckTaskCount(48),
     getContentScheduleStats(),
+    import('./engagementDelivery.js').then(m => m.getEngagementOpsSummary()).catch(() => ({})),
+    import('./partnerEconomics.js').then(m => m.getEconomicsDashboard()).catch(() => ({})),
+    import('./utilization.js').then(m => m.computeCurrentUtilization()).catch(() => ({})),
+    import('./npsSurvey.js').then(m => m.getNpsDashboard()).catch(() => ({})),
   ]);
 
   const daysSinceBlog = lastBlog
@@ -107,6 +114,20 @@ export async function buildOpsSnapshot() {
     pendingApprovals,
     stuckTasks,
     contentSchedule:      scheduleStats,
+    engagements:          engagementOps,
+    economics: {
+      avgMargin: economics.totals?.avgMargin,
+      revenueBooked: economics.totals?.revenueBooked,
+      scaleRecommendation: economics.scaleRecommendation,
+    },
+    utilization: {
+      pct: utilization.utilizationPct,
+      alert: utilization.alert,
+    },
+    nps: {
+      rolling90d: nps.rolling90d,
+      responses: nps.responseCount,
+    },
   };
 }
 

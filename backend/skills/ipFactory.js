@@ -3,8 +3,6 @@
  * store in agency IP, optionally promote into agent operating DNA.
  */
 
-import { saveAgencyPlaybook } from '../cloudflareR2.js';
-import { scoreCeoOutput } from './ceoQualityGate.js';
 import { getFrameworkById } from './firmFrameworks.js';
 
 const PROMOTED_CACHE_KEY = 'cache/promoted-frameworks.json';
@@ -40,90 +38,12 @@ async function savePromotedFrameworks(list) {
 }
 
 /**
- * Full IP synthesis pipeline: hybridize → quality gate → R2 → optional DNA promotion.
+ * Full IP synthesis pipeline — delegates to Synthesizer GEM Lattice (sole IP authority).
  */
 export async function runIpFactory(input = {}) {
-  const {
-    title,
-    domain = 'business_development',
-    type = 'framework',
-    sources = [],
-    instruction = '',
-    tagline = '',
-    access = 'premium',
-    promote = false,
-    promoteAsOperating = false,
-  } = input;
-
-  if (!title?.trim()) throw new Error('title is required');
-
-  const hybridInstruction = [
-    instruction,
-    sources.length ? `Synthesise logic from: ${sources.join(', ')}.` : '',
-    'Phase 1 (Audit/Diagnostic): Extract assessment logic.',
-    'Phase 2 (Setup/Infrastructure): Define technical and structural approach.',
-    'Phase 3 (Execution): Detail implementation and iteration.',
-    'Include actionable checklists, scorecard/maturity matrix, diagnostic questions, deliverables per phase.',
-    'Write as proprietary DigiFusion IP — original synthesis, not verbatim copy.',
-  ].filter(Boolean).join(' ');
-
-  let content;
-  if (domain === 'digital_media') {
-    const { aether } = await import('../agents/aether.js');
-    content = await aether.buildDigitalMediaFramework(title, {
-      domain,
-      instruction: hybridInstruction,
-      targetAudience: input.audience || '',
-      industry: input.industry || '',
-    });
-  } else {
-    const { atlas } = await import('../agents/atlas.js');
-    content = await atlas.buildFramework(title, domain, hybridInstruction);
-  }
-
-  if (!content?.trim()) throw new Error('Synthesis returned empty content');
-
-  const quality = scoreCeoOutput({ text: content.slice(0, 4000), outputType: 'workflow' });
-  if (!quality.passed && quality.score < 55) {
-    console.warn(`[IP Factory] Quality below threshold (${quality.score}) — storing with flag`);
-  }
-
-  const slug = `${slugify(title)}-${Date.now().toString(36)}`;
-  const entry = await saveAgencyPlaybook({
-    slug,
-    title,
-    domain,
-    type,
-    content,
-    sources,
-    tagline: tagline || `CEO quality: ${quality.grade}`,
-    access,
-  });
-
-  let promotion = null;
-  if (promote || promoteAsOperating) {
-    promotion = await promoteFrameworkToDna({
-      slug,
-      title,
-      domain,
-      oneLiner: tagline || `Proprietary ${title} — synthesized firm IP.`,
-      kind: promoteAsOperating ? 'operating_framework' : 'library_product',
-      sources,
-    });
-  }
-
-  await seedFrameworkKnowledge({ title, content, domain, slug, sources }).catch(e => {
-    console.warn('[IP Factory] KB seed skipped:', e.message);
-  });
-
-  return {
-    ok:       true,
-    entry,
-    slug,
-    quality,
-    promotion,
-    preview:  content.slice(0, 600),
-  };
+  const { synthesizer } = await import('../agents/synthesizer.js');
+  const { crystallizeFramework } = await import('./synthesizerCrystallize.js');
+  return crystallizeFramework(synthesizer, input);
 }
 
 /** Promote synthesized IP into runtime agent DNA registry (R2 cache). */
@@ -134,6 +54,8 @@ export async function promoteFrameworkToDna({
   oneLiner,
   kind = 'library_product',
   sources = [],
+  ipms = null,
+  gemProvenance = [],
 }) {
   const agent = DOMAIN_AGENT[domain] || 'atlas';
   const id = slugify(title).replace(/-/g, '_').slice(0, 32) || slug.slice(0, 32);
@@ -150,6 +72,9 @@ export async function promoteFrameworkToDna({
     kbSlug:    slug,
     oneLiner:  oneLiner || `Synthesized DigiFusion IP (${domain}).`,
     sources,
+    ipms,
+    gemProvenance,
+    engine:    'GEM Lattice',
     promotedAt: new Date().toISOString(),
   };
 
@@ -186,7 +111,7 @@ export async function seedFrameworkKnowledge({ title, content, domain, slug, sou
     tags:            ['firm_ip', 'synthesized', 'ip_factory', domain],
     metadata:        { slug, kind: 'synthesized', sources },
     relevance_score: 4,
-    processed_by:    'ipFactory',
+    processed_by:    'gem_lattice',
   });
 
   if (error) throw new Error(error.message);

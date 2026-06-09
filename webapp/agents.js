@@ -351,6 +351,77 @@
     }
   }
 
+  async function loadEngagementOps () {
+    const grid = $('engagementOpsGrid');
+    const list = $('engagementList');
+    if (!grid) return;
+    try {
+      const data = await apiFetch('/api/engagements');
+      const items = data.engagements || [];
+      const active = items.filter(e => e.status === 'active').length;
+      const atRisk = items.filter(e => e.health === 'at_risk' || e.health === 'blocked').length;
+      grid.innerHTML = [
+        { label: 'Active engagements', value: String(active), hint: 'Delivery OS' },
+        { label: 'At risk / blocked', value: String(atRisk), hint: 'Needs Boss attention' },
+      ].map(c => `<div class="nexus-ops-card"><span class="nexus-ops-card-label">${esc(c.label)}</span><span class="nexus-ops-card-value">${esc(c.value)}</span><span class="nexus-ops-card-hint">${esc(c.hint)}</span></div>`).join('');
+      if (list) {
+        const rows = items.slice(0, 8).map(e => `<tr><td>${esc(e.client_name)}</td><td>${esc(e.current_phase)}</td><td>${esc(e.health)}</td><td>${esc(e.track)}</td></tr>`).join('')
+          || '<tr><td colspan="4">No engagements — create a Client Blueprint</td></tr>';
+        list.innerHTML = `<table class="analytics-table"><thead><tr><th>Client</th><th>Phase</th><th>Health</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+    } catch (err) {
+      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run supabase/010_engagement_ops.sql</div>`;
+    }
+  }
+
+  async function loadEconomicsOps () {
+    const grid = $('economicsOpsGrid');
+    const top = $('economicsTopMargin');
+    if (!grid) return;
+    try {
+      const [econ, util] = await Promise.all([
+        apiFetch('/api/ops/economics'),
+        apiFetch('/api/ops/utilization'),
+      ]);
+      const t = econ.totals || {};
+      grid.innerHTML = [
+        { label: 'Revenue booked', value: `$${Math.round(t.revenueBooked || 0)}`, hint: 'All engagements' },
+        { label: 'Avg margin', value: `${Math.round(t.avgMargin || 0)}%`, hint: 'Partner economics' },
+        { label: 'Utilization', value: `${util.utilizationPct ?? '—'}%`, hint: util.alert ? 'Pause intake' : 'Capacity OK' },
+        { label: 'Scale segment', value: esc(econ.scaleRecommendation || 'sme'), hint: 'Highest scale score' },
+      ].map(c => `<div class="nexus-ops-card"><span class="nexus-ops-card-label">${esc(c.label)}</span><span class="nexus-ops-card-value">${c.value}</span><span class="nexus-ops-card-hint">${esc(c.hint)}</span></div>`).join('');
+      if (top && econ.topByMargin?.length) {
+        top.innerHTML = `<div class="analytics-section-title">Top margin engagements</div><ul>${econ.topByMargin.map(e => `<li>${esc(e.client)} — ${e.marginPct}%</li>`).join('')}</ul>`;
+      }
+    } catch (err) {
+      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+    }
+  }
+
+  async function loadNpsOps () {
+    const el = $('npsDashboard');
+    if (!el) return;
+    try {
+      const data = await apiFetch('/api/ops/nps');
+      el.innerHTML = `<p class="nexus-ops-intro">Rolling 90d NPS: <strong>${data.rolling90d ?? '—'}</strong> (${data.responseCount || 0} responses)</p>`;
+    } catch (err) {
+      el.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+    }
+  }
+
+  async function loadGemLattice () {
+    const el = $('gemCrystallizations');
+    if (!el) return;
+    try {
+      const data = await apiFetch('/api/agents/synthesizer/crystallizations');
+      const rows = (data.items || []).map(c => `<tr><td>${esc(c.title)}</td><td>${c.ipms}</td><td>${esc(c.tier)}</td><td>${c.gem_count}</td></tr>`).join('')
+        || '<tr><td colspan="4">No crystallizations yet — Synthesizer IP Factory</td></tr>';
+      el.innerHTML = `<table class="analytics-table"><thead><tr><th>Framework</th><th>IPMS</th><th>Tier</th><th>Gems</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } catch (err) {
+      el.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run 010 migration for gem_crystallizations.</div>`;
+    }
+  }
+
   async function loadCeoOps () {
     const grid = $('ceoOpsGrid');
     const agentsEl = $('ceoOpsAgents');
@@ -359,6 +430,10 @@
     if (agentsEl) agentsEl.innerHTML = '';
     await loadApprovalPanel();
     loadFunnelAttribution();
+    loadEngagementOps();
+    loadEconomicsOps();
+    loadNpsOps();
+    loadGemLattice();
     try {
       const data = await apiFetch('/api/agents/nexus/ceo-ops');
       const ops = data.ops || {};

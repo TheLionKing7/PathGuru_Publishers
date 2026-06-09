@@ -1229,7 +1229,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       try {
         const title = message.replace(/synthesi[sz]e|framework|playbook|ip factory/gi, '').trim() || 'New Framework';
         const result = await this.runIpSynthesis({ title, instruction: message, domain: 'business_development' });
-        return `IP synthesized, Boss. Slug: ${result.slug} (${result.quality?.grade}). ${result.promotion ? 'Promoted to agent DNA.' : 'Stored in agency IP.'}`;
+        return `IP crystallized via GEM Lattice, Boss. Slug: ${result.slug} | IPMS ${result.ipms} | tier: ${result.tier}. ${result.promotion ? 'Encoded into agent DNA.' : 'Stored in firm knowledge base.'}`;
       } catch (e) {
         return `IP synthesis failed — ${e.message}`;
       }
@@ -1354,10 +1354,14 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     const db = getSupabase();
     let liveContext = '';
     if (db) {
-      const [tasksRes, leadsRes, pendingApproval] = await Promise.all([
+      const { buildClient360Snapshot } = await import('../skills/client360.js');
+      const { computeCurrentUtilization } = await import('../skills/utilization.js');
+      const [tasksRes, leadsRes, pendingApproval, clientSnap, util] = await Promise.all([
         db.from('tasks').select('title, agent_id, status').order('created_at', { ascending: false }).limit(5),
-        db.from('leads').select('name, status, lead_score').order('created_at', { ascending: false }).limit(3),
+        db.from('leads').select('name, status, score').order('created_at', { ascending: false }).limit(3),
         findPendingApproval(),
+        buildClient360Snapshot().catch(() => ''),
+        computeCurrentUtilization().catch(() => null),
       ]);
       const tasks = tasksRes.data || [];
       const leads = leadsRes.data || [];
@@ -1372,6 +1376,8 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       const notionOk = !!(process.env.NOTION_API_KEY && process.env.NOTION_TASKS_DB_ID);
       liveContext += `\nNOTION STATUS: ${notionOk ? 'connected (log tasks, sync CEO dashboard)' : 'not configured'}`;
       liveContext += '\nBOSS APPROVAL CHANNELS: Nexus chat YES, WhatsApp webhook, Command Center Approve button';
+      if (clientSnap) liveContext += clientSnap;
+      if (util) liveContext += `\nUTILIZATION: ${util.utilizationPct}%${util.alert ? ' — PAUSE NEW INTAKE' : ''}`;
     }
 
     const episodic = await this.recallEpisodic(3).catch(() => '');
