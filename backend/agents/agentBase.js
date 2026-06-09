@@ -413,11 +413,15 @@ Return ONLY the JSON array, no other text.`;
     const db = getSupabase();
     let liveState = '';
     if (db) {
-      const { data: myTasks } = await db.from('tasks')
-        .select('title, status, created_at')
-        .eq('agent_id', this.id)
-        .order('created_at', { ascending: false })
-        .limit(5).catch(() => ({ data: [] }));
+      let myTasks = [];
+      try {
+        const { data } = await db.from('tasks')
+          .select('title, status, created_at')
+          .eq('agent_id', this.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        myTasks = data || [];
+      } catch { myTasks = []; }
       if (myTasks?.length) {
         liveState = 'LIVE SYSTEM STATE (your recent tasks):\n' +
           myTasks.map(t => '- ' + (t.title || '').slice(0, 60) + ' [' + t.status + ']').join('\n');

@@ -855,7 +855,11 @@
     });
     if (!res.ok) {
       const e = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(e.error || `HTTP ${res.status}`);
+      const msg = e.error || e.reply || `HTTP ${res.status}`;
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error(`${msg} — Render may be waking up. Wait 30s, open ${base}/ping, then retry.`);
+      }
+      throw new Error(msg);
     }
     const data = await res.json();
     // Persist history (keep last 20 turns)

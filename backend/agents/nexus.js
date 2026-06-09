@@ -38,6 +38,18 @@ import { runIpFactory } from '../skills/ipFactory.js';
 import { buildClientBlueprint, listClientBlueprints, getClientBlueprint } from '../skills/clientBlueprint.js';
 import { buildPillarClusterPlan, enqueueC2cCalendar, derivePlaybookTeasers } from '../skills/c2cGrowthEngine.js';
 import { retuneOpenEngagements } from '../skills/engagementMonitor.js';
+import { buildApprovalStatusReply } from '../skills/approvalStatus.js';
+
+const CHAT_TIMEOUT_MS = Number(process.env.NEXUS_CHAT_TIMEOUT_MS || 25000);
+
+function withChatTimeout(promise, label = 'chat') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out — backend or AI provider may be slow. Try again in a moment.`)), CHAT_TIMEOUT_MS),
+    ),
+  ]);
+}
 
 const NEXUS_SYSTEM = `You are Nexus — Digital CEO of the DigiFusion Intelligence Network.
 
@@ -1217,6 +1229,15 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     }
 
+    // ── ACTION: Approval / blog publish status (fast — no LLM) ─────────────
+    if (/approval|approved|gotten the approval|blog.*publish|waiting.*yes|pending.*blog|did you (get|receive)/i.test(lower)) {
+      try {
+        return await buildApprovalStatusReply();
+      } catch (e) {
+        return `I could not read approval status right now: ${e.message}. Check Network → Command for pending approvals.`;
+      }
+    }
+
     // ── ACTION: CEO ops snapshot ───────────────────────────────────────────
     if (/ceo ops|ceo status|cadence status|content cadence/.test(lower)) {
       const ops = await this.getCeoOpsStatus();
@@ -1320,7 +1341,15 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
       ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 
-    const reply = await callAiProvider(resolveProvider(), fullPrompt, chatSystem, CHAT_LLM_OPTS);
+    const provider = resolveProvider();
+    if (!provider) {
+      return 'Boss, no AI provider is configured on the server (check DEEPSEEK_API_KEY or GROQ_API_KEY in Render env). I can still answer approval/status questions — try "approval status".';
+    }
+
+    const reply = await withChatTimeout(
+      callAiProvider(provider, fullPrompt, chatSystem, CHAT_LLM_OPTS),
+      'Nexus chat',
+    );
 
     this.rememberEpisodic({
       summary:    `Boss chat: "${message.slice(0, 80)}"`,

@@ -2231,8 +2231,32 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const { message, history = [] } = body;
       if (!message?.trim()) { err(res, 'message is required', 400); return; }
-      const reply = await agent.chat(message, history);
+      const chatTimeoutMs = Number(process.env.AGENT_CHAT_TIMEOUT_MS || 28000);
+      const reply = await Promise.race([
+        agent.chat(message, history),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Request timed out — server or AI provider is slow. On Render free tier, wake the service with /ping and retry.')), chatTimeoutMs),
+        ),
+      ]);
       json(res, { reply, agentId, timestamp: new Date().toISOString() });
+    } catch (e) {
+      console.error(`[Chat/${path.split('/')[3]}]`, e.message);
+      // Return 200 with error text so the UI shows a message instead of bare HTTP 502 from the proxy
+      json(res, {
+        reply:    `⚠ ${e.message}`,
+        agentId:  path.split('/')[3],
+        error:    true,
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return;
+  }
+
+  // GET /api/agents/nexus/approval-status — fast approval snapshot (no LLM)
+  if (req.method === 'GET' && path === '/api/agents/nexus/approval-status') {
+    try {
+      const { buildApprovalStatusReply } = await import('./skills/approvalStatus.js');
+      json(res, { reply: await buildApprovalStatusReply(), timestamp: new Date().toISOString() });
     } catch (e) { err(res, e.message, 500); }
     return;
   }

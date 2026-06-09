@@ -31,8 +31,8 @@ export {
   refreshPromotedFrameworks,
 };
 
-// Warm promoted-framework cache at startup
-refreshPromotedFrameworks().catch(() => {});
+// Warm promoted-framework cache after startup (non-blocking — avoids slow cold boot on Render)
+setTimeout(() => refreshPromotedFrameworks().catch(() => {}), 3000);
 
 /** Internal agent-DNA documents (Synthesizer + agents, not sold standalone) */
 export function getOperatingFrameworks() {
