@@ -102,8 +102,9 @@ const AGENT_CAPABILITIES = {
 const RESEARCH_REQUIRED_TYPES = ['research', 'analysis', 'competitive_intelligence', 'market_research', 'content_research'];
 
 // ── Client lifecycle stage sequence ──────────────────────────────────────────
-/** CEO briefings must survive a pinned provider outage (e.g. Gemini billing). */
-const CEO_LLM_OPTS = { json: false, fallback: true };
+/** Chat + briefings must survive a pinned provider outage (e.g. Gemini billing). */
+const CHAT_LLM_OPTS = { json: false, fallback: true };
+const CEO_LLM_OPTS  = CHAT_LLM_OPTS;
 
 const LIFECYCLE_STAGES = [
   'discovery',
@@ -1165,7 +1166,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
       ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 
-    const reply = await callAiProvider(this.provider, fullPrompt, chatSystem, { json: false });
+    const reply = await callAiProvider(this.provider, fullPrompt, chatSystem, CHAT_LLM_OPTS);
 
     this.rememberEpisodic({
       summary:    `Boss chat: "${message.slice(0, 80)}"`,
@@ -1278,7 +1279,7 @@ ${status.pendingAlerts.map(a => `- [${a.severity.toUpperCase()}] ${a.title}: ${a
 
 Write a 5–10 sentence operational briefing. Be direct. Flag anything needing immediate attention.`;
 
-    return callAiProvider(this.provider, reportPrompt, this.systemPrompt, { json: false });
+    return callAiProvider(this.provider, reportPrompt, this.systemPrompt, CHAT_LLM_OPTS);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
