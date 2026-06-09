@@ -255,21 +255,91 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     NEXUS COMMAND CENTER
+     NEXUS COMMAND CENTER — executive dashboard
   ═══════════════════════════════════════════════════════════════ */
+  let _cmdActiveTab = 'overview';
+  const _cmdLoaded = new Set();
+
+  function renderCmdKpis (el, cards) {
+    if (!el) return;
+    el.innerHTML = cards.map(c => {
+      const mod = c.mod ? ` cmd-kpi--${c.mod}` : '';
+      return `<div class="cmd-kpi${mod}">
+        <span class="cmd-kpi-label">${esc(c.label)}</span>
+        <span class="cmd-kpi-value">${c.value}</span>
+        <span class="cmd-kpi-hint">${esc(c.hint || '')}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function renderCmdEmpty (title, message, ctaHtml = '') {
+    return `<div class="cmd-empty">
+      <p class="cmd-empty-title">${esc(title)}</p>
+      <p>${esc(message)}</p>
+      ${ctaHtml}
+    </div>`;
+  }
+
+  function renderCmdTable (rows, cols, emptyTitle, emptyMsg) {
+    if (!rows.length) {
+      return renderCmdEmpty(emptyTitle, emptyMsg);
+    }
+    const head = cols.map(c => `<th>${esc(c.label)}</th>`).join('');
+    const body = rows.join('');
+    return `<table class="cmd-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  }
+
+  function parseApprovalReply (reply = '') {
+    const pending = /still waiting/i.test(reply);
+    if (!pending) return { pending: false };
+    const titleMatch = reply.match(/Pending:\s*\*([^*]+)\*/i) || reply.match(/Pending:\s*(.+)/i);
+    const refMatch = reply.match(/Ref:\s*(\S+)/i);
+    return {
+      pending: true,
+      title: (titleMatch?.[1] || 'Blog post').trim(),
+      ref: refMatch?.[1] || '',
+      meta: 'Reply YES on WhatsApp, Nexus chat, or approve below. Caveats welcome.',
+    };
+  }
+
+  function formatPhase (p) {
+    return String(p || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function healthBadge (health) {
+    const h = (health || 'on_track').toLowerCase().replace(/\s+/g, '_');
+    return `<span class="cmd-badge cmd-badge--${esc(h)}">${esc(formatPhase(h))}</span>`;
+  }
+
+  function switchCmdTab (tab) {
+    _cmdActiveTab = tab;
+    document.querySelectorAll('.cmd-tab').forEach(btn => {
+      const on = btn.dataset.cmdTab === tab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.cmd-panel').forEach(p => {
+      p.classList.toggle('active', p.id === `cmd-panel-${tab}`);
+    });
+    loadCmdPanel(tab);
+  }
+
   async function loadApprovalPanel () {
     const panel = $('nexusApprovalPanel');
-    const detail = $('nexusApprovalDetail');
+    const topic = $('nexusApprovalTopic');
+    const meta = $('nexusApprovalMeta');
     const resultEl = $('nexusApprovalResult');
     if (!panel) return;
     try {
       const data = await apiFetch('/api/agents/nexus/approval-status');
-      const reply = data.reply || '';
-      const pending = /still waiting/i.test(reply);
-      panel.hidden = !pending;
-      if (detail) detail.textContent = reply.replace(/\*\*/g, '');
+      const parsed = parseApprovalReply(data.reply || '');
+      panel.hidden = !parsed.pending;
+      if (parsed.pending) {
+        if (topic) topic.textContent = parsed.title;
+        if (meta) meta.textContent = parsed.ref ? `${parsed.meta} Ref ${parsed.ref}` : parsed.meta;
+      }
       if (resultEl) resultEl.textContent = '';
-    } catch (e) {
+    } catch (_) {
       panel.hidden = true;
     }
   }
@@ -295,12 +365,89 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
       if (resultEl) resultEl.textContent = data.reply || 'Done.';
+      _cmdLoaded.clear();
       await loadCeoOps();
     } catch (e) {
       if (resultEl) resultEl.textContent = e.message;
     } finally {
       if (btnA) btnA.disabled = false;
       if (btnR) btnR.disabled = false;
+    }
+  }
+
+  async function loadCmdOverview () {
+    const kpiEl = $('cmdOverviewKpis');
+    const agentsEl = $('ceoOpsAgents');
+    const gaugeEl = $('cmdUtilizationGauge');
+    if (!kpiEl) return;
+
+    kpiEl.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div></div>';
+    try {
+      const [ceo, util, funnel, eng] = await Promise.all([
+        apiFetch('/api/agents/nexus/ceo-ops'),
+        apiFetch('/api/ops/utilization').catch(() => ({})),
+        apiFetch('/api/funnel/attribution?range=30d').catch(() => ({ funnel: {} })),
+        apiFetch('/api/engagements').catch(() => ({ engagements: [] })),
+      ]);
+      const ops = ceo.ops || {};
+      const sched = ops.contentSchedule || {};
+      const f = funnel.funnel || {};
+      const items = eng.engagements || [];
+      const atRisk = items.filter(e => e.health === 'at_risk' || e.health === 'blocked').length;
+
+      renderCmdKpis(kpiEl, [
+        { label: 'Blog cadence', value: ops.cadenceDue ? 'Due' : 'On track', hint: ops.daysSinceLastBlog != null ? `${ops.daysSinceLastBlog}d since last post` : 'No posts yet', mod: ops.cadenceDue ? 'warn' : 'ok' },
+        { label: 'Approvals', value: String(ops.pendingApprovals ?? 0), hint: 'Awaiting Boss YES', mod: (ops.pendingApprovals ?? 0) > 0 ? 'warn' : 'muted' },
+        { label: 'Captures (30d)', value: String(f.captures ?? 0), hint: 'Lead magnet funnel' },
+        { label: 'Engagements', value: String(items.filter(e => e.status === 'active').length), hint: atRisk ? `${atRisk} at risk` : 'Delivery OS', mod: atRisk ? 'warn' : 'ok' },
+        { label: 'Utilization', value: `${util.utilizationPct ?? '—'}%`, hint: util.alert ? 'Pause intake' : 'Capacity OK', mod: util.alert ? 'warn' : 'ok' },
+        { label: 'Active tasks', value: String(ceo.activeTaskCount ?? 0), hint: `${ops.stuckTasks ?? 0} stuck >48h`, mod: (ops.stuckTasks ?? 0) > 0 ? 'warn' : 'muted' },
+      ]);
+
+      if (agentsEl) {
+        const summary = ceo.agentSummary || [];
+        agentsEl.innerHTML = summary.length
+          ? summary.map(a => {
+            const st = a.status || 'idle';
+            const dot = st === 'running' ? 'cmd-agent-dot--running' : 'cmd-agent-dot--idle';
+            return `<div class="cmd-agent"><span class="cmd-agent-dot ${dot}"></span><span class="cmd-agent-name">${esc(a.id)}</span><span class="cmd-badge cmd-badge--${esc(st)}">${esc(st)}</span></div>`;
+          }).join('')
+          : renderCmdEmpty('No agent data', 'Refresh or check backend connectivity.');
+      }
+
+      if (gaugeEl) {
+        const pct = Math.min(100, Math.max(0, Number(util.utilizationPct) || 0));
+        const alert = util.alert;
+        gaugeEl.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span class="cmd-section-title" style="margin:0">Firm utilization</span>
+            <span style="font-size:1.25rem;font-weight:700">${pct}%</span>
+          </div>
+          <div class="cmd-gauge-bar"><div class="cmd-gauge-fill${alert ? ' cmd-gauge-fill--alert' : ''}" style="width:${pct}%"></div></div>
+          <p class="cmd-nps-label">${alert ? 'Capacity threshold reached — defer new intake.' : `${util.bossHoursUsed ?? 0}h used of ${util.bossHoursCapacity ?? 40}h weekly Boss capacity.`}</p>`;
+      }
+    } catch (err) {
+      kpiEl.innerHTML = renderCmdEmpty('Overview unavailable', err.message);
+    }
+  }
+
+  async function loadCmdPublishing () {
+    const grid = $('ceoOpsGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div></div>';
+    try {
+      const data = await apiFetch('/api/agents/nexus/ceo-ops');
+      const ops = data.ops || {};
+      const sched = ops.contentSchedule || {};
+      renderCmdKpis(grid, [
+        { label: 'Blog cadence', value: ops.cadenceDue ? 'Due' : 'On track', hint: ops.daysSinceLastBlog != null ? `${ops.daysSinceLastBlog}d since last post` : 'No posts yet', mod: ops.cadenceDue ? 'warn' : 'ok' },
+        { label: 'Pending approvals', value: String(ops.pendingApprovals ?? 0), hint: 'Boss YES required', mod: (ops.pendingApprovals ?? 0) > 0 ? 'warn' : 'muted' },
+        { label: 'Stuck tasks', value: String(ops.stuckTasks ?? 0), hint: '>48h without progress', mod: (ops.stuckTasks ?? 0) > 0 ? 'warn' : 'muted' },
+        { label: 'Content queue', value: String(sched.queued ?? 0), hint: `${sched.pending ?? 0} awaiting approval` },
+        { label: 'Active tasks', value: String(data.activeTaskCount ?? 0), hint: 'Across agent network' },
+      ]);
+    } catch (err) {
+      grid.innerHTML = renderCmdEmpty('Publishing metrics unavailable', err.message);
     }
   }
 
@@ -313,42 +460,92 @@
     try {
       const data = await apiFetch('/api/funnel/attribution?range=30d');
       const f = data.funnel || {};
-      const cards = [
+      renderCmdKpis(kpiGrid, [
         { label: 'Magnet captures', value: String(f.captures ?? 0), hint: 'Last 30 days' },
         { label: 'Nurture active', value: String(f.nurtureActive ?? 0), hint: 'In sequence' },
         { label: 'Nurture completed', value: String(f.nurtureCompleted ?? 0), hint: 'Finished 5-step' },
         { label: 'Bookings', value: String(f.bookings ?? 0), hint: 'Strategy sessions' },
         { label: 'Converted leads', value: String(f.converted ?? 0), hint: 'Closed deals' },
-      ];
-      kpiGrid.innerHTML = cards.map(c => `
-        <div class="nexus-ops-card">
-          <span class="nexus-ops-card-label">${esc(c.label)}</span>
-          <span class="nexus-ops-card-value">${esc(c.value)}</span>
-          <span class="nexus-ops-card-hint">${esc(c.hint)}</span>
-        </div>
-      `).join('');
+      ]);
 
       if (byContent) {
-        const rows = (data.byContent || []).map(r => `<tr><td>${esc(r.label)}</td><td>${r.count}</td></tr>`).join('')
-          || '<tr><td colspan="2">No attributed content yet</td></tr>';
-        byContent.innerHTML = `<div class="analytics-section-title">Top content → captures</div>
-          <table class="analytics-table"><thead><tr><th>Content</th><th>Captures</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const rows = (data.byContent || []).map(r => `<tr><td>${esc(r.label)}</td><td>${r.count}</td></tr>`);
+        byContent.innerHTML = renderCmdTable(rows, [{ label: 'Content' }, { label: 'Captures' }],
+          'No attributed content', 'Publish gated assets and connect DigiFusion capture forms.');
       }
 
       if (recent) {
-        const rows = (data.recentCaptures || []).map(c => `
-          <tr>
-            <td>${esc(c.email)}</td>
-            <td>${esc(c.magnet_slug || '—')}</td>
-            <td>${esc(c.content_slug || '—')}</td>
-            <td>${esc(c.utm_source || '—')}</td>
-          </tr>`).join('') || '<tr><td colspan="4">No captures yet — wire DigiFusion forms to POST /api/funnel/capture</td></tr>';
-        recent.innerHTML = `<div class="analytics-section-title">Recent captures</div>
-          <table class="analytics-table"><thead><tr><th>Email</th><th>Magnet</th><th>Content</th><th>UTM</th></tr></thead><tbody>${rows}</tbody></table>`;
+        const rows = (data.recentCaptures || []).map(c => `<tr>
+          <td>${esc(c.email)}</td><td>${esc(c.magnet_slug || '—')}</td>
+          <td>${esc(c.content_slug || '—')}</td><td>${esc(c.utm_source || '—')}</td></tr>`);
+        recent.innerHTML = renderCmdTable(rows,
+          [{ label: 'Email' }, { label: 'Magnet' }, { label: 'Content' }, { label: 'UTM' }],
+          'No captures yet', 'Create a lead magnet above, then wire your site forms to capture emails.');
       }
     } catch (err) {
-      kpiGrid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run supabase/009_lead_magnet_funnel.sql if tables are missing.</div>`;
+      kpiGrid.innerHTML = renderCmdEmpty('Funnel data unavailable', err.message);
     }
+  }
+
+  async function openEngagementDrawer (id) {
+    const drawer = $('cmdEngDrawer');
+    const backdrop = $('cmdDrawerBackdrop');
+    const body = $('cmdDrawerBody');
+    if (!drawer || !body) return;
+    body.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div></div>';
+    drawer.classList.add('open');
+    backdrop?.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    backdrop?.setAttribute('aria-hidden', 'false');
+    try {
+      const data = await apiFetch(`/api/engagements/${id}`);
+      const eng = data.engagement || {};
+      const milestones = data.milestones || [];
+      const deliverables = data.deliverables || [];
+      const econ = data.economics;
+      body.innerHTML = `
+        <h3 style="margin:0 0 4px;font-size:1.1rem">${esc(eng.client_name)}</h3>
+        <p class="cmd-nps-label" style="margin:0 0 16px">${healthBadge(eng.health)} · ${esc(formatPhase(eng.current_phase))} · ${esc(eng.track || '')}</p>
+        ${econ ? `<p class="cmd-tool-sub" style="margin-bottom:16px">Revenue $${Math.round(econ.revenue_booked || 0)} · Margin ${Math.round(econ.margin_pct || 0)}%</p>` : ''}
+        <h4 class="cmd-section-title" style="margin-bottom:8px">Milestones</h4>
+        ${milestones.map(m => `<div class="cmd-milestone" data-ms-id="${esc(m.id)}">
+          <span>${esc(m.title)}<br><small class="cmd-nps-label">${esc(formatPhase(m.phase))} · ${esc(m.status)}</small></span>
+          ${m.status !== 'done' ? `<button type="button" class="btn-primary btn-sm cmd-ms-signoff" data-eng="${esc(id)}" data-ms="${esc(m.id)}">Sign off</button>` : '<span class="cmd-badge cmd-badge--on_track">Done</span>'}
+        </div>`).join('') || '<p class="cmd-nps-label">No milestones</p>'}
+        ${deliverables.length ? `<h4 class="cmd-section-title" style="margin:16px 0 8px">Deliverables</h4>
+          <ul style="margin:0;padding-left:18px;font-size:13px">${deliverables.map(d => `<li>${esc(d.title)} — ${esc(d.status)}</li>`).join('')}</ul>` : ''}`;
+      body.querySelectorAll('.cmd-ms-signoff').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = '…';
+          try {
+            const base = getBackendUrl();
+            const res = await fetch(`${base}/api/engagements/${btn.dataset.eng}/milestones/${btn.dataset.ms}/signoff`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ signedOffBy: 'Boss' }),
+            });
+            const d = await res.json();
+            if (!res.ok) throw new Error(d.error || res.statusText);
+            _cmdLoaded.delete('engagements');
+            await openEngagementDrawer(id);
+            await loadEngagementOps();
+          } catch (e) {
+            btn.textContent = 'Failed';
+            alert(e.message);
+          }
+        });
+      });
+    } catch (e) {
+      body.innerHTML = renderCmdEmpty('Engagement unavailable', e.message);
+    }
+  }
+
+  function closeEngagementDrawer () {
+    $('cmdEngDrawer')?.classList.remove('open');
+    $('cmdDrawerBackdrop')?.classList.remove('open');
+    $('cmdEngDrawer')?.setAttribute('aria-hidden', 'true');
+    $('cmdDrawerBackdrop')?.setAttribute('aria-hidden', 'true');
   }
 
   async function loadEngagementOps () {
@@ -360,17 +557,30 @@
       const items = data.engagements || [];
       const active = items.filter(e => e.status === 'active').length;
       const atRisk = items.filter(e => e.health === 'at_risk' || e.health === 'blocked').length;
-      grid.innerHTML = [
+      renderCmdKpis(grid, [
         { label: 'Active engagements', value: String(active), hint: 'Delivery OS' },
-        { label: 'At risk / blocked', value: String(atRisk), hint: 'Needs Boss attention' },
-      ].map(c => `<div class="nexus-ops-card"><span class="nexus-ops-card-label">${esc(c.label)}</span><span class="nexus-ops-card-value">${esc(c.value)}</span><span class="nexus-ops-card-hint">${esc(c.hint)}</span></div>`).join('');
+        { label: 'At risk / blocked', value: String(atRisk), hint: 'Needs Boss attention', mod: atRisk ? 'warn' : 'ok' },
+      ]);
       if (list) {
-        const rows = items.slice(0, 8).map(e => `<tr><td>${esc(e.client_name)}</td><td>${esc(e.current_phase)}</td><td>${esc(e.health)}</td><td>${esc(e.track)}</td></tr>`).join('')
-          || '<tr><td colspan="4">No engagements — create a Client Blueprint</td></tr>';
-        list.innerHTML = `<table class="analytics-table"><thead><tr><th>Client</th><th>Phase</th><th>Health</th><th>Track</th></tr></thead><tbody>${rows}</tbody></table>`;
+        if (!items.length) {
+          list.innerHTML = renderCmdEmpty('No engagements', 'Build a Client Blueprint in Team Workflow to spin up delivery.', '<button type="button" class="btn-secondary btn-sm" id="cmdEmptyBlueprint">Create blueprint</button>');
+          $('cmdEmptyBlueprint')?.addEventListener('click', () => document.querySelector('.module-tab[data-subtab="agents-workflow"]')?.click());
+        } else {
+          const rows = items.slice(0, 12).map(e => `<tr class="cmd-row-action" data-eng-id="${esc(e.id)}" tabindex="0">
+            <td>${esc(e.client_name)}</td>
+            <td>${esc(formatPhase(e.current_phase))}</td>
+            <td>${healthBadge(e.health)}</td>
+            <td>${esc(e.track || '—')}</td></tr>`).join('');
+          list.innerHTML = renderCmdTable(rows, [{ label: 'Client' }, { label: 'Phase' }, { label: 'Health' }, { label: 'Track' }], '', '');
+          list.querySelectorAll('.cmd-row-action').forEach(row => {
+            const open = () => openEngagementDrawer(row.dataset.engId);
+            row.addEventListener('click', open);
+            row.addEventListener('keydown', ev => { if (ev.key === 'Enter') open(); });
+          });
+        }
       }
     } catch (err) {
-      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run supabase/010_engagement_ops.sql</div>`;
+      grid.innerHTML = renderCmdEmpty('Engagements unavailable', err.message);
     }
   }
 
@@ -379,22 +589,24 @@
     const top = $('economicsTopMargin');
     if (!grid) return;
     try {
-      const [econ, util] = await Promise.all([
-        apiFetch('/api/ops/economics'),
-        apiFetch('/api/ops/utilization'),
-      ]);
+      const econ = await apiFetch('/api/ops/economics');
       const t = econ.totals || {};
-      grid.innerHTML = [
-        { label: 'Revenue booked', value: `$${Math.round(t.revenueBooked || 0)}`, hint: 'All engagements' },
+      renderCmdKpis(grid, [
+        { label: 'Revenue booked', value: `$${Math.round(t.revenueBooked || 0).toLocaleString()}`, hint: 'All engagements' },
         { label: 'Avg margin', value: `${Math.round(t.avgMargin || 0)}%`, hint: 'Partner economics' },
-        { label: 'Utilization', value: `${util.utilizationPct ?? '—'}%`, hint: util.alert ? 'Pause intake' : 'Capacity OK' },
         { label: 'Scale segment', value: esc(econ.scaleRecommendation || 'sme'), hint: 'Highest scale score' },
-      ].map(c => `<div class="nexus-ops-card"><span class="nexus-ops-card-label">${esc(c.label)}</span><span class="nexus-ops-card-value">${c.value}</span><span class="nexus-ops-card-hint">${esc(c.hint)}</span></div>`).join('');
-      if (top && econ.topByMargin?.length) {
-        top.innerHTML = `<div class="analytics-section-title">Top margin engagements</div><ul>${econ.topByMargin.map(e => `<li>${esc(e.client)} — ${e.marginPct}%</li>`).join('')}</ul>`;
+      ]);
+      if (top) {
+        if (econ.topByMargin?.length) {
+          const rows = econ.topByMargin.map(e => `<tr><td>${esc(e.client)}</td><td>${e.marginPct}%</td><td>$${Math.round(e.revenueBooked || 0).toLocaleString()}</td></tr>`);
+          top.innerHTML = `<div class="cmd-section-head"><h3 class="cmd-section-title">Top margin engagements</h3></div>
+            <div class="cmd-card cmd-table-wrap">${renderCmdTable(rows, [{ label: 'Client' }, { label: 'Margin' }, { label: 'Revenue' }], '', '')}</div>`;
+        } else {
+          top.innerHTML = '';
+        }
       }
     } catch (err) {
-      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+      grid.innerHTML = renderCmdEmpty('Economics unavailable', err.message);
     }
   }
 
@@ -403,9 +615,13 @@
     if (!el) return;
     try {
       const data = await apiFetch('/api/ops/nps');
-      el.innerHTML = `<p class="nexus-ops-intro">Rolling 90d NPS: <strong>${data.rolling90d ?? '—'}</strong> (${data.responseCount || 0} responses)</p>`;
+      const score = data.rolling90d;
+      el.innerHTML = `
+        <div class="cmd-nps-score">${score != null ? score : '—'}</div>
+        <div class="cmd-nps-label">Rolling 90-day NPS · ${data.responseCount || 0} responses</div>
+        ${data.responseCount ? '<p class="cmd-tool-sub" style="margin-top:12px">Based on completed engagement surveys.</p>' : '<p class="cmd-tool-sub" style="margin-top:12px">Surveys send automatically when engagements complete.</p>'}`;
     } catch (err) {
-      el.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+      el.innerHTML = renderCmdEmpty('NPS unavailable', err.message);
     }
   }
 
@@ -414,55 +630,115 @@
     if (!el) return;
     try {
       const data = await apiFetch('/api/agents/synthesizer/crystallizations');
-      const rows = (data.items || []).map(c => `<tr><td>${esc(c.title)}</td><td>${c.ipms}</td><td>${esc(c.tier)}</td><td>${c.gem_count}</td></tr>`).join('')
-        || '<tr><td colspan="4">No crystallizations yet — Synthesizer IP Factory</td></tr>';
-      el.innerHTML = `<table class="analytics-table"><thead><tr><th>Framework</th><th>IPMS</th><th>Tier</th><th>Gems</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const items = data.items || [];
+      if (!items.length) {
+        el.innerHTML = renderCmdEmpty('No crystallizations yet', 'Use the form above to mine gems and craft proprietary frameworks.');
+        return;
+      }
+      const rows = items.map(c => `<tr>
+        <td>${esc(c.title)}</td><td>${c.ipms ?? '—'}</td>
+        <td>${esc(c.tier || '—')}</td><td>${c.gem_count ?? '—'}</td></tr>`);
+      el.innerHTML = renderCmdTable(rows,
+        [{ label: 'Framework' }, { label: 'IPMS' }, { label: 'Tier' }, { label: 'Gems' }], '', '');
     } catch (err) {
-      el.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}. Run 010 migration for gem_crystallizations.</div>`;
+      el.innerHTML = renderCmdEmpty('GEM Lattice unavailable', err.message);
     }
   }
 
-  async function loadCeoOps () {
-    const grid = $('ceoOpsGrid');
-    const agentsEl = $('ceoOpsAgents');
-    if (!grid) return;
-    grid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>';
-    if (agentsEl) agentsEl.innerHTML = '';
-    await loadApprovalPanel();
-    loadFunnelAttribution();
-    loadEngagementOps();
-    loadEconomicsOps();
-    loadNpsOps();
-    loadGemLattice();
+  async function createLeadMagnetFromCmd () {
+    const title = $('cmdMagnetTitle')?.value.trim();
+    const slug = $('cmdMagnetSlug')?.value.trim();
+    const result = $('cmdMagnetResult');
+    const btn = $('cmdCreateMagnet');
+    if (!title) { if (result) result.textContent = 'Enter a title.'; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
+    if (result) result.textContent = '';
     try {
-      const data = await apiFetch('/api/agents/nexus/ceo-ops');
-      const ops = data.ops || {};
-      const sched = ops.contentSchedule || {};
-      const cards = [
-        { label: 'Blog cadence', value: ops.cadenceDue ? 'Due' : 'On track', hint: ops.daysSinceLastBlog != null ? `${ops.daysSinceLastBlog}d since last post` : 'No posts yet' },
-        { label: 'Pending approvals', value: String(ops.pendingApprovals ?? 0), hint: 'Boss YES required' },
-        { label: 'Stuck tasks', value: String(ops.stuckTasks ?? 0), hint: '>48h without progress' },
-        { label: 'Content queue', value: String(sched.queued ?? 0), hint: `${sched.pending ?? 0} awaiting approval` },
-        { label: 'Active tasks', value: String(data.activeTaskCount ?? 0), hint: 'Across agent network' },
-      ];
-      grid.innerHTML = cards.map(c => `
-        <div class="nexus-ops-card">
-          <span class="nexus-ops-card-label">${esc(c.label)}</span>
-          <span class="nexus-ops-card-value">${esc(c.value)}</span>
-          <span class="nexus-ops-card-hint">${esc(c.hint)}</span>
-        </div>
-      `).join('');
-
-      if (agentsEl && data.agentSummary?.length) {
-        agentsEl.innerHTML = `
-          <h3 class="nexus-ops-agents-title">Agent status</h3>
-          <div class="nexus-ops-agent-chips">
-            ${data.agentSummary.map(a => `<span class="nexus-ops-chip nexus-ops-chip-${esc(a.status || 'idle')}">${esc(a.id)} · ${esc(a.status || 'idle')}</span>`).join('')}
-          </div>`;
-      }
-    } catch (err) {
-      grid.innerHTML = `<div class="content-empty content-empty-err">${esc(err.message)}</div>`;
+      const base = getBackendUrl();
+      const res = await fetch(`${base}/api/funnel/lead-magnet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, slug: slug || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (result) result.textContent = `✓ Magnet "${data.magnet?.title || title}" ready (slug: ${data.magnet?.slug || slug})`;
+      _cmdLoaded.delete('growth');
+      await loadFunnelAttribution();
+    } catch (e) {
+      if (result) result.textContent = `✗ ${e.message}`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Create magnet'; }
     }
+  }
+
+  async function crystallizeFromCmd () {
+    const title = $('cmdCrystalTitle')?.value.trim();
+    const domain = $('cmdCrystalDomain')?.value || 'business_development';
+    const instruction = $('cmdCrystalInstruction')?.value.trim();
+    const result = $('cmdCrystalResult');
+    const btn = $('cmdCrystallizeBtn');
+    if (!title) { if (result) result.textContent = 'Enter a framework title.'; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Crystallizing…'; }
+    if (result) result.textContent = 'Synthesizer mining gems — may take 30–90s…';
+    try {
+      const base = getBackendUrl();
+      const res = await fetch(`${base}/api/agents/synthesizer/crystallize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, domain, instruction }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (result) result.textContent = `✓ ${data.framework?.title || title} · IPMS ${data.ipms ?? '—'} · ${data.tier || 'stored'}`;
+      _cmdLoaded.delete('firmip');
+      await loadGemLattice();
+    } catch (e) {
+      if (result) result.textContent = `✗ ${e.message}`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Crystallize IP'; }
+    }
+  }
+
+  async function loadCmdPanel (tab) {
+    if (_cmdLoaded.has(tab)) return;
+    if (tab === 'overview') await loadCmdOverview();
+    else if (tab === 'publishing') await loadCmdPublishing();
+    else if (tab === 'growth') await loadFunnelAttribution();
+    else if (tab === 'engagements') {
+      await loadEngagementOps();
+      await loadEconomicsOps();
+      await loadNpsOps();
+    } else if (tab === 'firmip') await loadGemLattice();
+    _cmdLoaded.add(tab);
+  }
+
+  function wireCommandDashboard () {
+    if (wireCommandDashboard._wired) return;
+    wireCommandDashboard._wired = true;
+
+    document.querySelectorAll('.cmd-tab').forEach(btn => {
+      btn.addEventListener('click', () => switchCmdTab(btn.dataset.cmdTab));
+    });
+    $('cmdRefreshAll')?.addEventListener('click', () => { _cmdLoaded.clear(); loadCeoOps(); });
+    $('cmdGoBlueprint')?.addEventListener('click', () => document.querySelector('.module-tab[data-subtab="agents-workflow"]')?.click());
+    $('cmdGoConsole')?.addEventListener('click', () => {
+      switchConsole('nexus');
+      document.querySelector('.module-tab[data-subtab="agents-console"]')?.click();
+    });
+    $('cmdCreateMagnet')?.addEventListener('click', createLeadMagnetFromCmd);
+    $('cmdCrystallizeBtn')?.addEventListener('click', crystallizeFromCmd);
+    $('cmdEngRefresh')?.addEventListener('click', () => { _cmdLoaded.delete('engagements'); loadCmdPanel('engagements'); });
+    $('cmdDrawerClose')?.addEventListener('click', closeEngagementDrawer);
+    $('cmdDrawerBackdrop')?.addEventListener('click', closeEngagementDrawer);
+  }
+
+  async function loadCeoOps () {
+    if (!$('cmdOverviewKpis')) return;
+    wireCommandDashboard();
+    await loadApprovalPanel();
+    _cmdLoaded.clear();
+    await loadCmdPanel(_cmdActiveTab);
   }
 
   /* ═══════════════════════════════════════════════════════════════
