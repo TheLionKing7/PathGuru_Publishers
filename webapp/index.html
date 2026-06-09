@@ -1326,14 +1326,32 @@
           </div>
         </section>
 
-        <!-- Services & Bookings (renamed from Bookings) -->
+        <!-- Consulting & Bookings — CMS + Calendly + intake + Notion -->
         <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
-              <h2 class="shop-section-title">Service bookings</h2>
+              <h2 class="shop-section-title">Consulting operations</h2>
+              <div class="shop-services-tabs">
+                <button type="button" class="shop-services-tab active" data-svc="cms">CMS bookings</button>
+                <button type="button" class="shop-services-tab" data-svc="calendly">Calendly</button>
+                <button type="button" class="shop-services-tab" data-svc="intake">Intake pipeline</button>
+                <button type="button" class="shop-services-tab" data-svc="notion">Notion workspace</button>
+              </div>
               <button class="btn-secondary btn-sm" id="shopBookingsRefresh">Refresh</button>
             </div>
-            <div id="shopBookingsTable"><div class="shop-empty"><p>Click Refresh to load bookings.</p></div></div>
+            <p class="shop-services-hint">Aria intake completions sync to Notion automatically. Calendly bookings land in Supabase; CMS bookings come from DigiFusion checkout.</p>
+            <div class="shop-services-pane active" id="shopServicesPaneCms">
+              <div id="shopBookingsTable"><div class="shop-empty"><p>Click Refresh to load CMS service bookings.</p></div></div>
+            </div>
+            <div class="shop-services-pane" id="shopServicesPaneCalendly" hidden>
+              <div id="shopCalendlyTable"><div class="shop-empty"><p>Click Refresh to load Calendly schedule.</p></div></div>
+            </div>
+            <div class="shop-services-pane" id="shopServicesPaneIntake" hidden>
+              <div id="shopIntakeTable"><div class="shop-empty"><p>Click Refresh to load assistant intake leads.</p></div></div>
+            </div>
+            <div class="shop-services-pane" id="shopServicesPaneNotion" hidden>
+              <div id="shopNotionTable"><div class="shop-empty"><p>Click Refresh to load Notion clients &amp; leads.</p></div></div>
+            </div>
           </div>
         </section>
 
@@ -1343,6 +1361,11 @@
             <!-- Orders section -->
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Orders &amp; payments</h2>
+              <select id="shopOrdersGateway" class="shop-range-select" title="Filter by gateway">
+                <option value="">All gateways</option>
+                <option value="stripe">Stripe</option>
+                <option value="opay">OPay</option>
+              </select>
               <button class="btn-secondary btn-sm" id="shopPaymentsRefresh">Refresh</button>
             </div>
             <div id="shopPaymentsTable"><div class="shop-empty"><p>Click Refresh to load orders.</p></div></div>
@@ -1359,10 +1382,16 @@
         <section class="tab-panel" id="tab-shop-analytics" aria-label="Analytics">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
-              <h2 class="shop-section-title">Analytics</h2>
-              <div style="display:flex;gap:6px;align-items:center;margin-left:auto">
+              <h2 class="shop-section-title">Revenue analytics</h2>
+              <div style="display:flex;gap:6px;align-items:center;margin-left:auto;flex-wrap:wrap">
+                <select id="shopSalesRange" class="shop-range-select">
+                  <option value="7d">7 days</option>
+                  <option value="30d" selected>30 days</option>
+                  <option value="90d">90 days</option>
+                </select>
                 <button class="shop-analytics-tab btn-secondary btn-sm active" data-atab="sales">Sales</button>
                 <button class="shop-analytics-tab btn-secondary btn-sm" data-atab="traffic">Site Traffic</button>
+                <label class="shop-auto-refresh-label"><input type="checkbox" id="shopAutoRefresh"> Auto-refresh</label>
                 <button class="btn-secondary btn-sm" id="shopAnalyticsRefresh">Refresh</button>
               </div>
             </div>
@@ -1370,7 +1399,7 @@
             <!-- Sales pane -->
             <div class="shop-analytics-pane active" id="shopAnalyticsPaneSales">
               <div class="shop-stat-grid">
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">—</div><div class="shop-stat-label">Revenue (30d)</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">—</div><div class="shop-stat-label">Revenue</div></div>
                 <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">—</div><div class="shop-stat-label">Orders paid</div></div>
                 <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">—</div><div class="shop-stat-label">Avg order value</div></div>
                 <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">—</div><div class="shop-stat-label">Conversion</div></div>
@@ -1434,10 +1463,13 @@
                 <label for="shopTcPrivacy">Privacy policy</label>
                 <textarea id="shopTcPrivacy" rows="3" placeholder="How you collect, use, and protect customer data…"></textarea>
               </div>
-              <button class="btn-primary" id="shopTcSave">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Save &amp; publish
-              </button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn-secondary" id="shopTcLoad">Load from DigiFusion</button>
+                <button class="btn-primary" id="shopTcSave">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Save &amp; publish
+                </button>
+              </div>
             </div>
 
             <!-- Shipping card -->
@@ -1470,10 +1502,13 @@
                 <label for="shipZones">Shipping zones <span style="text-transform:none;font-weight:400;opacity:.7">(one per line)</span></label>
                 <textarea id="shipZones" rows="3" placeholder="US, CA, UK&#10;AU, NZ&#10;NG, GH, ZA"></textarea>
               </div>
-              <button class="btn-primary" id="shopShippingSave">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                Save shipping
-              </button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn-secondary" id="shopShippingLoad">Load from DigiFusion</button>
+                <button class="btn-primary" id="shopShippingSave">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Save shipping
+                </button>
+              </div>
             </div>
 
           </div>
@@ -1567,6 +1602,7 @@
             <h1 class="panel-title">Nexus Command Center</h1>
           </div>
           <div class="header-actions">
+            <button class="btn-secondary btn-sm" id="ceoNotionSyncBtn" title="Sync CEO dashboard to Notion">Sync Notion</button>
             <button class="btn-secondary btn-sm" id="ceoOpsRefreshBtn">Refresh</button>
           </div>
         </header>

@@ -625,7 +625,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && shopRefundMatch) {
     try {
       const body   = await readBody(req);
-ent.refundOrder(shopRefundMatch[1], body);
+      const result = await cmsClient.refundOrder(shopRefundMatch[1], body);
       json(res, result);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;
@@ -651,11 +651,29 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
+  // ── GET /api/shop/settings/terms ─────────────────
+  if (req.method === 'GET' && path === '/api/shop/settings/terms') {
+    try {
+      const result = await cmsClient.getTerms();
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
   // ── PUT /api/shop/settings/terms ─────────────────
   if (req.method === 'PUT' && path === '/api/shop/settings/terms') {
     try {
       const body   = await readBody(req);
       const result = await cmsClient.saveTerms(body.content || '');
+      json(res, result);
+    } catch (e) { err(res, e.message, e.status || 502); }
+    return;
+  }
+
+  // ── GET /api/shop/settings/shipping ──────────────
+  if (req.method === 'GET' && path === '/api/shop/settings/shipping') {
+    try {
+      const result = await cmsClient.getShipping();
       json(res, result);
     } catch (e) { err(res, e.message, e.status || 502); }
     return;
@@ -2249,6 +2267,23 @@ ent.refundOrder(shopRefundMatch[1], body);
       const body = await readBody(req);
       if (!body.topic) { err(res, 'topic is required', 400); return; }
       json(res, await AGENTS.nexus.dispatchResearch(body));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/notion/workspace — leads + client projects from Notion DBs
+  if (req.method === 'GET' && path === '/api/agents/notion/workspace') {
+    try {
+      const { notion } = await import('./notionClient.js');
+      json(res, await notion.listWorkspaceRecords());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/nexus/sync-notion — push CEO dashboard to Notion
+  if (req.method === 'POST' && path === '/api/agents/nexus/sync-notion') {
+    try {
+      json(res, await AGENTS.nexus.syncCeoNotionDashboard('manual'));
     } catch (e) { err(res, e.message, 500); }
     return;
   }

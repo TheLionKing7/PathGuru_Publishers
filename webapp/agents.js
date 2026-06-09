@@ -1876,6 +1876,19 @@
     /* Refresh button — Network */
     $('agentsRefreshBtn')?.addEventListener('click', loadNetworkStatus);
     $('ceoOpsRefreshBtn')?.addEventListener('click', loadCeoOps);
+    $('ceoNotionSyncBtn')?.addEventListener('click', async () => {
+      const btn = $('ceoNotionSyncBtn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+      try {
+        await apiFetch('/api/agents/nexus/sync-notion', { method: 'POST', body: '{}' });
+        const summary = $('agentsStatusSummary');
+        if (summary) summary.textContent = 'Notion synced';
+      } catch (e) {
+        alert(`Notion sync failed: ${e.message}`);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Sync Notion'; }
+      }
+    });
     $('activityRefreshBtn')?.addEventListener('click', loadActivityTimeline);
 
     /* Refresh — Tasks */

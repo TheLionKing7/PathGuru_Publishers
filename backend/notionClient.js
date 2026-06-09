@@ -309,9 +309,9 @@ export const notion = {
   // ── GENERIC QUERY ──────────────────────────────────────────────────────
 
   async queryDatabase(databaseId, filter = {}, sorts = []) {
-    if (!isConfigured()) return [];
+    if (!isConfigured() || !databaseId) return [];
     try {
-      const body = {};
+      const body = { page_size: 50 };
       if (Object.keys(filter).length) body.filter = filter;
       if (sorts.length) body.sorts = sorts;
       const result = await notionFetch(`/databases/${databaseId}/query`, 'POST', body);
@@ -320,6 +320,51 @@ export const notion = {
       console.error('[Notion] queryDatabase error:', e.message);
       return [];
     }
+  },
+
+  /** Summarize a Notion DB page for ops dashboards */
+  summarizePage (page) {
+    const props = page?.properties || {};
+    const read = (names) => {
+      for (const n of names) {
+        const p = props[n];
+        if (!p) continue;
+        if (p.type === 'title') return p.title?.[0]?.plain_text || '';
+        if (p.type === 'rich_text') return p.rich_text?.[0]?.plain_text || '';
+        if (p.type === 'select') return p.select?.name || '';
+        if (p.type === 'email') return p.email || '';
+        if (p.type === 'number') return p.number;
+        if (p.type === 'date') return p.date?.start || '';
+      }
+      return '';
+    };
+    return {
+      id:      page.id,
+      url:     page.url,
+      name:    read(['Name', 'Title']),
+      company: read(['Company']),
+      email:   read(['Email']),
+      track:   read(['Track']),
+      status:  read(['Status']),
+      score:   read(['Score']),
+      agent:   read(['Assigned Agent']),
+      updated: page.last_edited_time,
+    };
+  },
+
+  async listWorkspaceRecords () {
+    if (!isConfigured()) {
+      return { configured: false, leads: [], clients: [], reason: 'NOTION_API_KEY not set' };
+    }
+    const [leadPages, clientPages] = await Promise.all([
+      this.queryDatabase(process.env.NOTION_LEADS_DB_ID, {}, [{ timestamp: 'last_edited_time', direction: 'descending' }]),
+      this.queryDatabase(process.env.NOTION_CLIENTS_DB_ID, {}, [{ timestamp: 'last_edited_time', direction: 'descending' }]),
+    ]);
+    return {
+      configured: true,
+      leads:    leadPages.map(p => this.summarizePage(p)),
+      clients:  clientPages.map(p => this.summarizePage(p)),
+    };
   },
 
   async updatePage(pageId, properties = {}) {

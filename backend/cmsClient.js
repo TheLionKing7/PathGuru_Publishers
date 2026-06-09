@@ -216,8 +216,16 @@ export async function getAnalytics (range = '30d') {
  * Save Terms & Conditions content.
  * @param {string} content — markdown or HTML string
  */
+export async function getTerms () {
+  return cmsRequest('GET', '/api/cms/settings/terms');
+}
+
 export async function saveTerms (content) {
   return cmsRequest('PUT', '/api/cms/settings/terms', { content });
+}
+
+export async function getShipping () {
+  return cmsRequest('GET', '/api/cms/settings/shipping');
 }
 
 /**

@@ -147,10 +147,11 @@
     if (deptEl)    deptEl.textContent    = dept.label;
     if (sectionEl) sectionEl.textContent = section;
 
-    document.body.classList.remove('pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products');
+    document.body.classList.remove('pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products', 'pg-dept-analytics');
     if (dept.id === 'network')      document.body.classList.add('pg-dept-network');
     if (dept.id === 'intelligence') document.body.classList.add('pg-dept-intelligence');
     if (dept.id === 'products')     document.body.classList.add('pg-dept-products');
+    if (dept.id === 'analytics')    document.body.classList.add('pg-dept-analytics');
 
     syncDeptRouteNav(dept, activeTab);
 

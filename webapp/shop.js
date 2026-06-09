@@ -66,6 +66,35 @@
     return data;
   }
 
+  function unwrapData (data) {
+    if (!data || typeof data !== 'object') return {};
+    return data.data ?? data;
+  }
+
+  let _servicesSubTab = 'cms';
+  let _shopAutoRefreshTimer = null;
+
+  function startShopAutoRefresh () {
+    stopShopAutoRefresh();
+    if (!document.getElementById('shopAutoRefresh')?.checked) return;
+    _shopAutoRefreshTimer = setInterval(() => {
+      const mod = document.getElementById('module-shop');
+      if (!mod?.classList.contains('active')) return;
+      const tab = document.querySelector('#module-shop .shop-tab.active')?.dataset?.subtab;
+      if (tab === 'shop-payments') { loadOrders(); loadSubscriptions(); }
+      if (tab === 'shop-analytics') {
+        const pane = document.querySelector('.shop-analytics-pane.active');
+        if (pane?.id === 'shopAnalyticsPaneTraffic') loadTrafficAnalytics();
+        else loadAnalytics();
+      }
+    }, 60000);
+  }
+
+  function stopShopAutoRefresh () {
+    if (_shopAutoRefreshTimer) clearInterval(_shopAutoRefreshTimer);
+    _shopAutoRefreshTimer = null;
+  }
+
   /* ── SUBSCRIPTIONS ────────────────────────────────────────────── */
   async function loadSubscriptions () {
     const wrap = document.getElementById('shopSubsTable');
@@ -104,7 +133,7 @@
         </table>` : '<p class="shop-empty-msg">No active subscriptions yet.</p>'}
       `;
       wrap.hidden = false;
-      document.querySelector('#tab-shop-subs .shop-empty')?.remove();
+      document.querySelector('#tab-shop-payments .shop-empty')?.remove();
     } catch (e) {
       shopToast(e.message, 'error');
     } finally {
@@ -113,21 +142,28 @@
     }
   }
 
-  /* ── BOOKINGS ─────────────────────────────────────────────────── */
+  /* ── CONSULTING & BOOKINGS ────────────────────────────────────── */
+  function switchServicesPane (svc) {
+    _servicesSubTab = svc;
+    document.querySelectorAll('.shop-services-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.svc === svc);
+    });
+    const panes = { cms: 'Cms', calendly: 'Calendly', intake: 'Intake', notion: 'Notion' };
+    Object.entries(panes).forEach(([key, suffix]) => {
+      const el = document.getElementById(`shopServicesPane${suffix}`);
+      if (el) el.hidden = key !== svc;
+    });
+  }
+
   async function loadBookings () {
     const wrap = document.getElementById('shopBookingsTable');
-    const btn  = document.getElementById('shopBookingsRefresh');
-    if (!wrap || !btn) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Loading…';
-    wrap.hidden = true;
+    if (!wrap) return;
 
     try {
       const data = await shopFetch('GET', '/api/shop/bookings');
       if (!data) return;
 
-      const bookings = (data.data || data).bookings || [];
+      const bookings = unwrapData(data).bookings || data.bookings || [];
 
       wrap.innerHTML = bookings.length ? `
         <table class="shop-table">
@@ -137,21 +173,153 @@
               <tr>
                 <td>${esc(b.product?.name || '—')}</td>
                 <td>${esc(b.order?.customer_name || b.order?.customer_email || '—')}</td>
-                <td><span class="status-pill ${b.status?.replace('_','-')}">${esc(b.status || '—')}</span></td>
+                <td><span class="status-pill ${(b.status || '').replace('_','-')}">${esc(b.status || '—')}</span></td>
                 <td>${b.scheduled_at ? fmtDate(b.scheduled_at) : '<em>TBD</em>'}</td>
                 <td>${fmtDate(b.created_at)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
-      ` : '<p class="shop-empty-msg">No bookings yet.</p>';
-
-      wrap.hidden = false;
-      document.querySelector('#tab-shop-bookings .shop-empty')?.remove();
+      ` : '<p class="shop-empty-msg">No CMS service bookings yet.</p>';
     } catch (e) {
-      shopToast(e.message, 'error');
+      wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadCalendlyBookings () {
+    const wrap = document.getElementById('shopCalendlyTable');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="shop-empty-msg">Loading Calendly bookings…</p>';
+    try {
+      const res = await fetch(`${getBackendUrl()}/api/bookings?limit=50`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      const bookings = json.bookings || [];
+      wrap.innerHTML = bookings.length ? `
+        <table class="shop-table">
+          <thead><tr><th>Client</th><th>Track</th><th>Source</th><th>Status</th><th>Session</th></tr></thead>
+          <tbody>
+            ${bookings.map(b => `
+              <tr>
+                <td>${esc(b.client_name || b.client_email || '—')}</td>
+                <td>${esc(b.track || '—')}</td>
+                <td>${esc(b.source || 'aria')}</td>
+                <td>
+                  <span class="status-pill ${esc(b.status || 'pending')}">${esc(b.status || 'pending')}</span>
+                  ${b.status === 'pending' ? `<button class="btn-sm btn-primary svc-status-btn" data-id="${esc(b.id)}" data-status="confirmed">Confirm</button>` : ''}
+                </td>
+                <td>${fmtDate(b.booking_time)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      ` : '<p class="shop-empty-msg">No Calendly bookings in Supabase yet.</p>';
+
+      wrap.querySelectorAll('.svc-status-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          try {
+            const r = await fetch(`${getBackendUrl()}/api/bookings/${btn.dataset.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: btn.dataset.status }),
+            });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || r.statusText);
+            shopToast('Booking updated', 'success');
+            loadCalendlyBookings();
+          } catch (e) {
+            shopToast(e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (e) {
+      wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadIntakeLeads () {
+    const wrap = document.getElementById('shopIntakeTable');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="shop-empty-msg">Loading intake pipeline…</p>';
+    try {
+      const res = await fetch(`${getBackendUrl()}/api/agents/leads?limit=50`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      const leads = (json.leads || []).filter(l => {
+        const conv = Array.isArray(l.conversation) ? l.conversation : [];
+        return l.intake_data || conv.length >= 6 || l.score >= 3 || l.status === 'booked';
+      });
+      wrap.innerHTML = leads.length ? `
+        <table class="shop-table">
+          <thead><tr><th>Contact</th><th>Track</th><th>Score</th><th>Status</th><th>Intake</th><th>Source</th></tr></thead>
+          <tbody>
+            ${leads.map(l => `
+              <tr>
+                <td>${esc(l.name || l.email || '—')}<br><span class="mono" style="font-size:11px;color:var(--text-muted)">${esc(l.email || '')}</span></td>
+                <td>${esc(l.challenge?.slice(0, 40) || 'Consulting')}</td>
+                <td>${esc(l.score ?? '—')}</td>
+                <td><span class="status-pill ${esc(l.status || 'new')}">${esc(l.status || 'new')}</span></td>
+                <td>${l.intake_data || (Array.isArray(l.conversation) && l.conversation.length >= 6) ? 'Complete' : 'In progress'}</td>
+                <td>${l.booking_url ? `<a href="${esc(l.booking_url)}" target="_blank" rel="noopener" style="font-size:11px">Calendly</a>` : l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" rel="noopener" style="font-size:11px">Source</a>` : '—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      ` : '<p class="shop-empty-msg">No qualified intake leads yet. Aria syncs completed intakes to Notion.</p>';
+    } catch (e) {
+      wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadNotionWorkspace () {
+    const wrap = document.getElementById('shopNotionTable');
+    if (!wrap) return;
+    wrap.innerHTML = '<p class="shop-empty-msg">Loading Notion workspace…</p>';
+    try {
+      const res = await fetch(`${getBackendUrl()}/api/agents/notion/workspace`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      if (!json.configured) {
+        wrap.innerHTML = `<p class="shop-empty-msg">${esc(json.reason || 'Notion not configured')}</p>`;
+        return;
+      }
+      const clients = json.clients || [];
+      const leads   = json.leads || [];
+      wrap.innerHTML = `
+        <h3 class="shop-subsection-title">Active client projects (${clients.length})</h3>
+        ${clients.length ? `<table class="shop-table"><thead><tr><th>Client</th><th>Track</th><th>Status</th><th>Agent</th><th></th></tr></thead><tbody>
+          ${clients.map(c => `<tr>
+            <td>${esc(c.name)}<br><span style="font-size:11px;color:var(--text-muted)">${esc(c.company)}</span></td>
+            <td>${esc(c.track)}</td>
+            <td>${esc(c.status)}</td>
+            <td>${esc(c.agent)}</td>
+            <td>${c.url ? `<a href="${esc(c.url)}" target="_blank" rel="noopener">Open</a>` : ''}</td>
+          </tr>`).join('')}
+        </tbody></table>` : '<p class="shop-empty-msg">No client projects in Notion yet.</p>'}
+        <h3 class="shop-subsection-title" style="margin-top:20px">Leads &amp; intake (${leads.length})</h3>
+        ${leads.length ? `<table class="shop-table"><thead><tr><th>Lead</th><th>Track</th><th>Score</th><th>Status</th><th></th></tr></thead><tbody>
+          ${leads.map(l => `<tr>
+            <td>${esc(l.name)}<br><span style="font-size:11px;color:var(--text-muted)">${esc(l.email)}</span></td>
+            <td>${esc(l.track)}</td>
+            <td>${esc(l.score ?? '—')}</td>
+            <td>${esc(l.status)}</td>
+            <td>${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">Open</a>` : ''}</td>
+          </tr>`).join('')}
+        </tbody></table>` : '<p class="shop-empty-msg">No leads in Notion yet.</p>'}`;
+    } catch (e) {
+      wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
+    }
+  }
+
+  async function loadServicesHub () {
+    const btn = document.getElementById('shopBookingsRefresh');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+    try {
+      if (_servicesSubTab === 'cms') await loadBookings();
+      if (_servicesSubTab === 'calendly') await loadCalendlyBookings();
+      if (_servicesSubTab === 'intake') await loadIntakeLeads();
+      if (_servicesSubTab === 'notion') await loadNotionWorkspace();
     } finally {
-      btn.disabled = false;
-      btn.textContent = 'Load bookings';
+      if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
     }
   }
 
@@ -166,10 +334,12 @@
     wrap.hidden = true;
 
     try {
-      const data = await shopFetch('GET', '/api/shop/orders');
+      const gateway = document.getElementById('shopOrdersGateway')?.value || '';
+      const qs = gateway ? `?gateway=${encodeURIComponent(gateway)}` : '';
+      const data = await shopFetch('GET', `/api/shop/orders${qs}`);
       if (!data) return;
 
-      const orders = (data.data || data).orders || [];
+      const orders = unwrapData(data).orders || data.orders || [];
 
       wrap.innerHTML = orders.length ? `
         <table class="shop-table">
@@ -326,16 +496,80 @@
     }
   }
 
+  /* ── COMMERCE SETTINGS LOAD ───────────────────────────────────── */
+  function parseTermsSections (content) {
+    const sections = { refund: '', terms: '', privacy: '' };
+    if (!content) return sections;
+    const blocks = content.split(/\n---\n|\n(?=## )/);
+    for (const block of blocks) {
+      const lower = block.toLowerCase();
+      if (lower.includes('refund')) sections.refund = block.replace(/^##[^\n]*\n?/, '').trim();
+      else if (lower.includes('privacy')) sections.privacy = block.replace(/^##[^\n]*\n?/, '').trim();
+      else if (lower.includes('terms')) sections.terms = block.replace(/^##[^\n]*\n?/, '').trim();
+      else if (!sections.terms) sections.terms = block.trim();
+    }
+    return sections;
+  }
+
+  async function loadTermsSettings (quiet = false) {
+    try {
+      const data = await shopFetch('GET', '/api/shop/settings/terms');
+      if (!data) return;
+      const content = unwrapData(data).content || data.content || '';
+      const s = parseTermsSections(content);
+      const r = document.getElementById('shopTcRefund');
+      const t = document.getElementById('shopTcTerms');
+      const p = document.getElementById('shopTcPrivacy');
+      if (r) r.value = s.refund;
+      if (t) t.value = s.terms;
+      if (p) p.value = s.privacy;
+      if (!quiet) shopToast('Terms loaded from DigiFusion', 'success');
+    } catch (e) {
+      if (!quiet) shopToast(e.message, 'error');
+    }
+  }
+
+  async function loadShippingSettings (quiet = false) {
+    try {
+      const data = await shopFetch('GET', '/api/shop/settings/shipping');
+      if (!data) return;
+      const d = unwrapData(data);
+      const rules = d.rules || [];
+      const first = rules[0] || {};
+      const methodEl = document.getElementById('shipMethod');
+      const leadEl   = document.getElementById('shipLeadTime');
+      const flatEl   = document.getElementById('shipFlatRate');
+      const freeEl   = document.getElementById('shipFreeThreshold');
+      const zonesEl  = document.getElementById('shipZones');
+      if (methodEl) methodEl.value = first.method || '';
+      if (flatEl) flatEl.value = first.price_usd != null ? (first.price_usd / 100).toFixed(2) : '';
+      if (freeEl) freeEl.value = d.free_threshold_usd != null ? (d.free_threshold_usd / 100).toFixed(2) : '';
+      if (zonesEl) zonesEl.value = rules.map(r => `${r.region}=${((r.price_usd || r.price_ngn || 0) / 100).toFixed(2)}`).join('\n');
+      if (leadEl && first.eta) {
+        const m = String(first.eta).match(/(\d+)/);
+        if (m) leadEl.value = m[1];
+      }
+      if (!quiet) shopToast('Shipping rules loaded', 'success');
+    } catch (e) {
+      if (!quiet) shopToast(e.message, 'error');
+    }
+  }
+
+  async function loadCommerceSettings (quiet = true) {
+    await Promise.allSettled([loadTermsSettings(quiet), loadShippingSettings(quiet)]);
+  }
+
   /* ── ANALYTICS ────────────────────────────────────────────────── */
   async function loadAnalytics () {
     const btn = document.getElementById('shopAnalyticsRefresh');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
 
     try {
-      const data = await shopFetch('GET', '/api/shop/analytics?range=30d');
+      const range = document.getElementById('shopSalesRange')?.value || '30d';
+      const data = await shopFetch('GET', `/api/shop/analytics?range=${encodeURIComponent(range)}`);
       if (!data) return;
 
-      const d = data.data || data;
+      const d = unwrapData(data);
 
       const revEl  = document.getElementById('shopStatRevenue');
       const ordEl  = document.getElementById('shopStatOrders');
@@ -345,7 +579,18 @@
       if (revEl)  revEl.textContent  = `$${esc(d.revenue_usd || '0.00')}`;
       if (ordEl)  ordEl.textContent  = String(d.orders_paid || 0);
       if (aovEl)  aovEl.textContent  = `$${esc(d.aov_usd || '0.00')}`;
-      if (convEl) convEl.textContent = '—';
+
+      let conversion = d.conversion_rate ?? d.conversion_pct;
+      if (conversion == null) {
+        try {
+          const pvRes = await fetch(`${getBackendUrl()}/api/shop/analytics/pageviews?range=${encodeURIComponent(range)}`);
+          const pvJson = await pvRes.json().catch(() => ({}));
+          const sessions = unwrapData(pvJson).unique_sessions || 0;
+          const orders = Number(d.orders_paid || 0);
+          conversion = sessions > 0 ? ((orders / sessions) * 100).toFixed(2) : null;
+        } catch { conversion = null; }
+      }
+      if (convEl) convEl.textContent = conversion != null ? `${conversion}%` : '—';
 
       const byCurrency = d.revenue_by_currency || {};
       const currencies = Object.keys(byCurrency);
@@ -795,7 +1040,7 @@
     try {
       const res = await fetch(`${getBackendUrl()}/api/shop/analytics/pageviews?range=${range}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const d = await res.json();
+      const d = unwrapData(await res.json());
 
       const viewEl = document.getElementById('shopStatViews');
       const sessEl = document.getElementById('shopStatSessions');
@@ -964,10 +1209,18 @@
         shopShell.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         const panel = document.getElementById(`tab-shop-${target}`);
         if (panel) panel.classList.add('active');
-        if (target === 'services')  loadBookings();
+        if (target === 'services')  loadServicesHub();
         if (target === 'payments')  { loadOrders(); loadSubscriptions(); }
         if (target === 'analytics') loadAnalytics();
+        if (target === 'settings')  loadCommerceSettings();
         if (target === 'products')  wireProducts();
+      });
+    });
+
+    document.querySelectorAll('.shop-services-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchServicesPane(btn.dataset.svc);
+        loadServicesHub();
       });
     });
 
@@ -985,11 +1238,32 @@
     document.getElementById('shopTrafficRange')?.addEventListener('change', loadTrafficAnalytics);
     document.getElementById('shopTrafficRefresh')?.addEventListener('click', loadTrafficAnalytics);
     document.getElementById('shopSubsRefresh')?.addEventListener('click', loadSubscriptions);
-    document.getElementById('shopBookingsRefresh')?.addEventListener('click', loadBookings);
+    document.getElementById('shopBookingsRefresh')?.addEventListener('click', loadServicesHub);
     document.getElementById('shopPaymentsRefresh')?.addEventListener('click', loadOrders);
-    document.getElementById('shopAnalyticsRefresh')?.addEventListener('click', loadAnalytics);
+    document.getElementById('shopOrdersGateway')?.addEventListener('change', loadOrders);
+    document.getElementById('shopAnalyticsRefresh')?.addEventListener('click', () => {
+      const pane = document.querySelector('.shop-analytics-pane.active');
+      if (pane?.id === 'shopAnalyticsPaneTraffic') loadTrafficAnalytics();
+      else loadAnalytics();
+    });
+    document.getElementById('shopSalesRange')?.addEventListener('change', loadAnalytics);
     document.getElementById('shopTcSave')?.addEventListener('click', saveTerms);
+    document.getElementById('shopTcLoad')?.addEventListener('click', loadTermsSettings);
     document.getElementById('shopShippingSave')?.addEventListener('click', saveShipping);
+    document.getElementById('shopShippingLoad')?.addEventListener('click', loadShippingSettings);
+    document.getElementById('shopAutoRefresh')?.addEventListener('change', () => {
+      if (document.getElementById('shopAutoRefresh')?.checked) startShopAutoRefresh();
+      else stopShopAutoRefresh();
+    });
+
+    document.addEventListener('pg:tab-change', (e) => {
+      const { tab } = e.detail || {};
+      if (tab === 'shop-services') loadServicesHub();
+      if (tab === 'shop-payments') { loadOrders(); loadSubscriptions(); }
+      if (tab === 'shop-analytics') loadAnalytics();
+      if (tab === 'shop-settings') loadCommerceSettings();
+      if (tab === 'shop-products') wireProducts();
+    });
 
     // Wire products on startup — it's the default active tab
     const activeTab  = shopShell.querySelector('.shop-tab.active');
