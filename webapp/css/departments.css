@@ -185,23 +185,20 @@ body.pg-shell-v3 .app-chrome {
 }
 
 body.pg-shell-v3 .chrome-bar {
-  height: var(--shell-header-h);
+  height: auto;
+  min-height: 36px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
+  justify-content: flex-end;
+  padding: 6px 20px;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   gap: 16px;
 }
 
 body.pg-shell-v3 .chrome-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  min-width: 0;
+  display: none !important;
 }
 
 body.pg-shell-v3 .chrome-dept {
@@ -395,17 +392,32 @@ body.pg-dept-network #module-agents .dept-intel-only { display: none !important;
 body.pg-dept-intelligence #module-agents .dept-network-only { display: none !important; }
 
 /* Network ops panels */
+/* ── Module content breathing room ── */
+body.pg-shell-v3 .module-body > .tab-panel.active {
+  padding: 0;
+}
+.nexus-ops-body,
+.nexus-workflow-body,
+.activity-journal-body,
+.agents-network-body,
+.agents-tasks-body,
+.agents-leads-body,
+.agents-ip-body {
+  padding: 24px 28px 32px;
+  max-width: 1200px;
+}
 .nexus-ops-intro {
   font-size: 13px;
   color: var(--text-secondary);
-  margin: 0 0 16px;
-  line-height: 1.5;
+  margin: 0 0 20px;
+  line-height: 1.6;
+  max-width: 720px;
 }
 .nexus-ops-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 14px;
+  margin-bottom: 24px;
 }
 .nexus-ops-card {
   padding: 16px;
@@ -451,15 +463,174 @@ body.pg-dept-intelligence #module-agents .dept-network-only { display: none !imp
   text-transform: capitalize;
 }
 .nexus-ops-chip-running { border-color: rgba(62,207,142,.4); color: var(--green); }
-.nexus-workflow-body { max-width: 900px; }
-.nexus-workflow-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-.nexus-workflow-meta {
+.nexus-workflow-body { max-width: 880px; }
+.nexus-workflow-form {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
-.nexus-workflow-meta .form-input { flex: 1; min-width: 140px; }
+.nexus-workflow-form .form-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.nexus-workflow-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+}
+.nexus-workflow-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nexus-workflow-field .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.nexus-workflow-field .form-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.nexus-workflow-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+@media (max-width: 900px) {
+  .nexus-workflow-meta { grid-template-columns: 1fr 1fr; }
+  .nexus-workflow-actions { grid-column: 1 / -1; }
+}
+
+/* Activity journal timeline */
+.activity-journal-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.activity-filter-select {
+  min-width: 160px;
+  max-width: 220px;
+}
+.activity-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 4px;
+}
+.activity-timeline-item {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 16px;
+  min-height: 72px;
+}
+.activity-timeline-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+}
+.activity-timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--agent-color, var(--dept-network));
+  box-shadow: 0 0 0 3px rgba(167,139,250,.25);
+  flex-shrink: 0;
+}
+.activity-timeline-line {
+  flex: 1;
+  width: 2px;
+  min-height: 24px;
+  margin-top: 4px;
+  background: linear-gradient(var(--border), transparent);
+}
+.activity-timeline-card {
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.activity-timeline-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.activity-timeline-card-head time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.activity-timeline-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+  line-height: 1.4;
+}
+.activity-timeline-excerpt {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0 0 8px;
+}
+.activity-timeline-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.activity-timeline-empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.activity-timeline-error { color: var(--red); }
+
+/* Analytics department — stronger contrast */
+body.pg-dept-analytics .analytics-kpi-val {
+  color: var(--dept-analytics);
+}
+body.pg-dept-analytics .analytics-chart-bar,
+body.pg-dept-analytics .analytics-row-bar {
+  background: var(--dept-analytics);
+  opacity: 0.85;
+}
+body.pg-dept-analytics .analytics-section-title {
+  color: var(--text-secondary);
+}
+body.pg-dept-analytics .analytics-row-label {
+  color: var(--text-primary);
+}
 .nexus-workflow-spec {
   white-space: pre-wrap;
   font-size: 12px;
@@ -542,6 +713,17 @@ body.pg-dept-products #module-shop .module-body {
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+}
+.shop-gateway-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(62,207,142,.15);
+  color: var(--green);
+  border: 1px solid rgba(62,207,142,.3);
 }
 
 /* ── Responsive ── */

@@ -68,7 +68,8 @@
   <!-- App chrome + main panel -->
   <div class="app-chrome">
     <header class="chrome-bar" role="banner">
-      <nav class="chrome-breadcrumb" aria-label="Breadcrumb">
+      <!-- Breadcrumb paths removed — section titles live in panel headers only -->
+      <nav class="chrome-breadcrumb" aria-hidden="true" hidden>
         <span class="chrome-dept" id="chromeDept">Publisher</span>
         <span class="chrome-sep" aria-hidden="true">/</span>
         <span class="chrome-section" id="chromeSection">Brief &amp; Research</span>
@@ -1227,7 +1228,10 @@
                 <p>Click <strong>Refresh</strong> to load products, or <strong>+ Add Product</strong> to create your first one.</p>
               </div>
             </div>
-            <!-- Slide-in product form -->
+          </div>
+        </section>
+
+        <!-- Product overlays — module level (fixed), not inside scroll panel -->
             <div class="prod-form-overlay" id="prodFormOverlay">
               <div class="prod-form-panel" id="prodFormPanel">
                 <div class="prod-form-header">
@@ -1323,9 +1327,6 @@
               </div>
             </div>
 
-          </div>
-        </section>
-
         <!-- Consulting & Bookings — CMS + Calendly + intake + Notion -->
         <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
@@ -1361,10 +1362,10 @@
             <!-- Orders section -->
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Orders &amp; payments</h2>
-              <select id="shopOrdersGateway" class="shop-range-select" title="Filter by gateway">
+              <span class="shop-gateway-badge" title="Connected gateway">Paystack</span>
+              <select id="shopOrdersGateway" class="shop-range-select" title="Filter orders">
+                <option value="paystack" selected>Paystack only</option>
                 <option value="">All gateways</option>
-                <option value="stripe">Stripe</option>
-                <option value="opay">OPay</option>
               </select>
               <button class="btn-secondary btn-sm" id="shopPaymentsRefresh">Refresh</button>
             </div>
@@ -1615,10 +1616,7 @@
         <header class="panel-header" data-for="agents-activity">
           <div>
             <p class="panel-eyebrow">Agent Network</p>
-            <h1 class="panel-title">Activity Timeline</h1>
-          </div>
-          <div class="header-actions">
-            <button class="btn-secondary btn-sm" id="activityRefreshBtn">Refresh</button>
+            <h1 class="panel-title">Activity Journal</h1>
           </div>
         </header>
         <header class="panel-header" data-for="agents-network">
@@ -1719,10 +1717,6 @@
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
           Console
         </button>
-        <button class="module-tab dept-network-only" data-subtab="agents-tasks" role="tab" aria-selected="false">
-          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          Tasks
-        </button>
         <button class="module-tab dept-network-only" data-subtab="agents-leads" role="tab" aria-selected="false">
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Leads
@@ -1750,32 +1744,61 @@
               <label class="form-label" for="workflowProcessInput">Process description</label>
               <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding — intake form → Notion CRM → kickoff deck → delivery sprint"></textarea>
               <div class="nexus-workflow-meta">
-                <input type="text" id="workflowClientInput" class="form-input" placeholder="Client name (optional)">
-                <input type="text" id="workflowIndustryInput" class="form-input" placeholder="Industry (optional)">
-                <button type="button" class="btn-primary" id="workflowDesignBtn">Design workflow</button>
+                <div class="nexus-workflow-field">
+                  <label class="form-label" for="workflowClientInput">Client</label>
+                  <input type="text" id="workflowClientInput" class="form-input" placeholder="Client name (optional)">
+                </div>
+                <div class="nexus-workflow-field">
+                  <label class="form-label" for="workflowIndustryInput">Industry</label>
+                  <select id="workflowIndustryInput" class="form-input">
+                    <option value="general">General</option>
+                    <option value="consulting">Consulting &amp; professional services</option>
+                    <option value="saas">SaaS &amp; software</option>
+                    <option value="media">Digital media &amp; publishing</option>
+                    <option value="govtech">GovTech</option>
+                    <option value="hospitality">Hospitality</option>
+                    <option value="healthcare">Healthcare</option>
+                    <option value="finance">Finance &amp; fintech</option>
+                  </select>
+                </div>
+                <div class="nexus-workflow-field">
+                  <label class="form-label" for="workflowFrameworkInput">Framework</label>
+                  <select id="workflowFrameworkInput" class="form-input">
+                    <option value="">Auto-detect from process</option>
+                    <option value="ave">AVE — Automation Velocity Engine</option>
+                    <option value="deal">Deal Engine — BD &amp; consulting</option>
+                    <option value="c2c">C2C — Content-to-Capital</option>
+                    <option value="engagement">Engagement Model</option>
+                  </select>
+                </div>
+                <div class="nexus-workflow-actions">
+                  <button type="button" class="btn-primary" id="workflowDesignBtn">Design workflow</button>
+                </div>
               </div>
             </div>
             <div class="nexus-workflow-result" id="workflowResult" hidden></div>
           </div>
         </section>
 
-        <!-- ── ACTIVITY TIMELINE ── -->
-        <section class="tab-panel" id="tab-agents-activity" aria-label="Activity Timeline">
-          <div class="agents-tasks-body">
-            <div class="agents-table-wrap">
-              <table class="agents-table" id="activityTable">
-                <thead>
-                  <tr>
-                    <th>Agent</th>
-                    <th>Activity</th>
-                    <th>Status</th>
-                    <th>When</th>
-                  </tr>
-                </thead>
-                <tbody id="activityTableBody">
-                  <tr><td colspan="4" class="agents-table-empty">Loading activity…</td></tr>
-                </tbody>
-              </table>
+        <!-- ── ACTIVITY JOURNAL (agent action timeline) ── -->
+        <section class="tab-panel" id="tab-agents-activity" aria-label="Activity Journal">
+          <div class="activity-journal-body">
+            <div class="activity-journal-toolbar">
+              <select id="activityAgentFilter" class="form-input activity-filter-select" aria-label="Filter by agent">
+                <option value="">All agents</option>
+                <option value="nexus">Nexus</option>
+                <option value="atlas">Atlas</option>
+                <option value="nova">Nova</option>
+                <option value="aether">Aether</option>
+                <option value="pulse">Pulse</option>
+                <option value="synthesizer">Synthesizer</option>
+                <option value="researcher">Orion</option>
+                <option value="assistant">Aria</option>
+              </select>
+              <button class="btn-secondary btn-sm" id="activityRefreshBtn">Refresh journal</button>
+            </div>
+            <div class="activity-timeline" id="activityTimeline">
+              <div class="activity-timeline-empty">Loading agent journal…</div>
             </div>
           </div>
         </section>

@@ -301,9 +301,14 @@
     if (wireWorkflowTab._wired) return;
     wireWorkflowTab._wired = true;
     $('workflowDesignBtn')?.addEventListener('click', async () => {
-      const processDescription = $('workflowProcessInput')?.value.trim();
+      let processDescription = $('workflowProcessInput')?.value.trim();
       const clientName = $('workflowClientInput')?.value.trim() || 'Internal';
-      const industry = $('workflowIndustryInput')?.value.trim() || 'general';
+      const industry = $('workflowIndustryInput')?.value || 'general';
+      const framework = $('workflowFrameworkInput')?.value || '';
+      if (framework) {
+        const fwLabel = $('workflowFrameworkInput')?.selectedOptions?.[0]?.textContent || framework;
+        processDescription = `[Framework: ${fwLabel}]\n${processDescription}`;
+      }
       const out = $('workflowResult');
       if (!processDescription) {
         alert('Describe the process to design a workflow.');
@@ -340,31 +345,51 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     ACTIVITY TIMELINE (recent tasks)
+     ACTIVITY JOURNAL — vertical timeline of agent actions
   ═══════════════════════════════════════════════════════════════ */
   async function loadActivityTimeline () {
-    const tbody = $('activityTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4" class="agents-table-empty">Loading activity…</td></tr>';
+    const wrap = $('activityTimeline');
+    if (!wrap) return;
+    const agentFilter = $('activityAgentFilter')?.value || '';
+    wrap.innerHTML = '<div class="activity-timeline-empty">Loading agent journal…</div>';
     try {
-      const data = await fetchTasks('', '');
-      const tasks = (data.tasks || data || []).slice(0, 25);
+      const data = await fetchTasks(agentFilter, '');
+      const tasks = (data.tasks || data || [])
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 40);
       if (!tasks.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="agents-table-empty">No recent activity.</td></tr>';
+        wrap.innerHTML = '<div class="activity-timeline-empty">No agent actions recorded yet. Tasks from Nexus, Orion, Nova, and others appear here as a connected journal.</div>';
         return;
       }
-      tbody.innerHTML = tasks.map(t => {
-        const agent = AGENTS.find(a => a.id === t.agent_id) || { name: t.agent_id, color: '#888' };
+      wrap.innerHTML = tasks.map((t, i) => {
+        const agent = AGENTS.find(a => a.id === t.agent_id) || { name: t.agent_id, color: '#888', role: 'Agent' };
+        const isLast = i === tasks.length - 1;
+        const when = t.created_at ? new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+        const title = t.title || t.description || 'Agent action';
+        const excerpt = (t.result || t.output || '').toString().slice(0, 160);
         return `
-          <tr>
-            <td><span class="task-agent-chip" style="--agent-color:${agent.color}">${esc(agent.name || t.agent_id)}</span></td>
-            <td class="task-title-cell">${esc(t.title || t.description || '—')}</td>
-            <td>${statusBadge(t.status)}</td>
-            <td class="task-date-cell">${relTime(t.created_at)}</td>
-          </tr>`;
+          <article class="activity-timeline-item">
+            <div class="activity-timeline-rail" aria-hidden="true">
+              <span class="activity-timeline-dot" style="--agent-color:${agent.color}"></span>
+              ${isLast ? '' : '<span class="activity-timeline-line"></span>'}
+            </div>
+            <div class="activity-timeline-card">
+              <header class="activity-timeline-card-head">
+                <span class="task-agent-chip" style="--agent-color:${agent.color}">${esc(agent.name)}</span>
+                <time datetime="${esc(t.created_at || '')}">${esc(when)}</time>
+                ${statusBadge(t.status)}
+              </header>
+              <h4 class="activity-timeline-title">${esc(title)}</h4>
+              ${excerpt ? `<p class="activity-timeline-excerpt">${esc(excerpt)}${(t.result || t.output || '').length > 160 ? '…' : ''}</p>` : ''}
+              <footer class="activity-timeline-meta">
+                <span>${esc(agent.role || '')}</span>
+                ${t.completed_at ? `<span>Completed ${relTime(t.completed_at)}</span>` : ''}
+              </footer>
+            </div>
+          </article>`;
       }).join('');
     } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="4" class="agents-table-empty agents-table-error">${esc(err.message)}</td></tr>`;
+      wrap.innerHTML = `<div class="activity-timeline-empty activity-timeline-error">${esc(err.message)}</div>`;
     }
   }
 
@@ -1890,6 +1915,7 @@
       }
     });
     $('activityRefreshBtn')?.addEventListener('click', loadActivityTimeline);
+    $('activityAgentFilter')?.addEventListener('change', loadActivityTimeline);
 
     /* Refresh — Tasks */
     $('tasksRefreshBtn')?.addEventListener('click', loadTasks);

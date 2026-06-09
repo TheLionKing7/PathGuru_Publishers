@@ -1211,6 +1211,7 @@
         if (panel) panel.classList.add('active');
         if (target === 'services')  loadServicesHub();
         if (target === 'payments')  { loadOrders(); loadSubscriptions(); }
+      // default Paystack filter is set in HTML
         if (target === 'analytics') loadAnalytics();
         if (target === 'settings')  loadCommerceSettings();
         if (target === 'products')  wireProducts();

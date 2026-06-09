@@ -56,7 +56,7 @@
       sections: {
         'agents-command':  'Nexus Command Center',
         'agents-workflow': 'Team Workflow',
-        'agents-activity': 'Activity Timeline',
+        'agents-activity': 'Activity Journal',
         'agents-network':  'Agent Roster',
         'agents-console':  'Agent Console',
         'agents-tasks':    'Task History',
