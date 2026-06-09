@@ -177,8 +177,8 @@ async function runEditorialAgents(input, project, research, provider) {
  * @param {boolean} [options.fallback=true] — try next provider if this one fails
  */
 export async function callAiProvider(provider, prompt, systemHint, options = {}) {
-  // When AI_PROVIDER is pinned, do not silently fall back to broken keys (e.g. Gemini billing)
-  const { json = true, fallback = options.fallback ?? !process.env.AI_PROVIDER } = options;
+  // Default: DeepSeek → Groq fallback chain (see PROVIDER_FALLBACK_CHAIN)
+  const { json = true, fallback = options.fallback !== false } = options;
   try {
     if (provider.name === "gemini") return await callGemini(prompt, provider.model, systemHint, json);
     if (provider.name === "claude") return await callClaude(provider, prompt, systemHint);
@@ -192,18 +192,23 @@ export async function callAiProvider(provider, prompt, systemHint, options = {})
   }
 }
 
+/** Auto chain: DeepSeek primary, Groq fallback — Gemini only when AI_PROVIDER=gemini */
+const DEFAULT_PROVIDER_NAME = 'deepseek';
+const PROVIDER_FALLBACK_CHAIN = ['deepseek', 'groq', 'cerebras', 'claude', 'perplexity'];
+
 /** Select the next available provider, skipping the one that just failed. */
 function _resolveFallbackProvider(excludeName) {
-  const pinned = process.env.AI_PROVIDER?.toLowerCase();
-  const PRIORITY = [
-    ...(pinned ? [pinned] : []),
-    'deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity',
-  ];
-  for (const name of PRIORITY) {
+  const explicit = (process.env.AI_PROVIDER || '').toLowerCase();
+  const chain = explicit && explicit !== excludeName
+    ? [explicit, ...PROVIDER_FALLBACK_CHAIN]
+    : PROVIDER_FALLBACK_CHAIN;
+  for (const name of chain) {
     if (name === excludeName) continue;
-    const p = resolveProvider(name);
+    const p = _resolveProviderByName(name);
     if (p) return p;
   }
+  // Last resort only when explicitly configured
+  if (excludeName !== 'gemini') return _resolveProviderByName('gemini');
   return null;
 }
 
@@ -334,55 +339,64 @@ async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
 
 
 
-export function resolveProvider(overrideName) {
-  const requested = (overrideName || process.env.AI_PROVIDER || "").toLowerCase();
-  const providers = {
-    // Groq — OpenAI-compatible, ultra-fast inference (Llama / Mixtral / Gemma).
-    // Primary fast provider. Free tier generous; production tier very affordable.
+function _buildProviderRegistry() {
+  return {
+    deepseek: process.env.DEEPSEEK_API_KEY ? {
+      name:    'deepseek',
+      apiKey:  process.env.DEEPSEEK_API_KEY,
+      baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+      model:   process.env.DEEPSEEK_MODEL || 'deepseek-chat',
+    } : null,
     groq: process.env.GROQ_API_KEY ? {
-      name:    "groq",
+      name:    'groq',
       apiKey:  process.env.GROQ_API_KEY,
-      baseUrl: "https://api.groq.com/openai/v1",
-      model:   process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model:   process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
     } : null,
     cerebras: process.env.CEREBRAS_API_KEY ? {
-      name:    "cerebras",
+      name:    'cerebras',
       apiKey:  process.env.CEREBRAS_API_KEY,
-      baseUrl: process.env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",
-      model:   process.env.CEREBRAS_MODEL || "llama-4-scout-17b-16e-instruct",
-    } : null,
-    gemini: process.env.GEMINI_API_KEY ? {
-      name:   "gemini",
-      apiKey: process.env.GEMINI_API_KEY,
-      model:  process.env.GEMINI_MODEL || "gemini-2.5-flash",
-    } : null,
-    deepseek: process.env.DEEPSEEK_API_KEY ? {
-      name:    "deepseek",
-      apiKey:  process.env.DEEPSEEK_API_KEY,
-      baseUrl: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-      model:   process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
+      baseUrl: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
+      model:   process.env.CEREBRAS_MODEL || 'llama-4-scout-17b-16e-instruct',
     } : null,
     claude: process.env.CLAUDE_API_KEY ? {
-      name:   "claude",
-      apiKey: (process.env.CLAUDE_API_KEY || "").trim(),
-      model:  (process.env.CLAUDE_MODEL  || "claude-sonnet-4-5").trim(),
+      name:   'claude',
+      apiKey: (process.env.CLAUDE_API_KEY || '').trim(),
+      model:  (process.env.CLAUDE_MODEL || 'claude-sonnet-4-5').trim(),
     } : null,
-    // Perplexity — OpenAI-compatible, native web-search grounding.
-    // Best used for research queries that benefit from real-time sourcing.
     perplexity: process.env.PERPLEXITY_API_KEY ? {
-      name:    "perplexity",
+      name:    'perplexity',
       apiKey:  process.env.PERPLEXITY_API_KEY,
-      baseUrl: "https://api.perplexity.ai",
-      model:   process.env.PERPLEXITY_MODEL || "sonar-pro",
+      baseUrl: 'https://api.perplexity.ai',
+      model:   process.env.PERPLEXITY_MODEL || 'sonar-pro',
+    } : null,
+    // Opt-in only — set AI_PROVIDER=gemini explicitly; never auto-selected
+    gemini: process.env.GEMINI_API_KEY ? {
+      name:   'gemini',
+      apiKey: process.env.GEMINI_API_KEY,
+      model:  process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     } : null,
   };
+}
 
-  if (requested && providers[requested]) return providers[requested];
-  // Auto-select: honour AI_PROVIDER env, else Groq → Cerebras → Gemini → DeepSeek → Claude → Perplexity
-  if (process.env.AI_PROVIDER && providers[process.env.AI_PROVIDER.toLowerCase()]) {
-    return providers[process.env.AI_PROVIDER.toLowerCase()];
+function _resolveProviderByName(name) {
+  const providers = _buildProviderRegistry();
+  return providers[name?.toLowerCase()] || null;
+}
+
+export function resolveProvider(overrideName) {
+  const requested = (overrideName || process.env.AI_PROVIDER || DEFAULT_PROVIDER_NAME).toLowerCase();
+
+  // Explicit request (including default deepseek)
+  const direct = _resolveProviderByName(requested);
+  if (direct) return direct;
+
+  // Requested provider has no key — walk firm chain (never auto-pick gemini)
+  for (const name of PROVIDER_FALLBACK_CHAIN) {
+    const p = _resolveProviderByName(name);
+    if (p) return p;
   }
-  return providers.groq || providers.cerebras || providers.gemini || providers.deepseek || providers.claude || providers.perplexity || null;
+  return _resolveProviderByName('gemini');
 }
 
 /**
@@ -394,18 +408,9 @@ export function resolveResearchProvider() {
   return resolveProvider('perplexity') || resolveProvider('groq') || resolveProvider();
 }
 
-/**
- * Resolve a provider specifically for long-form editorial / PDF content generation.
- * Prefers Claude (highest prose quality, 32K output) → Groq → Gemini → DeepSeek.
- * Used by the book/playbook publishing pipeline where content quality is paramount.
- */
+/** Long-form editorial — DeepSeek primary, Groq fallback (same firm chain). */
 export function resolveEditorialProvider() {
-  // Honour AI_PROVIDER when explicitly set (e.g. deepseek, groq, cerebras)
-  if (process.env.AI_PROVIDER) {
-    const pinned = resolveProvider(process.env.AI_PROVIDER);
-    if (pinned) return pinned;
-  }
-  return resolveProvider('claude') || resolveProvider('groq') || resolveProvider('cerebras') || resolveProvider('deepseek') || resolveProvider('gemini') || resolveProvider();
+  return resolveProvider();
 }
 
 

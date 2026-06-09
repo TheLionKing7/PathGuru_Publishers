@@ -20,7 +20,7 @@
 
 import { AgentBase }      from './agentBase.js';
 import { getSupabase }    from '../supabaseClient.js';
-import { callAiProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';
@@ -672,7 +672,7 @@ Return ONLY a JSON array with fields: title, description, agent_id, type (resear
 
     let tasks;
     try {
-      const raw = await callAiProvider(this.provider, decompositionPrompt, this.systemPrompt);
+      const raw = await callAiProvider(resolveProvider(), decompositionPrompt, this.systemPrompt, { fallback: true });
       tasks = this._parseJsonArray(raw);
     } catch (e) {
       console.error('[Nexus] Decomposition failed:', e.message);
@@ -883,14 +883,14 @@ ${status.pendingAlerts.map(a => `- [${a.severity?.toUpperCase()}] ${a.title}`).j
 Write a direct morning CEO briefing: lead with today's top priority, then pipeline pulse, approvals needed, content cadence, one focus line per active agent. Max 6 sentences unless Boss asked for detail. Apply Minto Pyramid — recommendation first.`;
 
     const [briefingRaw, escalations] = await Promise.all([
-      callAiProvider(this.provider, briefingPrompt, this.systemPrompt, CEO_LLM_OPTS),
+      callAiProvider(resolveProvider(), briefingPrompt, this.systemPrompt, CEO_LLM_OPTS),
       this.checkEscalationTriggers().catch(() => []),
     ]);
 
     let briefing = briefingRaw;
     const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
     if (!quality.passed) {
-      const rewrite = await callAiProvider(this.provider,
+      const rewrite = await callAiProvider(resolveProvider(),
         `Rewrite this CEO briefing to pass quality gate. Lead with recommendation. Remove platitudes. Reference firm IP where relevant.\n\n${briefing}`,
         this.systemPrompt, CEO_LLM_OPTS);
       briefing = rewrite;
@@ -947,7 +947,7 @@ CEO OPS:
 
 Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first.`;
 
-    let briefing = await callAiProvider(this.provider, prompt, this.systemPrompt, CEO_LLM_OPTS);
+    let briefing = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, CEO_LLM_OPTS);
     const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
 
     await syncNotionCeoDashboard({ period: 'evening', briefingExcerpt: briefing, snap: ops }).catch((e) => {
@@ -1166,7 +1166,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
       ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 
-    const reply = await callAiProvider(this.provider, fullPrompt, chatSystem, CHAT_LLM_OPTS);
+    const reply = await callAiProvider(resolveProvider(), fullPrompt, chatSystem, CHAT_LLM_OPTS);
 
     this.rememberEpisodic({
       summary:    `Boss chat: "${message.slice(0, 80)}"`,
@@ -1279,7 +1279,7 @@ ${status.pendingAlerts.map(a => `- [${a.severity.toUpperCase()}] ${a.title}: ${a
 
 Write a 5–10 sentence operational briefing. Be direct. Flag anything needing immediate attention.`;
 
-    return callAiProvider(this.provider, reportPrompt, this.systemPrompt, CHAT_LLM_OPTS);
+    return callAiProvider(resolveProvider(), reportPrompt, this.systemPrompt, CHAT_LLM_OPTS);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1464,7 +1464,7 @@ Return JSON array only, no markdown:
 
     let proposals;
     try {
-      const raw = await callAiProvider(this.provider, prompt, this.systemPrompt);
+      const raw = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { fallback: true });
       proposals = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || raw);
     } catch (e) {
       console.error('[Nexus] Newsletter topic generation failed:', e.message);

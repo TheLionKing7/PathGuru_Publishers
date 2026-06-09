@@ -9,7 +9,7 @@
  * intake questionnaire for each service track, and books strategy sessions
  * with qualified prospects via Calendly.
  *
- * Provider auto-fallback: Gemini → Claude → Cerebras (configured in aiPipeline.js)
+ * Provider chain: DeepSeek → Groq fallback (configured in aiPipeline.js)
  *
  * Intake tracks handled conversationally:
  *   — BD Intake         (Atlas will handle post-intake)
@@ -20,7 +20,7 @@
  */
 
 import { AgentBase }      from './agentBase.js';
-import { callAiProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { notion }         from '../notionClient.js';
@@ -321,7 +321,7 @@ Visitor: ${message}
 Respond as Aria. Be concise and direct — 1 to 3 sentences unless the question genuinely requires more depth. No bullet lists unless explicitly asked. No filler openings.
 ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the strategy session in one sentence. The booking link will be appended by the system.' : ''}`;
 
-      response = await callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+      response = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
     }
 
     // ── 3. Extract qualification data ───────────────────────────────────────
@@ -614,7 +614,7 @@ Write a warm, professional closing message that:
 
 Keep it natural and concise — 3–4 short paragraphs maximum.`;
 
-      return callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+      return callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
     }
 
     // Ask the next question, informed by their previous answer
@@ -638,7 +638,7 @@ Do not say "Question ${nextStep + 1} of ${flow.questions.length}". Do not add fi
 
 If their answer reveals something significant (a constraint, an opportunity, a risk), note it briefly before moving on.`;
 
-    return callAiProvider(this.provider, prompt, this.systemPrompt, { json: false });
+    return callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
   }
 
   async _onIntakeComplete(leadState, sessionId, sourceUrl, history) {
@@ -907,7 +907,7 @@ Only include fields where information was clearly provided. Return {} if nothing
 Return ONLY the JSON object.`;
 
     try {
-      const raw  = await callAiProvider(this.provider, extractPrompt, null, { json: true });
+      const raw  = await callAiProvider(resolveProvider(), extractPrompt, null, { json: true, fallback: true });
       const data = JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}');
       return { ...currentState, ...Object.fromEntries(Object.entries(data).filter(([, v]) => v)) };
     } catch {

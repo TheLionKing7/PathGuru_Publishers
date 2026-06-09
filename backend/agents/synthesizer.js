@@ -278,7 +278,7 @@ When asked to synthesize across multiple sources, you identify convergent themes
 /** Build provider chain: AI_PROVIDER first, then sensible fallbacks (no Claude-first override). */
 function buildSynthesizerProviderChain() {
   const primary = resolveProvider();
-  const fallbackNames = ['deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity'];
+  const fallbackNames = ['deepseek', 'groq', 'cerebras', 'claude', 'perplexity'];
   const chain = [];
   const seen  = new Set();
 

@@ -17,6 +17,9 @@
 
 import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+
+/** DeepSeek primary, Groq fallback — resolved fresh each call (env changes without restart). */
+const LLM_CALL_OPTS = { fallback: true };
 import { notion }        from '../notionClient.js';
 import { getFrameworksForAgent } from '../skills/firmKnowledge.js';
 
@@ -46,8 +49,9 @@ export class AgentBase {
       ? `${config.systemPrompt}\n\nYOUR OPERATING FRAMEWORKS (DigiFusion firm IP):\n${fwBlock}`
       : config.systemPrompt;
     this.domains      = config.domains || [];
-    this.model        = config.model || resolveProvider()?.model || DEFAULT_MODEL;
-    this.provider     = resolveProvider();
+    const active       = resolveProvider();
+    this.model        = config.model || active?.model || DEFAULT_MODEL;
+    this.provider     = active;
   }
 
   // ---
@@ -229,7 +233,7 @@ ${data.map((e, i) => `[${i}] ${e.title} (${e.domain}): ${e.content.slice(0, 200)
 Return a JSON array of up to 4 index numbers that are most relevant to the task query. Example: [0, 2, 5]
 Return ONLY the JSON array, no other text.`;
 
-      const raw = await callAiProvider(this.provider, selectionPrompt);
+      const raw = await callAiProvider(resolveProvider(), selectionPrompt, null, LLM_CALL_OPTS);
       const selected = JSON.parse(raw.match(/\[[\d,\s]+\]/)?.[0] || '[]');
       const relevant = selected.map(i => data[i]).filter(Boolean);
       return this._formatKnowledgeEntries(relevant.length > 0 ? relevant : data.slice(0, 3));
@@ -293,7 +297,7 @@ Return ONLY the JSON array, no other text.`;
       ? `${contextBlocks}\n\n---\n\n## Current task\n${taskPrompt}`
       : taskPrompt;
 
-    return callAiProvider(this.provider, fullPrompt, this.systemPrompt);
+    return callAiProvider(resolveProvider(), fullPrompt, this.systemPrompt, LLM_CALL_OPTS);
   }
 
   // ---
@@ -440,10 +444,10 @@ Return ONLY the JSON array, no other text.`;
       ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
 
     const reply = await callAiProvider(
-      this.provider,
+      resolveProvider(),
       fullPrompt,
       guardrailedSystem,
-      { json: false }
+      { json: false, fallback: true },
     );
 
     // Log the exchange as episodic memory (low importance - conversational)

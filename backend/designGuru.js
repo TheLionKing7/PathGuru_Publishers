@@ -1,5 +1,5 @@
 import { createComplianceReport, createKdpProfile, getPageCss } from "./kdpCompliance.js";
-import { createAiPublishingPackage } from "./aiPipeline.js";
+import { createAiPublishingPackage, callAiProvider, resolveProvider } from "./aiPipeline.js";
 
 const publisherProfiles = {
   pathfinda: {
@@ -457,23 +457,11 @@ async function runFeedbackLoop(manuscript, renderReport, nicheProfile, project) 
     console.log(`[PathGuru] Feedback loop: fixing ${renderReport.sections.filter(s=>s.issues?.length>0).length} weak sections...`);
 
     let rawResponse = '';
-    const provider = process.env.AI_PROVIDER || 'gemini';
-
-    if (provider === 'gemini' && process.env.GEMINI_API_KEY) {
-      const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-          body: JSON.stringify({
-            contents: [{ role:'user', parts:[{ text: prompt }] }],
-            generationConfig: { temperature: 0.6, responseMimeType: 'application/json' },
-          }),
-        }
-      );
-      const data = await res.json();
-      rawResponse = data.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('').trim() || '';
+    try {
+      rawResponse = await callAiProvider(resolveProvider(), prompt, null, { json: true, fallback: true });
+    } catch (e) {
+      console.warn('[PathGuru] Feedback loop AI failed:', e.message);
+      return manuscript;
     }
 
     if (!rawResponse) return manuscript;

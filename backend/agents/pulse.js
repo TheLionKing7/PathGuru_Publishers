@@ -9,7 +9,7 @@
  */
 
 import { AgentBase }      from './agentBase.js';
-import { callAiProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiPipeline.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { dispatchPendingNotifications } from '../skills/notifier.js';
 import { nexus }          from './nexus.js';
@@ -268,7 +268,7 @@ Write a concise executive-level ${period} report:
 
 Be direct and specific. If something is underperforming, say so clearly.`;
 
-    const narrative = await callAiProvider(this.provider, reportPrompt, this.systemPrompt);
+    const narrative = await callAiProvider(resolveProvider(), reportPrompt, this.systemPrompt, { fallback: true });
 
     // Notify team with summary
     const subject = `${period.charAt(0).toUpperCase() + period.slice(1)} Report — ${reportData.tasks.completed} tasks completed, ${reportData.leads.booked} leads booked`;
