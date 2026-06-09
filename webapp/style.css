@@ -2289,6 +2289,12 @@ select option { background: var(--surface-2); }
   display: flex;
 }
 
+/* v3 shell overrides positioning — see departments.css */
+body.pg-shell-v3 .module-shell {
+  position: relative;
+  inset: auto;
+}
+
 /* Module headers — one per sub-tab, only the active one is visible.
    Sits ABOVE the topnav so the page reads: title → tabs → content. */
 .module-headers {
@@ -4648,7 +4654,7 @@ select option { background: var(--surface-2); }
   top: 0;
   z-index: 3;
   flex-wrap: nowrap;
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .prod-toolbar input[type="search"] {
@@ -4686,7 +4692,6 @@ select option { background: var(--surface-2); }
 
 .prod-toolbar .btn-sm {
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 /* Product detail slide-over (was missing — caused buttons at page bottom) */

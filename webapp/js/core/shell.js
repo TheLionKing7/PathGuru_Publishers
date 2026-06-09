@@ -123,12 +123,37 @@
     return dept.sections[tab] || tab;
   }
 
-  function syncDeptRouteNav(dept, activeTab) {
+  function placeDeptRouteNav(activeModule, show) {
+    const nav = document.getElementById('deptRouteNav');
+    if (!nav) return;
+    const routeHome = document.querySelector('.main-panel');
+
+    if (!show) {
+      if (routeHome && nav.parentElement !== routeHome) {
+        routeHome.insertBefore(nav, routeHome.firstChild);
+      }
+      return;
+    }
+
+    const moduleEl = document.getElementById(`module-${activeModule}`);
+    if (!moduleEl) return;
+
+    const topnav = moduleEl.querySelector('.module-topnav');
+    const headers = moduleEl.querySelector('.module-headers');
+    if (topnav) {
+      moduleEl.insertBefore(nav, topnav);
+    } else if (headers) {
+      headers.insertAdjacentElement('afterend', nav);
+    }
+  }
+
+  function syncDeptRouteNav(dept, activeTab, activeModule) {
     const nav = document.getElementById('deptRouteNav');
     if (!nav) return;
     const show = dept.id === 'intelligence';
     nav.hidden = !show;
     nav.classList.toggle('is-visible', show);
+    placeDeptRouteNav(activeModule, show);
     if (!show) return;
     nav.querySelectorAll('[data-dept-tab]').forEach(btn => {
       const match = btn.dataset.deptTab === activeTab
@@ -153,7 +178,7 @@
     if (dept.id === 'products')     document.body.classList.add('pg-dept-products');
     if (dept.id === 'analytics')    document.body.classList.add('pg-dept-analytics');
 
-    syncDeptRouteNav(dept, activeTab);
+    syncDeptRouteNav(dept, activeTab, activeModule);
 
     document.querySelectorAll('.nav-btn[data-dept]').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.dept === dept.id);

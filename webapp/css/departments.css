@@ -5,12 +5,20 @@
 
 :root {
   --sidebar-w-expanded: 232px;
+  --workspace-head-h:   52px;
   --dept-publisher:     #c9a84c;
   --dept-intelligence:  #4ecdc4;
   --dept-products:      #7c8cff;
   --dept-network:       #a78bfa;
   --dept-analytics:     #38bdf8;
-  --shell-header-h:     56px;
+  --shell-header-h:     0px;
+}
+
+/* ── Full-height shell — no dead row above workspace ── */
+body.pg-shell-v3 {
+  height: 100vh;
+  overflow: hidden;
+  align-items: stretch;
 }
 
 /* ── Expanded sidebar ── */
@@ -181,24 +189,122 @@ body.pg-shell-v3 .app-chrome {
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 body.pg-shell-v3 .chrome-bar {
-  height: auto;
-  min-height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 6px 20px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  gap: 16px;
+  display: none !important;
 }
 
 body.pg-shell-v3 .chrome-breadcrumb {
   display: none !important;
+}
+
+/* Backend URL lives in sidebar footer */
+body.pg-shell-v3 .sidebar-backend {
+  font-size: 10px;
+  font-family: monospace;
+  color: var(--text-muted);
+  padding: 0 12px 8px;
+  margin: 0;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+body.pg-shell-v3 .main-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Intelligence route strip — only when visible; no reserved height when hidden */
+body.pg-shell-v3 #deptRouteNav[hidden] {
+  display: none !important;
+}
+
+/* Active module fills workspace below optional dept route */
+body.pg-shell-v3 .module-shell {
+  position: relative;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+body.pg-shell-v3 .module-shell.active {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "head tabs"
+    "body body";
+  align-items: stretch;
+}
+
+body.pg-shell-v3 .module-headers {
+  grid-area: head;
+  align-self: stretch;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+body.pg-shell-v3 .module-topnav {
+  grid-area: tabs;
+  align-self: stretch;
+  justify-content: flex-end;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 0 16px 0 8px;
+}
+
+body.pg-shell-v3 .module-body {
+  grid-area: body;
+  min-height: 0;
+}
+
+/* Title + tabs on one row — compact */
+body.pg-shell-v3 .module-headers .panel-header.active {
+  padding: 10px 20px;
+  min-height: var(--workspace-head-h);
+  border-bottom: none;
+  align-items: center;
+}
+
+body.pg-shell-v3 .module-headers .panel-title {
+  font-size: 18px;
+  line-height: 1.15;
+}
+
+body.pg-shell-v3 .module-headers .panel-eyebrow {
+  margin-bottom: 0;
+  font-size: 9px;
+  letter-spacing: 0.11em;
+}
+
+body.pg-shell-v3 .module-topnav .module-tab {
+  padding: 14px 12px;
+}
+
+@media (max-width: 960px) {
+  body.pg-shell-v3 .module-shell.active {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "head"
+      "tabs"
+      "body";
+  }
+  body.pg-shell-v3 .module-topnav {
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
 }
 
 body.pg-shell-v3 .chrome-dept {
@@ -233,11 +339,6 @@ body.pg-shell-v3 .chrome-backend {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-body.pg-shell-v3 .main-panel {
-  flex: 1;
-  min-height: 0;
 }
 
 /* ── Publisher welcome strip ── */
@@ -352,23 +453,30 @@ body.pg-shell-v3 [data-module="publishing"].module-shell.active .panel-eyebrow  
 body.pg-shell-v3 [data-module="agents"].module-shell.active .panel-eyebrow[data-intel],
 body.pg-shell-v3 #tab-agents-ip.active ~ * .panel-eyebrow { color: var(--dept-intelligence); }
 
-/* ── Intelligence route nav (Playbooks | Schedule | Blog-room) ── */
+/* ── Intelligence route nav — same row as title (Publisher reference layout) ── */
 .dept-route-nav {
   display: none;
+}
+
+body.pg-shell-v3 .module-shell .dept-route-nav.is-visible {
+  grid-area: tabs;
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 24px;
-  min-height: 44px;
+  justify-content: flex-end;
+  gap: 2px;
+  padding: 0 16px 0 8px;
+  min-height: var(--workspace-head-h);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
   flex-shrink: 0;
 }
-.dept-route-nav.is-visible {
-  display: flex;
-}
 
 .dept-route-tab {
-  padding: 8px 14px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 12px;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
@@ -377,6 +485,7 @@ body.pg-shell-v3 #tab-agents-ip.active ~ * .panel-eyebrow { color: var(--dept-in
   border-bottom: 2px solid transparent;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
 }
 .dept-route-tab:hover { color: var(--text-primary); }
 .dept-route-tab.active {
@@ -384,8 +493,26 @@ body.pg-shell-v3 #tab-agents-ip.active ~ * .panel-eyebrow { color: var(--dept-in
   border-bottom-color: var(--dept-intelligence);
 }
 
-/* Intelligence: dept route owns navigation — hide duplicate agent topnav */
-body.pg-dept-intelligence #module-agents .module-topnav { display: none !important; }
+/* Intelligence: dept route replaces agent network subnav */
+body.pg-dept-intelligence #module-agents .module-topnav {
+  display: none !important;
+}
+
+/* Blog-room keeps Compose | Assets under the shared title row */
+body.pg-dept-intelligence #module-blog.module-shell.active {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "head tabs"
+    "subnav subnav"
+    "body body";
+}
+body.pg-dept-intelligence #module-blog .module-topnav {
+  grid-area: subnav;
+  justify-content: flex-start;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
 
 /* ── Department-scoped agent tabs ── */
 body.pg-dept-network #module-agents .dept-intel-only { display: none !important; }
@@ -651,13 +778,55 @@ body.pg-dept-analytics .analytics-row-label {
   color: var(--text-secondary);
 }
 
-/* Products: prevent topnav from forcing page-wide horizontal scroll */
+/* Products: compact shop tabs — no page-wide horizontal scroll */
 body.pg-dept-products #module-shop .module-topnav {
-  flex-wrap: wrap;
-  overflow-x: visible;
+  flex-wrap: nowrap;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+body.pg-dept-products #module-shop .module-topnav .module-tab {
+  padding: 12px 10px;
+  font-size: 12px;
 }
 body.pg-dept-products #module-shop .module-body {
   overflow-x: hidden;
+}
+
+/* Product catalog toolbar — one line, no horizontal scroll */
+body.pg-shell-v3 .prod-toolbar {
+  --prod-filter-w: 136px;
+  overflow-x: hidden;
+  flex-wrap: nowrap;
+  gap: 8px;
+  padding: 10px 20px;
+}
+
+body.pg-shell-v3 .prod-toolbar input[type="search"] {
+  flex: 0 0 calc(var(--prod-filter-w) * 2 + 8px);
+  width: calc(var(--prod-filter-w) * 2 + 8px);
+  min-width: 0;
+  max-width: calc(var(--prod-filter-w) * 2 + 8px);
+}
+
+body.pg-shell-v3 .prod-toolbar select {
+  flex: 0 0 var(--prod-filter-w);
+  width: var(--prod-filter-w);
+  min-width: 0;
+}
+
+body.pg-shell-v3 .prod-toolbar .prod-toolbar-spacer {
+  flex: 1 1 auto;
+  min-width: 8px;
+}
+
+body.pg-shell-v3 .prod-toolbar .prod-toolbar-add {
+  flex-shrink: 0;
+  margin-left: 0;
+}
+
+body.pg-shell-v3 .prod-toolbar .btn-sm:not(.prod-toolbar-add) {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 /* Services hub sub-tabs */
