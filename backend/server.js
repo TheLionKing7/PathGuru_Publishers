@@ -1806,13 +1806,20 @@ ent.refundOrder(shopRefundMatch[1], body);
     return;
   }
 
-  // ── POST /api/webhooks/whatsapp — Twilio inbound WhatsApp messages ──────────
-  // Twilio sends a POST with URL-encoded form data when you receive a WhatsApp message.
-  // We verify the sender is OWNER_PHONE, pass the text to Nexus.chat(), and reply
-  // with TwiML so Twilio delivers the response back to the same WhatsApp number.
-  // Webhook URL to paste in Twilio console:
-  //   https://<your-render-url>/api/webhooks/whatsapp
-  if (req.method === 'POST' && path === '/api/webhooks/whatsapp') {
+  // ── /api/webhooks/whatsapp — Twilio inbound WhatsApp messages ───────────────
+  // Twilio POSTs application/x-www-form-urlencoded on inbound messages.
+  // GET returns 200 for console/browser checks (Twilio validation, manual test).
+  // Webhook URL: https://pathguru-publishers.onrender.com/api/webhooks/whatsapp
+  if (path === '/api/webhooks/whatsapp' || path === '/api/webhooks/whatsapp/') {
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      if (req.method === 'HEAD') { res.writeHead(200); res.end(); return; }
+      json(res, { ok: true, webhook: 'whatsapp', inbound: 'POST', hint: 'Twilio inbound messages use POST' });
+      return;
+    }
+    if (req.method !== 'POST') {
+      err(res, 'Method not allowed — use POST for inbound messages', 405);
+      return;
+    }
     try {
       // Twilio sends application/x-www-form-urlencoded
       const raw = await new Promise((resolve, reject) => {
@@ -1826,8 +1833,13 @@ ent.refundOrder(shopRefundMatch[1], body);
       const msgBody = (params.get('Body') || '').trim();
 
       // Security: only accept messages from the owner's number
-      const ownerPhone = (process.env.OWNER_PHONE || '').trim().replace('whatsapp:', '');
-      const allowed    = !ownerPhone || from === ownerPhone || from === ownerPhone.replace('+', '');
+      const ownerRaw   = (process.env.OWNER_PHONE || process.env.WHATSAPP_TO || '').trim().replace('whatsapp:', '');
+      const ownerPhone = ownerRaw.replace(/\s/g, '');
+      const fromNorm   = from.replace(/\s/g, '');
+      const allowed    = !ownerPhone
+        || fromNorm === ownerPhone
+        || fromNorm === ownerPhone.replace(/^\+/, '')
+        || `+${fromNorm.replace(/^\+/, '')}` === `+${ownerPhone.replace(/^\+/, '')}`;
 
       const twiml = reply => {
         res.writeHead(200, { 'Content-Type': 'text/xml' });
@@ -2651,6 +2663,8 @@ server.listen(PORT, () => {
   │   GET  /ping                                     │
   │   GET  /health                                   │
   │   GET  /api/cron/ping                            │
+  │   GET  /api/webhooks/whatsapp                    │
+  │   POST /api/webhooks/whatsapp                    │
   │   GET  /api/cron/morning-briefing                │
   │   GET  /api/cron/evening-briefing                │
   │   GET  /api/cron/content-cadence                 │
