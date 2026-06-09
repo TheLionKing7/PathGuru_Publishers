@@ -1890,143 +1890,94 @@
 
         <!-- ── NEXUS COMMAND CENTER ── -->
         <section class="tab-panel active" id="tab-agents-command" aria-label="Nexus Command Center">
-          <div class="cmd-dashboard">
+          <div class="nexus-ops-body">
+            <p class="nexus-ops-intro">Unified operations view — cadence, approvals, content queue, growth funnel, client delivery, and firm IP. Boss approval gates all publishing.</p>
 
-            <header class="cmd-hero">
-              <div class="cmd-hero-text">
-                <h2>Executive operations</h2>
-                <p class="cmd-hero-sub">Cadence, client delivery, growth funnel, and firm IP — consolidated for strategic decisions.</p>
-              </div>
-              <div class="cmd-quick-actions">
-                <button type="button" class="btn-secondary btn-sm" id="cmdGoBlueprint">Client blueprint</button>
-                <button type="button" class="btn-secondary btn-sm" id="cmdGoConsole">Open Nexus chat</button>
-                <button type="button" class="btn-primary btn-sm" id="cmdRefreshAll">Refresh</button>
-              </div>
-            </header>
-
-            <div class="cmd-alert" id="nexusApprovalPanel" hidden>
-              <p class="cmd-alert-title">Publishing approval required</p>
-              <p class="cmd-alert-topic" id="nexusApprovalTopic"></p>
-              <p class="cmd-alert-meta" id="nexusApprovalMeta"></p>
-              <div class="cmd-alert-actions">
-                <textarea class="form-input" id="nexusApprovalCaveats" rows="2" placeholder="Optional caveats for Aether (e.g. shorten the intro)"></textarea>
-                <button type="button" class="btn-primary btn-sm" id="nexusApproveBtn">Approve &amp; publish</button>
+            <div class="nexus-approval-panel" id="nexusApprovalPanel" hidden>
+              <h3 class="nexus-ops-agents-title">Publishing approval required</h3>
+              <p class="nexus-approval-topic" id="nexusApprovalTopic"></p>
+              <p class="nexus-ops-intro" id="nexusApprovalMeta"></p>
+              <textarea class="form-input" id="nexusApprovalCaveats" rows="2" placeholder="Optional caveats for Aether (e.g. shorten the intro)"></textarea>
+              <div class="header-actions" style="margin-top:10px">
+                <button type="button" class="btn-primary btn-sm" id="nexusApproveBtn">Approve &amp; Publish</button>
                 <button type="button" class="btn-secondary btn-sm" id="nexusRejectBtn">Reject</button>
               </div>
-              <p class="cmd-alert-result" id="nexusApprovalResult"></p>
+              <p class="nexus-ops-intro" id="nexusApprovalResult" style="margin-top:8px"></p>
             </div>
 
-            <nav class="cmd-tabs" role="tablist" aria-label="Command sections">
-              <button type="button" class="cmd-tab active" data-cmd-tab="overview" role="tab" aria-selected="true">Overview</button>
-              <button type="button" class="cmd-tab" data-cmd-tab="publishing" role="tab">Publishing</button>
-              <button type="button" class="cmd-tab" data-cmd-tab="growth" role="tab">Growth funnel</button>
-              <button type="button" class="cmd-tab" data-cmd-tab="engagements" role="tab">Engagements</button>
-              <button type="button" class="cmd-tab" data-cmd-tab="firmip" role="tab">Firm IP</button>
-            </nav>
-
-            <div id="cmd-panel-overview" class="cmd-panel active" role="tabpanel">
-              <div class="cmd-kpi-strip" id="cmdOverviewKpis"></div>
-              <div class="cmd-section">
-                <div class="cmd-section-head">
-                  <h3 class="cmd-section-title">Agent network</h3>
-                  <p class="cmd-section-desc">Live roster</p>
-                </div>
-                <div class="cmd-agent-grid" id="ceoOpsAgents"></div>
-              </div>
-              <div class="cmd-section">
-                <div class="cmd-section-head">
-                  <h3 class="cmd-section-title">Capacity</h3>
-                </div>
-                <div class="cmd-gauge" id="cmdUtilizationGauge"></div>
-              </div>
+            <div class="nexus-ops-grid" id="ceoOpsGrid">
+              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>
             </div>
+            <div class="nexus-ops-agents" id="ceoOpsAgents"></div>
 
-            <div id="cmd-panel-publishing" class="cmd-panel" role="tabpanel">
-              <div class="cmd-kpi-strip" id="ceoOpsGrid"></div>
-            </div>
-
-            <div id="cmd-panel-growth" class="cmd-panel" role="tabpanel">
-              <div class="cmd-tool">
-                <h4 class="cmd-tool-title">Create lead magnet</h4>
-                <p class="cmd-tool-sub">Registers a gated asset for DigiFusion capture forms and nurture sequences.</p>
-                <div class="cmd-form-row">
-                  <div class="cmd-form-field">
-                    <label for="cmdMagnetTitle">Title</label>
-                    <input type="text" id="cmdMagnetTitle" placeholder="AI-First Playbook Checklist">
+            <div class="nexus-funnel-panel" id="nexusFunnelPanel">
+              <h3 class="nexus-ops-agents-title">C2C Funnel — Lead magnet → Email → Nurture → Attribution</h3>
+              <p class="nexus-ops-intro">Register gated assets and track captures from DigiFusion forms through nurture to closed deals.</p>
+              <div class="nexus-workflow-form" style="margin-bottom:16px">
+                <div class="nexus-workflow-meta">
+                  <div class="nexus-workflow-field">
+                    <label class="form-label" for="cmdMagnetTitle">Magnet title</label>
+                    <input type="text" id="cmdMagnetTitle" class="form-input" placeholder="AI-First Playbook Checklist">
                   </div>
-                  <div class="cmd-form-field">
-                    <label for="cmdMagnetSlug">Slug (optional)</label>
-                    <input type="text" id="cmdMagnetSlug" placeholder="ai-first-checklist">
+                  <div class="nexus-workflow-field">
+                    <label class="form-label" for="cmdMagnetSlug">Slug (optional)</label>
+                    <input type="text" id="cmdMagnetSlug" class="form-input" placeholder="ai-first-checklist">
                   </div>
-                  <div class="cmd-form-field">
-                    <label>&nbsp;</label>
+                  <div class="nexus-workflow-actions">
                     <button type="button" class="btn-primary btn-sm" id="cmdCreateMagnet">Create magnet</button>
                   </div>
                 </div>
-                <p class="cmd-tool-result" id="cmdMagnetResult"></p>
+                <p class="nexus-ops-intro" id="cmdMagnetResult" style="margin:8px 0 0"></p>
               </div>
-              <div class="cmd-kpi-strip" id="funnelKpiGrid"></div>
-              <div class="cmd-section">
-                <div class="cmd-section-head"><h3 class="cmd-section-title">Top content</h3></div>
-                <div class="cmd-card cmd-table-wrap" id="funnelByContent"></div>
-              </div>
-              <div class="cmd-section">
-                <div class="cmd-section-head"><h3 class="cmd-section-title">Recent captures</h3></div>
-                <div class="cmd-card cmd-table-wrap" id="funnelRecentCaptures"></div>
-              </div>
+              <div class="nexus-ops-grid" id="funnelKpiGrid"></div>
+              <div class="analytics-section" id="funnelByContent"></div>
+              <div class="analytics-section" id="funnelRecentCaptures"></div>
             </div>
 
-            <div id="cmd-panel-engagements" class="cmd-panel" role="tabpanel">
-              <div class="cmd-kpi-strip" id="engagementOpsGrid"></div>
-              <div class="cmd-section">
-                <div class="cmd-section-head">
-                  <h3 class="cmd-section-title">Active engagements</h3>
-                  <button type="button" class="btn-secondary btn-sm" id="cmdEngRefresh">Refresh</button>
-                </div>
-                <div class="cmd-card cmd-table-wrap" id="engagementList"></div>
-              </div>
-              <div class="cmd-kpi-strip" id="economicsOpsGrid"></div>
-              <div class="cmd-section" id="economicsTopMargin"></div>
-              <div class="cmd-section">
-                <div class="cmd-section-head"><h3 class="cmd-section-title">Client satisfaction</h3></div>
-                <div class="cmd-card" style="padding:20px" id="npsDashboard"></div>
-              </div>
+            <div class="nexus-funnel-panel" id="nexusDeliveryPanel">
+              <h3 class="nexus-ops-agents-title">Engagement Delivery OS</h3>
+              <div class="nexus-ops-grid" id="engagementOpsGrid"></div>
+              <div class="analytics-section" id="engagementList"></div>
             </div>
 
-            <div id="cmd-panel-firmip" class="cmd-panel" role="tabpanel">
-              <div class="cmd-tool">
-                <h4 class="cmd-tool-title">GEM Lattice crystallization</h4>
-                <p class="cmd-tool-sub">Synthesizer mines knowledge gems and crafts proprietary frameworks (IPMS-gated).</p>
-                <div class="cmd-form-row">
-                  <div class="cmd-form-field">
-                    <label for="cmdCrystalTitle">Framework title</label>
-                    <input type="text" id="cmdCrystalTitle" placeholder="SME Automation Maturity Model">
+            <div class="nexus-funnel-panel" id="nexusEconomicsPanel">
+              <h3 class="nexus-ops-agents-title">Partner Economics &amp; Utilization</h3>
+              <div class="nexus-ops-grid" id="economicsOpsGrid"></div>
+              <div class="analytics-section" id="economicsTopMargin"></div>
+            </div>
+
+            <div class="nexus-funnel-panel" id="nexusNpsPanel">
+              <h3 class="nexus-ops-agents-title">Client NPS (90d)</h3>
+              <div id="npsDashboard"></div>
+            </div>
+
+            <div class="nexus-funnel-panel" id="nexusGemPanel">
+              <h3 class="nexus-ops-agents-title">GEM Lattice — Firm IP</h3>
+              <p class="nexus-ops-intro">Synthesizer mines knowledge gems and crystallizes proprietary frameworks (IPMS-gated).</p>
+              <div class="nexus-workflow-form" style="margin-bottom:16px">
+                <div class="nexus-workflow-meta">
+                  <div class="nexus-workflow-field">
+                    <label class="form-label" for="cmdCrystalTitle">Framework title</label>
+                    <input type="text" id="cmdCrystalTitle" class="form-input" placeholder="SME Automation Maturity Model">
                   </div>
-                  <div class="cmd-form-field">
-                    <label for="cmdCrystalDomain">Domain</label>
-                    <select id="cmdCrystalDomain">
+                  <div class="nexus-workflow-field">
+                    <label class="form-label" for="cmdCrystalDomain">Domain</label>
+                    <select id="cmdCrystalDomain" class="form-input">
                       <option value="business_development">Business development</option>
                       <option value="automation">Automation</option>
                       <option value="digital_media">Digital media</option>
                     </select>
                   </div>
-                  <div class="cmd-form-field" style="grid-column:1/-1">
-                    <label for="cmdCrystalInstruction">Instruction (optional)</label>
-                    <textarea id="cmdCrystalInstruction" rows="2" placeholder="Focus on African SME operators, 90-day ROI…"></textarea>
-                  </div>
-                  <div class="cmd-form-field">
-                    <label>&nbsp;</label>
+                  <div class="nexus-workflow-actions">
                     <button type="button" class="btn-primary btn-sm" id="cmdCrystallizeBtn">Crystallize IP</button>
                   </div>
                 </div>
-                <p class="cmd-tool-result" id="cmdCrystalResult"></p>
+                <label class="form-label" for="cmdCrystalInstruction">Instruction (optional)</label>
+                <textarea id="cmdCrystalInstruction" class="form-textarea" rows="2" placeholder="Focus on African SME operators, 90-day ROI…"></textarea>
+                <p class="nexus-ops-intro" id="cmdCrystalResult" style="margin:8px 0 0"></p>
               </div>
-              <div class="cmd-section">
-                <div class="cmd-section-head"><h3 class="cmd-section-title">Recent crystallizations</h3></div>
-                <div class="cmd-card cmd-table-wrap" id="gemCrystallizations"></div>
-              </div>
+              <div class="analytics-section" id="gemCrystallizations"></div>
             </div>
-
           </div>
 
           <div class="cmd-drawer-backdrop" id="cmdDrawerBackdrop" aria-hidden="true"></div>

@@ -895,6 +895,65 @@ body.pg-shell-v3 .prod-toolbar .btn-sm:not(.prod-toolbar-add) {
   border: 1px solid rgba(62,207,142,.3);
 }
 
+/* ── Nexus Command Center panels ── */
+.nexus-funnel-panel {
+  margin-top: 28px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.nexus-approval-panel {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(201, 168, 76, 0.45);
+  background: linear-gradient(135deg, rgba(201, 168, 76, 0.08) 0%, rgba(15, 23, 42, 0.5) 100%);
+}
+.nexus-approval-panel[hidden] { display: none !important; }
+.nexus-approval-topic {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.analytics-section { margin-bottom: 18px; }
+.analytics-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.nexus-ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+.nexus-ops-table th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.nexus-ops-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.nexus-ops-table tbody tr:last-child td { border-bottom: none; }
+.nexus-ops-row-action { cursor: pointer; }
+.nexus-ops-row-action:hover td { background: rgba(201, 168, 76, 0.06); }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   body.pg-shell-v3 .sidebar { width: 72px; }
