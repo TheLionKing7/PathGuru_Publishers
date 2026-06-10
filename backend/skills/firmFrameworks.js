@@ -71,6 +71,32 @@ export const FIRM_IP_FRAMEWORKS = [
     oneLiner:  '4-phase BD orchestration fusing ABM, SPIN, Challenger, Miller Heiman, and Value Proposition Design.',
   },
   {
+    id:        'digital-ads-playbook',
+    name:      'The Digital Ads Playbook',
+    shortName: 'Digital Ads Playbook',
+    agent:     'aether',
+    domain:    'digital_media',
+    track:     'Paid media & platform psychology',
+    kind:      'author_ip',
+    access:    'published',
+    kbSlug:    'digital-ads-playbook',
+    author:    'James Baldwin · PathFinda Publishers',
+    oneLiner:  'Demand capture vs creation, Schwartz awareness on Google/Meta/TikTok, HSO, mechanism-first platform doctrine.',
+  },
+  {
+    id:        'stop-buying-ads',
+    name:      'Stop Buying Ads. Start Buying Customers.',
+    shortName: 'Stop Buying Ads',
+    agent:     'aether',
+    domain:    'digital_media',
+    track:     'Marketing economics & offer architecture',
+    kind:      'author_ip',
+    access:    'published',
+    kbSlug:    'stop-buying-ads-start-buying-customers',
+    author:    'James Baldwin · PathFinda Publishers',
+    oneLiner:  'Unit economics (CAC/LTV/AOV), front-end cash recovery, 100-day post-purchase, Grand Slam Offer, Sovereign Database.',
+  },
+  {
     id:        'c2c',
     name:      'Content-to-Capital Pipeline (C2C)',
     shortName: 'C2C Pipeline',
@@ -210,7 +236,7 @@ export function getFrameworksForAgent(agentId) {
   const map = {
     nova:        ['ave', 'engagement-model'],
     atlas:       ['deal-engine', 'engagement-model', 'sme-scale-engine', 'enterprise-velocity', 'govtech', 'fira'],
-    aether:      ['c2c', 'engagement-model'],
+    aether:      ['digital-ads-playbook', 'stop-buying-ads', 'c2c', 'engagement-model'],
     nexus:       FRAMEWORK_IDS,
     assistant:   FRAMEWORK_IDS,
     researcher:  FRAMEWORK_IDS,
@@ -249,8 +275,10 @@ NOVA — Automation Velocity Engine (AVE):
 ATLAS — Deal Engine:
 Dream 50 + SPIN + Challenger + Miller Heiman + Value Proposition Design.
 
-AETHER — Content-to-Capital Pipeline (C2C):
-STDC Audit → Pillar-Cluster Authority → RACE Conversion → Hub-Spoke Distribution.
+AETHER — Author IP (James Baldwin / PathFinda) + Content-to-Capital Pipeline:
+Digital Ads Playbook (capture vs creation, HSO, platform psychology) +
+Stop Buying Ads (CAC/LTV, offer architecture, 100-day retention) +
+C2C: STDC Audit → Pillar-Cluster → RACE Conversion → Hub-Spoke Distribution.
 
 NEXUS — DigiFusion Engagement Model (every engagement):
 Phase 01 Discovery Audit → Phase 02 Gap Analysis → Phase 03 Solution Design → Phase 04 Build, Deploy & Measure.

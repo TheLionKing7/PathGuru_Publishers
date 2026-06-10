@@ -156,6 +156,43 @@ export async function persistResearchDeliverable({
   return { jsonKey, markdownKey: mdKey, r2Saved };
 }
 
+/**
+ * Persist deliverable + log to Notion via Nexus bridge (verified pageId).
+ * Use this instead of persistResearchDeliverable at all completion paths.
+ */
+export async function completeResearchDeliverable(params) {
+  const stored = await persistResearchDeliverable(params);
+
+  if (!params.brief || String(params.brief).trim().length < 20) {
+    return { ...stored, notionPageId: null, notionOk: false };
+  }
+
+  const { logResearchDeliverableToNotion, attachNotionPageToResearchTask } =
+    await import('../skills/nexusNotionOps.js');
+
+  const notionResult = await logResearchDeliverableToNotion({
+    taskId:       params.taskId,
+    instruction:  params.instruction,
+    brief:        params.brief,
+    sources:      params.sources,
+    gaps:         params.gaps,
+    qualityScore: params.qualityScore,
+    depth:        params.depth,
+    forAgent:     params.forAgent,
+  });
+
+  if (notionResult.ok && notionResult.pageId && params.taskId) {
+    await attachNotionPageToResearchTask(params.taskId, notionResult.pageId);
+  }
+
+  return {
+    ...stored,
+    notionPageId: notionResult.pageId || null,
+    notionOk:     notionResult.ok,
+    notionReason: notionResult.reason || null,
+  };
+}
+
 /** List deliverables from tasks table (primary) with optional R2 manifest merge. */
 export async function listResearchDeliverables({ limit = 30, offset = 0 } = {}) {
   const db = getSupabase();
@@ -167,24 +204,25 @@ export async function listResearchDeliverables({ limit = 30, offset = 0 } = {}) 
       .select('id, title, description, status, output, created_at, completed_at, agent_id')
       .eq('agent_id', 'researcher')
       .eq('type', 'research')
-      .in('status', ['completed', 'in_progress', 'failed'])
+      .in('status', ['completed', 'in_progress', 'failed', 'pending', 'cancelled'])
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     for (const row of data || []) {
       const out = row.output || {};
       items.push({
-        taskId:      row.id,
-        title:       row.title || out.instruction?.slice(0, 120) || 'Research',
-        instruction: row.description || out.instruction || '',
-        status:      row.status,
-        brief:       out.brief || null,
-        sources:     out.sources || [],
+        taskId:       row.id,
+        title:        row.title || out.instruction?.slice(0, 120) || 'Research',
+        instruction:  row.description || out.instruction || '',
+        status:       row.status,
+        brief:        out.brief || null,
+        sources:      out.sources || [],
         qualityGrade: out.qualityScore?.grade || null,
-        depth:       out.depth || 'standard',
-        createdAt:   row.created_at,
-        completedAt: row.completed_at,
-        deliverable: out.deliverable || null,
+        depth:        out.depth || 'standard',
+        notionPageId: out.notionPageId || out.deliverable?.notionPageId || null,
+        createdAt:    row.created_at,
+        completedAt:  row.completed_at,
+        deliverable:  out.deliverable || null,
       });
     }
   }
@@ -214,11 +252,12 @@ export async function getResearchDeliverable(taskId) {
 
   return {
     task: data,
-    brief:       out.brief || r2Record?.brief || null,
-    sources:     out.sources || r2Record?.sources || [],
-    gaps:        out.gaps || r2Record?.gaps || [],
+    brief:        out.brief || r2Record?.brief || null,
+    sources:      out.sources || r2Record?.sources || [],
+    gaps:         out.gaps || r2Record?.gaps || [],
     qualityScore: out.qualityScore || r2Record?.qualityScore || null,
-    deliverable: out.deliverable || null,
+    notionPageId: out.notionPageId || out.deliverable?.notionPageId || null,
+    deliverable:  out.deliverable || null,
     r2Record,
   };
 }

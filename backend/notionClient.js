@@ -98,6 +98,16 @@ function calloutBlock(text, emoji = '📌') {
   };
 }
 
+function chunkText(text, maxLen = 1900) {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+  const chunks = [];
+  for (let i = 0; i < raw.length; i += maxLen) {
+    chunks.push(raw.slice(i, i + maxLen));
+  }
+  return chunks;
+}
+
 // ── Notion is not configured? return graceful no-op ───────────────────────
 
 function isConfigured() {
@@ -275,6 +285,65 @@ export const notion = {
       return page.id;
     } catch (e) {
       console.warn('[Notion] logTask error (non-critical):', e.message);
+      return null;
+    }
+  },
+
+  /**
+   * Log an Orion research deliverable — invoked via Nexus only (nexusNotionOps.js).
+   * Creates a rich page in NOTION_TASKS_DB_ID with instruction, brief, and sources.
+   */
+  async logResearchDeliverable({
+    taskId,
+    instruction,
+    brief,
+    sources = [],
+    gaps = [],
+    qualityScore = null,
+    depth = 'standard',
+    forAgent = 'nexus',
+  } = {}) {
+    if (!isConfigured() || !process.env.NOTION_TASKS_DB_ID) return null;
+    if (!brief || String(brief).trim().length < 20) return null;
+
+    try {
+      const children = [
+        calloutBlock(`Orion research logged by Nexus. PathGuru task ${taskId || 'n/a'}. Depth: ${depth}. For: ${forAgent}.`, '🔬'),
+        headingBlock('Instruction', 2),
+        paragraphBlock(instruction || '—'),
+        headingBlock('Brief', 2),
+        ...chunkText(brief, 1900).slice(0, 8).map((c) => paragraphBlock(c)),
+      ];
+
+      if (sources?.length) {
+        children.push(headingBlock('Sources', 2));
+        for (const s of sources.slice(0, 12)) {
+          children.push(bulletBlock(`${s.title || 'Source'}: ${s.url || '—'}`));
+        }
+      }
+
+      if (gaps?.length) {
+        children.push(headingBlock('Gaps', 2));
+        for (const g of gaps.slice(0, 8)) {
+          children.push(bulletBlock(g));
+        }
+      }
+
+      const grade = qualityScore?.grade || 'completed';
+      const page = await notionFetch('/pages', 'POST', {
+        parent: { database_id: process.env.NOTION_TASKS_DB_ID },
+        properties: {
+          'Name':    title(`[Orion] ${String(instruction || 'Research').slice(0, 120)}`),
+          'Agent':   select('Nexus (Digital CEO)'),
+          'Type':    select('research_deliverable'),
+          'Outcome': select(grade),
+          'Date':    date(new Date()),
+        },
+        children: children.slice(0, 100),
+      });
+      return page.id;
+    } catch (e) {
+      console.warn('[Notion] logResearchDeliverable error:', e.message);
       return null;
     }
   },

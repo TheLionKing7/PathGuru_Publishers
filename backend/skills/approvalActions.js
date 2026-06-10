@@ -79,14 +79,23 @@ export async function forceResolvePendingApproval(decision = 'approved', feedbac
   return { handled: true, reply, approval };
 }
 
-/** True when Boss is asking about status, not issuing YES/NO. */
+/** True when Boss is asking about blog/approval status, not issuing YES/NO. */
 export function isApprovalStatusQuery(text) {
   const raw = (text || '').trim();
   if (!raw) return false;
   if (parseApprovalReply(raw).decision) return false;
 
   const t = raw.toLowerCase();
-  return /approval|gotten|received|waiting.*yes|pending.*blog|have you|did you (get|receive)|still waiting|sent.*yes|honor|whatsapp|via wa|don'?t know if you got|got my (reply|message|response)/i.test(t);
+
+  // "Still waiting" alone often means Orion research — not blog approval.
+  if (/still waiting/i.test(t) && !/approval|blog|yes|publish|whatsapp|wa\b/i.test(t)) {
+    return false;
+  }
+  if (/orion|researcher|research\s+(result|report|brief)|nocopo|deliverable/i.test(t)) {
+    return false;
+  }
+
+  return /approval|gotten|received|waiting.*(yes|approval|blog)|pending.*(blog|approval)|have you.*(approval|yes|blog)|did you (get|receive).*(approval|yes|blog)|sent.*yes|honor|whatsapp|via wa|don'?t know if you got|got my (reply|message|response)/i.test(t);
 }
 
 /** Boss asking whether WhatsApp / webhook received their reply. */
@@ -129,7 +138,7 @@ export async function buildApprovalChannelGuidance(includeNotion = false) {
 export function getNotionCapabilityReply() {
   const notionOk = !!(process.env.NOTION_API_KEY && process.env.NOTION_TASKS_DB_ID);
   if (!notionOk) {
-    return 'Boss, Notion isn\'t wired on this server yet — add NOTION_API_KEY and NOTION_TASKS_DB_ID in Render env. Once set, I can log tasks, sync the CEO dashboard, and push client lifecycle updates.';
+    return 'Boss, Notion isn\'t wired on this server yet — add NOTION_API_KEY and NOTION_TASKS_DB_ID in Render env. Once set, Nexus will auto-log Orion research deliverables, sync the CEO dashboard, and push client lifecycle updates.';
   }
-  return 'Yes Boss — Notion is connected. I log agent tasks, sync the CEO dashboard ("sync notion"), and create client project pages on lifecycle milestones. Tell me what to log, e.g. "log strategy call with Acme to notion".';
+  return 'Yes Boss — Notion is connected and **only Nexus** writes to it from the agent network. Orion research is auto-logged to the Tasks DB (Type: research_deliverable) when a brief completes. I also sync the CEO dashboard ("sync notion") and client lifecycle pages. Manual logs: "log strategy call with Acme to notion".';
 }

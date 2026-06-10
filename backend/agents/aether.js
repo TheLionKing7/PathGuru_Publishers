@@ -1,14 +1,16 @@
 /**
  * DigiFusion Intelligence Network — Aether
  * ==========================================
- * Senior Digital Media Strategist & Content Architect
+ * Copywriter & Marketing Specialist (award-winning marketer first; production second)
  *
- * Aether is DigiFusion's award-winning CMO character — a seasoned strategist
- * who has built content empires for global brands, won industry awards, and
- * developed the proprietary Content-to-Capital Pipeline methodology.
+ * Aether is DigiFusion's award-winning marketing lead — campaign architecture,
+ * brand voice, conversion strategy, and copy that converts. Blog posts and
+ * long-form are execution outputs of the Content-to-Capital Pipeline, not her
+ * primary identity.
  *
- * Aether does not assist. Aether LEADS strategy sessions, takes notes,
- * challenges weak thinking, and turns every conversation into documented IP.
+ * Aether LEADS marketing strategy sessions, diagnoses maturity, designs campaigns,
+ * and produces copy across channels — grounded in Boss's published Baldwin IP
+ * (Digital Ads Playbook + Stop Buying Ads) and the C2C Pipeline.
  *
  * The Content-to-Capital Pipeline is Aether's operating framework:
  *   Phase 1 — The Intelligence Audit     (See-Think-Do-Care)
@@ -25,6 +27,25 @@ import {
   buildContentAdvocateSystemBlock,
   buildContentAdvocateUserBlock,
 } from '../skills/contentAdvocate.js';
+import {
+  buildMarketingOpsSnapshot,
+  formatMarketingLiveContext,
+  extractBrandName,
+} from '../skills/aetherMarketingOps.js';
+import {
+  buildAetherDnaBlock,
+  buildAuthorIpKnowledgeQuery,
+  buildAuthorIpContextBlock,
+} from '../skills/aetherMarketingDoctrine.js';
+import { getFrameworksForAgent } from '../skills/firmFrameworks.js';
+
+async function loadAuthorIp(topic = '') {
+  return synthesizer.answer(
+    buildAuthorIpKnowledgeQuery(topic),
+    'aether',
+    ['digital_media', 'business_development', 'general'],
+  ).catch(() => '');
+}
 
 // ── The C2C Framework — hardcoded as Aether's operating logic ────────────────
 const C2C_FRAMEWORK = `
@@ -87,13 +108,19 @@ Maturity Tiers:
 `;
 
 // ── Aether's character prompt ─────────────────────────────────────────────────
-const AETHER_SYSTEM = `You are Aether — DigiFusion's Senior Digital Media Strategist and Chief Content Architect.
+const AETHER_SYSTEM = `You are Aether — DigiFusion's Copywriter and Marketing Specialist.
+
+PRIMARY IDENTITY: Award-winning marketer and copywriter. You are the operational voice of Boss's published marketing canon — The Digital Ads Playbook and Stop Buying Ads. Start Buying Customers. (PathFinda Publishers). You architect campaigns, unit economics, platform strategy, and copy that converts.
+
+SECONDARY DUTY: Long-form and blog production — derivative of Orion research, firm playbooks, or Baldwin frameworks — never generic filler.
 
 YOUR BACKGROUND:
-You have 15 years of experience building content systems for global brands across Africa, Europe, and North America. You have won multiple industry awards for content strategy and campaign architecture. You have personally overseen campaigns that generated seven-figure revenue from zero paid media spend — pure content authority. You have trained over 200 marketing teams. You have seen every mistake in the book, and you do not let your clients repeat them.
+15+ years across Africa, Europe, and North America. You think in CAC/LTV payback, demand capture vs creation, and Schwartz awareness levels before you think in "more budget." You kill ROAS-only thinking and vague briefs before they waste capital.
 
-YOUR OPERATING FRAMEWORK:
-Every strategy you design is built on the Content-to-Capital Pipeline — DigiFusion's proprietary 4-phase methodology:
+YOUR AUTHOR IP DNA (always apply — Boss's published works):
+${buildAetherDnaBlock()}
+
+YOUR OPERATING FRAMEWORK (DigiFusion C2C — pairs with Baldwin IP above):
 ${C2C_FRAMEWORK}
 
 YOUR CHARACTER:
@@ -107,7 +134,7 @@ YOUR ROLE IN STRATEGY SESSIONS:
 During strategy sessions, you behave like a seasoned co-strategist sitting across the table:
 — You ask sharp diagnostic questions to understand the client's real situation
 — You take notes on everything strategically significant (you flag this explicitly: "I'm noting this...")
-— You connect everything back to the C2C framework — every problem has a pipeline address
+— You connect everything to Baldwin IP (economics + platforms) AND the C2C pipeline
 — You challenge assumptions that will lead to expensive mistakes
 — You end every session segment with a concrete recommendation or a clarifying question
 — You remember what was discussed earlier in the session and build on it
@@ -120,10 +147,181 @@ export class Aether extends AgentBase {
     super({
       id:           'aether',
       displayName:  'Aether',
-      role:         'Senior Digital Media Strategist',
+      role:         'Copywriter & Marketing Specialist',
       systemPrompt: AETHER_SYSTEM,
       domains:      ['digital_media', 'general', 'business_development'],
     });
+  }
+
+  async getMarketingOpsStatus() {
+    const snap = await buildMarketingOpsSnapshot();
+    return { snap, context: formatMarketingLiveContext(snap) };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CHAT — marketing actions + grounded strategy (not generic replies)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async chat(message, history = []) {
+    const lower = message.toLowerCase();
+    const brand = extractBrandName(message);
+
+    if (/c2c pipeline|full pipeline|content-to-capital for/.test(lower)) {
+      const name = brand || message.replace(/c2c pipeline|full pipeline/gi, '').trim().slice(0, 60) || 'Brand';
+      const { result } = await this.runFullPipeline(name, { context: message });
+      return `**C2C Pipeline — ${name}**\n\n${(result || '').slice(0, 3500)}`;
+    }
+    if (/content diagnostic|maturity scorecard|marketing diagnostic/.test(lower)) {
+      const name = brand || 'Brand';
+      const { report, compositeScore, tier } = await this.runDiagnostic(name, message);
+      const score = compositeScore != null ? `\n\n**Score:** ${compositeScore}/100 — **${tier}**` : '';
+      return `**Marketing Maturity Diagnostic — ${name}**${score}\n\n${(report || '').slice(0, 3000)}`;
+    }
+    if (/campaign brief|marketing campaign for/.test(lower)) {
+      const name = brand || 'Campaign';
+      const result = await this.buildCampaignBrief(name, { context: message });
+      return `**Campaign Brief — ${name}**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/brand voice|tone of voice|voice guide/.test(lower)) {
+      const name = brand || 'Brand';
+      const result = await this.buildBrandVoiceGuide(name, message);
+      return `**Brand Voice Guide — ${name}**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/social calendar|30.day calendar|editorial calendar/.test(lower)) {
+      const name = brand || 'Brand';
+      const result = await this.buildSocialCalendar(name, { context: message });
+      return `**Social & Editorial Calendar — ${name}**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 1|intelligence audit|see.think.do/.test(lower)) {
+      const result = await this.runPhase1Audit(brand || 'Brand', message);
+      return `**Phase 1 — Intelligence Audit**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 2|pillar|authority engine|cluster/.test(lower)) {
+      const result = await this.runPhase2Authority(brand || 'Brand', message.slice(0, 80), message);
+      return `**Phase 2 — Authority Engine**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 3|race|conversion funnel/.test(lower)) {
+      const result = await this.runPhase3Conversion(brand || 'Brand', {}, message);
+      return `**Phase 3 — Conversion Funnel**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 4|flywheel|repurpos|hub.and.spoke/.test(lower)) {
+      const result = await this.runPhase4Flywheel(brand || 'Brand', message.slice(0, 80), [], message);
+      return `**Phase 4 — Distribution Flywheel**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/blog teaser|derivative headline|snippet/.test(lower)) {
+      const result = await this.deriveBlogSnippets({ researchBrief: message, count: 3 });
+      return `**Blog Teaser Derivatives**\n\n${result}`;
+    }
+
+    const sessionId = `chat-${(brand || 'marketing').toLowerCase().replace(/\W+/g, '-').slice(0, 40)}`;
+    const sessionResult = await this.strategySession(message, sessionId, { brand, topic: message.slice(0, 100) });
+    const response = sessionResult.response || '';
+
+    if (response.length < 80) {
+      const { context: live } = await this.getMarketingOpsStatus();
+      const historyBlock = history.slice(-8).map(t =>
+        `${t.role === 'user' ? 'Boss' : 'Aether'}: ${t.content}`
+      ).join('\n');
+      return await this.runLLM(
+        [
+          `LIVE MARKETING STATE:\n${live}`,
+          historyBlock ? `CONVERSATION:\n${historyBlock}` : '',
+          `Boss: ${message}`,
+        ].filter(Boolean).join('\n\n'),
+        { skipKnowledge: false, knowledgeQuery: message.slice(0, 120) },
+      );
+    }
+    return response;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MARKETING STUDIO — Campaign, voice, calendar (core forte)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async buildCampaignBrief(brand, options = {}) {
+    const { context = '', objective = '', audience = '', channels = [], budget = '' } = options;
+    const [knowledge, authorIp] = await Promise.all([
+      synthesizer.answer(`Integrated marketing campaign strategy for ${brand}`, 'aether', ['digital_media', 'business_development']).catch(() => ''),
+      loadAuthorIp(`campaign brief ${brand}`),
+    ]);
+
+    const prompt = `${buildAuthorIpContextBlock(authorIp)}
+
+${knowledge ? `## Intelligence\n${knowledge.slice(0, 2000)}\n\n---\n\n` : ''}
+## Integrated Marketing Campaign Brief — ${brand}
+
+${objective ? `Objective: ${objective}` : ''}
+${audience ? `Audience: ${audience}` : ''}
+${channels?.length ? `Channels: ${channels.join(', ')}` : ''}
+${budget ? `Budget context: ${budget}` : ''}
+${context ? `Brief: ${context}` : ''}
+
+You are Aether — award-winning marketer. Produce a campaign brief Boss can approve and hand to execution:
+
+1. CAMPAIGN THESIS — One sentence: what we are proving in market
+2. AUDIENCE & INSIGHT — Who, what they believe today, the reframe (Challenger-style)
+3. MESSAGE ARCHITECTURE — Primary promise, 3 proof pillars, objection killers
+4. CHANNEL PLAN — Role of each channel in the funnel (STDC + RACE mapped)
+5. CREATIVE TERRITORIES — 3 visual/copy territories with sample headlines
+6. COPY SAMPLES — Hero headline, email subject, LinkedIn hook, ad primary text
+7. KPIs & MEASUREMENT — CAC, LTV, payback period, front-end recovery — not ROAS alone
+8. PLATFORM MAP — Which tactics are demand capture vs creation; awareness level per asset
+9. 90-DAY PHASING — What ships week 1–4, month 2–3
+10. RISKS — What kills this campaign if ignored (cite Playbook or Stop Buying Ads logic)
+
+No generic marketing fluff. Every line is deployable.`;
+
+    return this.runLLM(prompt, { skipKnowledge: true });
+  }
+
+  async buildBrandVoiceGuide(brand, context = '') {
+    const knowledge = await synthesizer.answer(
+      `Brand voice, tone, messaging for ${brand}`,
+      'aether', ['digital_media'],
+    ).catch(() => '');
+
+    const prompt = `${knowledge ? `## Intelligence\n${knowledge.slice(0, 1500)}\n\n---\n\n` : ''}
+## Brand Voice & Copy System — ${brand}
+
+${context ? `Context: ${context}` : ''}
+
+Produce a copywriter-ready voice guide:
+
+1. BRAND PERSONALITY — 4 traits with "sounds like / not like" examples
+2. TONE SPECTRUM — How voice shifts across LinkedIn, email, ads, website, support
+3. VOCABULARY — Words we use, words we ban (include AI-fluff bans)
+4. SENTENCE RHYTHM — Length, punctuation, humour rules
+5. PROOF STYLE — How we cite evidence without sounding academic
+6. CTA LIBRARY — 8 approved CTAs by funnel stage
+7. SAMPLE PARAGRAPHS — Same idea written for BOSS audience vs. SME audience
+8. QA CHECKLIST — 10-point review before any copy ships`;
+
+    return this.runLLM(prompt, { skipKnowledge: true });
+  }
+
+  async buildSocialCalendar(brand, options = {}) {
+    const { context = '', channels = [], weeks = 4 } = options;
+    const ch = channels.length ? channels : ['LinkedIn', 'Email', 'Blog', 'Instagram'];
+
+    const prompt = `## ${weeks}-Week Social & Editorial Calendar — ${brand}
+
+Channels: ${ch.join(', ')}
+${context ? `Context: ${context}` : ''}
+
+You are Aether. Build a calendar that a marketing team can execute tomorrow.
+
+For each week, provide a table:
+| Day | Channel | Format | Topic/Hook | STDC Stage | CTA | Owner |
+
+Include:
+— 1 hub content piece per week (pillar or campaign asset)
+— 3–5 spokes derived from the hub
+— 1 email nurture touch
+— KPI per week (what success looks like)
+
+End with: top 3 creative risks and how to mitigate.`;
+
+    return this.runLLM(prompt, { skipKnowledge: true });
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -165,13 +363,17 @@ export class Aether extends AgentBase {
 
     // ── Pull relevant knowledge from the intelligence base ────────────────
     const knowledgeQuery = [brand, topic, message].filter(Boolean).join(' — ').slice(0, 200);
-    const knowledge = await synthesizer.answer(knowledgeQuery, 'aether', ['digital_media', 'business_development', 'general']).catch(() => '');
+    const [knowledge, authorIp] = await Promise.all([
+      synthesizer.answer(knowledgeQuery, 'aether', ['digital_media', 'business_development', 'general']).catch(() => ''),
+      loadAuthorIp(knowledgeQuery),
+    ]);
 
     // ── Build the session prompt ──────────────────────────────────────────
     const sessionPrompt = [
       sessionHistory
         ? `## SESSION HISTORY (what we have covered so far)\n${sessionHistory}\n\n---`
         : '',
+      buildAuthorIpContextBlock(authorIp),
       knowledge
         ? `## INTELLIGENCE BASE CONTEXT\n${knowledge.slice(0, 3000)}\n\n---`
         : '',
@@ -186,7 +388,7 @@ export class Aether extends AgentBase {
       `Respond as Aether — the senior digital media strategist. Be direct, specific, and commercially grounded.`,
       `If the message contains strategically significant decisions, preferences, or client facts, FLAG THEM with "📋 NOTING:" so they can be saved to the session record.`,
       `If you need more information to give a strong recommendation, ask ONE sharp diagnostic question.`,
-      `Every recommendation should reference the relevant C2C Pipeline phase (e.g. "This is a Phase 2 problem...").`,
+      `Every recommendation should reference Baldwin IP (economics or platform) AND the relevant C2C phase.`,
     ].filter(Boolean).join('\n');
 
     const response = await this.runLLM(sessionPrompt, { skipKnowledge: true, skipMemory: true });
@@ -274,11 +476,10 @@ Format as a clean, professional brief that can be shared with the client.`;
    * @param {string} [context] — any additional context about the client
    */
   async runDiagnostic(brand, answers, context = '') {
-    const knowledge = await synthesizer.answer(
-      `Content maturity assessment and diagnostic for ${brand} type business`,
-      'aether',
-      ['digital_media', 'business_development'],
-    ).catch(() => '');
+    const [knowledge, authorIp] = await Promise.all([
+      synthesizer.answer(`Content maturity assessment and diagnostic for ${brand} type business`, 'aether', ['digital_media', 'business_development']).catch(() => ''),
+      loadAuthorIp(`marketing diagnostic ${brand}`),
+    ]);
 
     // If answers is an object with numeric scores, calculate directly
     let scoreBlock = '';
@@ -314,7 +515,9 @@ CALCULATED SCORES:
       `;
     }
 
-    const diagnosticPrompt = `${knowledge ? `## Intelligence Base Context\n${knowledge.slice(0, 2000)}\n\n---\n\n` : ''}
+    const diagnosticPrompt = `${buildAuthorIpContextBlock(authorIp)}
+
+${knowledge ? `## Intelligence Base Context\n${knowledge.slice(0, 2000)}\n\n---\n\n` : ''}
 ## Content Maturity Diagnostic
 
 Brand: ${brand}
@@ -771,10 +974,10 @@ RETURN ONLY a valid JSON object with this exact schema:
       bossCaveats = [], outline = [], proposedTitle = '',
     } = options;
 
-    const knowledge = await synthesizer.answer(
-      `${contentType} best practices and content strategy for: ${topic}`,
-      'aether', ['digital_media', 'general'],
-    ).catch(() => '');
+    const [knowledge, authorIp] = await Promise.all([
+      synthesizer.answer(`${contentType} best practices and content strategy for: ${topic}`, 'aether', ['digital_media', 'general']).catch(() => ''),
+      loadAuthorIp(topic),
+    ]);
 
     const advocateBlock = buildContentAdvocateUserBlock({
       researchBrief,
@@ -787,6 +990,8 @@ RETURN ONLY a valid JSON object with this exact schema:
     const prompt = `${buildContentAdvocateSystemBlock()}
 
 ---
+
+${buildAuthorIpContextBlock(authorIp)}
 
 ${advocateBlock}
 
@@ -998,9 +1203,48 @@ Keep it sharp — team briefing format.`;
         result = { result: await this.buildDigitalMediaFramework(frameworkName || task.title, { domain: 'digital_media', instruction: task.description, targetAudience: audience, industry: task.industry }) };
         break;
 
+      case 'campaign_brief':
+        result = { result: await this.buildCampaignBrief(brand || task.title, {
+          context: context || task.description, objective: task.objective, audience,
+          channels: channels || task.channels, budget: task.budget,
+        }) };
+        break;
+
+      case 'brand_voice':
+        result = { result: await this.buildBrandVoiceGuide(brand || task.title, context || task.description) };
+        break;
+
+      case 'social_calendar':
+        result = { result: await this.buildSocialCalendar(brand || task.title, {
+          context: context || task.description, channels: channels || task.channels, weeks: task.weeks || 4,
+        }) };
+        break;
+
+      case 'write':
+      case 'outline':
       case 'produce_content':
-        result = { result: await this.produceContent(contentType || 'blog post', topic || task.title, {
-          audience, voiceNotes: task.voiceNotes, callToAction: task.callToAction, wordCount: task.wordCount, stdcStage: task.stdcStage,
+        result = { result: await this.produceContent(
+          contentType || task.format || (action === 'outline' ? 'outline' : 'blog post'),
+          topic || task.title,
+          {
+            audience, voiceNotes: task.voiceNotes, callToAction: task.callToAction,
+            wordCount: task.wordCount, stdcStage: task.stdcStage,
+            researchBrief: task.researchBrief, playbookSlug: task.playbookSlug,
+            frameworkId: task.frameworkId, proposedTitle: task.proposedTitle,
+          },
+        ) };
+        break;
+
+      case 'content_strategy':
+        result = await this.runFullPipeline(brand || task.title, { audience, goals, channels, context: context || task.description });
+        break;
+
+      case 'derive_snippets':
+        result = { result: await this.deriveBlogSnippets({
+          researchBrief: task.researchBrief || task.description,
+          playbookSlug: task.playbookSlug,
+          frameworkId: task.frameworkId,
+          count: task.count || 3,
         }) };
         break;
 

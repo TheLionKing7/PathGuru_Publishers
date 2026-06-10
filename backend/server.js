@@ -1384,8 +1384,16 @@ const server = createServer(async (req, res) => {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // AETHER — Digital Media Strategy Routes
+  // AETHER — Marketing Studio Routes
   // ══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /api/agents/aether/ops — marketing queue + frameworks snapshot ───
+  if (req.method === 'GET' && path === '/api/agents/aether/ops') {
+    try {
+      json(res, await aether.getMarketingOpsStatus());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
 
   // ── POST /api/agents/aether/strategy-session ─────────────────────────────
   // Interactive strategy session with note-taking. Aether as co-strategist.
@@ -2648,6 +2656,17 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // POST /api/agents/nexus/task-hygiene — cancel stale tasks, dedupe research, reconcile ghosts
+  if (req.method === 'POST' && path === '/api/agents/nexus/task-hygiene') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { runTaskHygiene } = await import('./skills/taskHygiene.js');
+      const dryRun = url.searchParams.get('dryRun') === '1';
+      json(res, await runTaskHygiene({ dryRun }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // GET /api/cron/morning-briefing — external cron (cron-job.org, GitHub Actions)
   if (req.method === 'GET' && path === '/api/cron/morning-briefing') {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
@@ -2965,8 +2984,8 @@ const server = createServer(async (req, res) => {
       if (taskId) {
         const { scoreResearchBrief } = await import('./skills/researchQualityGate.js');
         const qScore = scoreResearchBrief(result);
-        const { persistResearchDeliverable } = await import('./lib/researchDeliverables.js');
-        await persistResearchDeliverable({
+        const { completeResearchDeliverable } = await import('./lib/researchDeliverables.js');
+        await completeResearchDeliverable({
           taskId,
           instruction: body.topic,
           brief:       result.brief,
@@ -3411,6 +3430,16 @@ async function startup() {
       await AGENTS.nexus.processOrchestrationCampaigns();
     } catch (e) { console.warn('[Nexus Campaign] step processor error:', e.message); }
   }, 15 * 60 * 1000);
+  // Task hygiene — cancel stale work, dedupe research, reconcile ghost completions
+  setInterval(async () => {
+    try {
+      const { runTaskHygiene } = await import('./skills/taskHygiene.js');
+      await runTaskHygiene();
+    } catch (e) { console.warn('[TaskHygiene] error:', e.message); }
+  }, 6 * 60 * 60 * 1000);
+  import('./skills/taskHygiene.js').then((m) => m.runTaskHygiene()).catch((e) => {
+    console.warn('[TaskHygiene] startup pass failed:', e.message);
+  });
   // NOTE: checkEscalationTriggers() is NOT called on startup — it runs inside
   // generateDailyBriefing() at 7am only. Calling it on every restart caused
   // a Chrome notification flood on every Render deploy/spin-up.

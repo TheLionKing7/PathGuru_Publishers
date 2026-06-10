@@ -244,14 +244,17 @@ export async function syncNotionCeoDashboard({ period = 'morning', briefingExcer
     `Content queue: ${ops.contentSchedule.queued} queued, ${ops.contentSchedule.pending} pending approval`,
   ].filter(Boolean).join('\n');
 
-  await notion.logTask({
+  const pageId = await notion.logTask({
     agentId:   'nexus',
     agentName: 'Nexus (Digital CEO)',
     taskTitle: `CEO Dashboard — ${period} ${new Date().toLocaleDateString('en-GB')}`,
     taskType:  'ceo_dashboard',
     outcome:   'synced',
     notes,
-  }).catch(e => console.warn('[Nexus CEO] Notion sync failed:', e.message));
+  }).catch((e) => {
+    console.warn('[Nexus CEO] Notion sync failed:', e.message);
+    return null;
+  });
 
   const ctx = await loadOpsContext();
   ctx.lastNotionSync = new Date().toISOString();
@@ -263,5 +266,5 @@ export async function syncNotionCeoDashboard({ period = 'morning', briefingExcer
   if (period === 'evening') ctx.lastEveningBriefing = new Date().toISOString();
   await saveOpsContext(ctx);
 
-  return { synced: true, period, ops };
+  return { synced: !!pageId, pageId, period, ops };
 }

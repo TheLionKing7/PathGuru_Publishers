@@ -54,11 +54,15 @@
     {
       id: 'aether',
       name: 'Aether',
-      role: 'Digital Media & Content Strategy',
-      desc: 'Content-to-Capital Pipeline lead. Builds content architecture, editorial strategy, and derivative teasers from premium IP.',
+      role: 'Copywriter & Marketing Specialist',
+      desc: 'Award-winning marketer first. DNA: Digital Ads Playbook + Stop Buying Ads (PathFinda) woven with C2C Pipeline. Campaigns, economics, platform copy; blogs are secondary.',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
       color: '#4ecdc4',
-      actions: ['write', 'outline', 'edit'],
+      actions: [
+        'strategy_session', 'campaign_brief', 'brand_voice', 'full_pipeline', 'diagnostic',
+        'phase1_audit', 'phase2_authority', 'phase3_conversion', 'phase4_flywheel',
+        'social_calendar', 'produce_content', 'derive_snippets', 'repurposing_plan', 'write',
+      ],
     },
     {
       id: 'pulse',
@@ -1609,66 +1613,117 @@
     return buildChatPanel(agent, taskSection);
   }
 
-  /* ── Aether — chat + content task dispatch ── */
+  /* ── Aether — Marketing Studio ── */
   function buildAetherPanel (agent) {
     const taskSection = `
-      <div class="console-panel-section">
+      <div class="console-panel-section console-marketing-studio">
         <div class="console-section-header">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          Run a content task
+          Marketing Studio
+        </div>
+        <p class="console-agent-desc" style="margin:0 0 12px;font-size:12px;opacity:.75">
+          Strategy and copy first — <strong>Digital Ads Playbook</strong> + <strong>Stop Buying Ads</strong> (Boss's published IP) + C2C Pipeline. Blog production is under <strong>Production</strong>.
+        </p>
+        <div id="aetherOpsStrip" class="console-pipeline-strip" style="font-size:11px;opacity:.8;margin-bottom:12px;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          Loading marketing ops…
         </div>
         <div class="console-form-row">
-          <div class="console-form-group">
-            <select id="aetherActionSelect" class="console-select">
-              <option value="write">Write Content</option>
-              <option value="outline">Create Outline</option>
-              <option value="content_strategy">Content Strategy</option>
-              <option value="social_calendar">Social Calendar</option>
-            </select>
+          <div class="console-form-group" style="flex:1">
+            <label class="console-label" for="aetherBrandInput">Brand / client</label>
+            <input id="aetherBrandInput" class="console-input" type="text" placeholder="e.g. DigiFusion, Acme SaaS…"/>
           </div>
-          <div class="console-form-group">
-            <select id="aetherFormatSelect" class="console-select">
-              <option value="blog_post">Blog Post</option>
-              <option value="linkedin">LinkedIn</option>
-              <option value="newsletter">Newsletter</option>
-              <option value="thread">Twitter/X Thread</option>
-            </select>
+          <div class="console-form-group" style="flex:1">
+            <label class="console-label" for="aetherChannelsInput">Channels <span style="opacity:.5">(optional)</span></label>
+            <input id="aetherChannelsInput" class="console-input" type="text" placeholder="LinkedIn, Email, Paid social…"/>
           </div>
         </div>
         <div class="console-form-group">
-          <textarea id="aetherTaskInput" class="console-textarea" rows="3"
-            placeholder="Derivative angle / headline — must trace to research or playbook below"></textarea>
+          <label class="console-label" for="aetherBriefInput" id="aetherBriefLabel">Campaign brief / objective</label>
+          <textarea id="aetherBriefInput" class="console-textarea" rows="3"
+            placeholder="What are we marketing? Audience, offer, constraints, competitors, success metrics…"></textarea>
         </div>
         <div class="console-form-row">
-          <div class="console-form-group" style="flex:2">
-            <label class="console-label">Orion research brief <span style="opacity:.6">(required unless playbook slug set)</span></label>
-            <textarea id="aetherResearchBrief" class="console-textarea" rows="4"
-              placeholder="Paste Orion output here — stats, sources, frameworks found…"></textarea>
-          </div>
-          <div class="console-form-group" style="flex:1">
-            <label class="console-label">Playbook slug</label>
-            <input id="aetherPlaybookSlug" class="console-input" type="text" placeholder="agency-ip slug" />
-            <label class="console-label" style="margin-top:8px">Framework lens</label>
-            <select id="aetherFrameworkId" class="console-select">
-              <option value="">Auto</option>
-              <option value="ave">AVE</option>
-              <option value="deal-engine">Deal Engine</option>
-              <option value="c2c">C2C Pipeline</option>
-              <option value="sme-scale-engine">SME Scale Engine</option>
-              <option value="enterprise-velocity">Enterprise Velocity</option>
-              <option value="govtech">GovTech</option>
-              <option value="fira">FIRA</option>
+          <div class="console-form-group" style="flex:1.5">
+            <label class="console-label" for="aetherActionSelect">Tool</label>
+            <select id="aetherActionSelect" class="console-select">
+              <optgroup label="Marketing strategy (core)">
+                <option value="strategy_session">Strategy session (live notes)</option>
+                <option value="campaign_brief">Integrated campaign brief</option>
+                <option value="brand_voice">Brand voice &amp; copy system</option>
+                <option value="full_pipeline">Full C2C Pipeline (4 phases)</option>
+                <option value="diagnostic">Marketing maturity diagnostic</option>
+              </optgroup>
+              <optgroup label="C2C phases">
+                <option value="phase1_audit">Phase 1 — Intelligence audit (STDC)</option>
+                <option value="phase2_authority">Phase 2 — Authority engine (pillar/cluster)</option>
+                <option value="phase3_conversion">Phase 3 — Conversion funnel (RACE)</option>
+                <option value="phase4_flywheel">Phase 4 — Distribution flywheel</option>
+              </optgroup>
+              <optgroup label="Campaign execution">
+                <option value="social_calendar">Social &amp; editorial calendar</option>
+                <option value="repurposing_plan">Hub-and-spoke repurposing plan</option>
+                <option value="derive_snippets">Blog teaser headlines (derivatives)</option>
+              </optgroup>
+              <optgroup label="Copy production (secondary)">
+                <option value="write">Write copy piece</option>
+                <option value="outline">Content outline</option>
+              </optgroup>
             </select>
           </div>
+          <div class="console-form-group" id="aetherFormatGroup" style="flex:1;display:none">
+            <label class="console-label" for="aetherFormatSelect">Format</label>
+            <select id="aetherFormatSelect" class="console-select">
+              <option value="linkedin">LinkedIn post</option>
+              <option value="newsletter">Newsletter</option>
+              <option value="thread">X / Twitter thread</option>
+              <option value="landing_page">Landing page copy</option>
+              <option value="ad_copy">Paid ad copy</option>
+              <option value="email_sequence">Email sequence</option>
+              <option value="blog_post">Blog article</option>
+            </select>
+          </div>
+          <div class="console-form-group" id="aetherTopicGroup" style="flex:1;display:none">
+            <label class="console-label" for="aetherTopicInput">Topic / hub piece</label>
+            <input id="aetherTopicInput" class="console-input" type="text" placeholder="Pillar topic or hub title"/>
+          </div>
         </div>
-        <div class="console-actions" style="gap:8px;flex-wrap:wrap">
-          <button class="btn-console-run btn-secondary-run" id="aetherRunBtn">
+        <details id="aetherProductionDetails" class="console-production-panel" style="margin:12px 0">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;opacity:.85">Production inputs (Orion / playbook — for copy &amp; blog)</summary>
+          <div class="console-form-row" style="margin-top:10px">
+            <div class="console-form-group" style="flex:2">
+              <label class="console-label">Orion research brief</label>
+              <textarea id="aetherResearchBrief" class="console-textarea" rows="5"
+                placeholder="Paste Orion output — stats, sources, frameworks…"></textarea>
+            </div>
+            <div class="console-form-group" style="flex:1">
+              <label class="console-label">Playbook slug</label>
+              <input id="aetherPlaybookSlug" class="console-input" type="text" placeholder="agency-ip slug"/>
+              <label class="console-label" style="margin-top:8px">Framework lens</label>
+              <select id="aetherFrameworkId" class="console-select">
+                <option value="">Auto (Baldwin + C2C)</option>
+                <option value="digital-ads-playbook">Digital Ads Playbook</option>
+                <option value="stop-buying-ads">Stop Buying Ads</option>
+                <option value="c2c">C2C Pipeline</option>
+                <option value="ave">AVE</option>
+                <option value="deal-engine">Deal Engine</option>
+                <option value="sme-scale-engine">SME Scale Engine</option>
+                <option value="enterprise-velocity">Enterprise Velocity</option>
+                <option value="govtech">GovTech</option>
+                <option value="fira">FIRA</option>
+              </select>
+            </div>
+          </div>
+        </details>
+        <div class="console-actions" style="gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn-console-run" id="aetherRunBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Run Task
+            <span id="aetherRunBtnLabel">Run campaign brief</span>
           </button>
-          <button class="btn-console-run" id="aetherPublishBlogBtn" style="background:#00d4aa22;color:#00d4aa;border:1px solid #00d4aa40">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-            Write &amp; Publish Blog
+          <button class="btn-console-run btn-secondary-run" id="aetherSessionNotesBtn" title="Compile strategy session into a brief">
+            Compile session brief
+          </button>
+          <button class="btn-console-run btn-tertiary-run" id="aetherPublishBlogBtn" title="Secondary: blog derivative → Boss approval path">
+            Publish blog derivative
           </button>
         </div>
         <div class="console-output-area" id="aetherOutput" style="display:none">
@@ -1685,6 +1740,40 @@
       </div>`;
     return buildChatPanel(agent, taskSection);
   }
+
+  function formatAetherResult (raw) {
+    if (!raw) return '(No output)';
+    if (typeof raw === 'string') return raw;
+    if (raw.response) return raw.response;
+    if (raw.report) {
+      const hdr = raw.brand ? `## ${raw.brand}\n\n` : '';
+      const score = raw.compositeScore != null ? `**Score:** ${raw.compositeScore}/100 — **${raw.tier}**\n\n` : '';
+      return hdr + score + raw.report;
+    }
+    if (raw.summary && typeof raw.summary === 'string') return raw.summary;
+    const text = raw.result ?? raw.output;
+    if (typeof text === 'string') return text;
+    return '```json\n' + JSON.stringify(raw, null, 2) + '\n```';
+  }
+
+  const AETHER_ACTION_LABELS = {
+    strategy_session: 'Start session',
+    campaign_brief:   'Run campaign brief',
+    brand_voice:      'Build voice guide',
+    full_pipeline:    'Run C2C pipeline',
+    diagnostic:       'Run diagnostic',
+    phase1_audit:     'Run Phase 1',
+    phase2_authority: 'Run Phase 2',
+    phase3_conversion:'Run Phase 3',
+    phase4_flywheel:  'Run Phase 4',
+    social_calendar:  'Build calendar',
+    repurposing_plan: 'Build flywheel',
+    derive_snippets:  'Generate teasers',
+    write:            'Write copy',
+    outline:          'Create outline',
+  };
+
+  const AETHER_PRODUCTION_ACTIONS = new Set(['write', 'outline', 'derive_snippets']);
 
   /* ── Assistant — chat only (it IS a chat agent) ── */
   function buildAssistantPanel (agent) {
@@ -2402,78 +2491,160 @@
 
     /* ── Aether ── */
     if (agentId === 'aether') {
-      const runBtn    = $('aetherRunBtn');
-      const statusEl  = $('aetherTaskStatus');
-      const statusMsg = $('aetherTaskStatusMsg');
-      const outputEl  = $('aetherOutput');
-      const outputLbl = $('aetherOutputLabel');
-      const mdEl      = $('aetherMarkdownOutput');
-      const copyBtn   = $('aetherCopyBtn');
+      const runBtn      = $('aetherRunBtn');
+      const runLbl      = $('aetherRunBtnLabel');
+      const statusEl    = $('aetherTaskStatus');
+      const statusMsg   = $('aetherTaskStatusMsg');
+      const outputEl    = $('aetherOutput');
+      const outputLbl   = $('aetherOutputLabel');
+      const mdEl        = $('aetherMarkdownOutput');
+      const copyBtn     = $('aetherCopyBtn');
+      const actionSel   = $('aetherActionSelect');
+      const formatGrp   = $('aetherFormatGroup');
+      const topicGrp    = $('aetherTopicGroup');
+      const prodDetails = $('aetherProductionDetails');
+      let _aetherSessionId = `console-${Date.now()}`;
+
+      async function loadAetherOps () {
+        const strip = $('aetherOpsStrip');
+        if (!strip) return;
+        try {
+          const res = await apiFetch('/api/agents/aether/ops');
+          const snap = res.snap || res;
+          strip.textContent = `Queue: ${snap.scheduledContent?.queued || 0} scheduled · ${snap.scheduledContent?.pending || 0} awaiting approval · Frameworks: ${(snap.frameworks || []).map(f => f.name).join(', ') || 'C2C'}`;
+        } catch {
+          strip.textContent = 'Marketing ops unavailable — check backend.';
+        }
+      }
+
+      function syncAetherFormUi () {
+        const action = actionSel?.value || 'campaign_brief';
+        if (runLbl) runLbl.textContent = AETHER_ACTION_LABELS[action] || 'Run';
+        const showFormat = action === 'write' || action === 'outline';
+        const showTopic  = ['phase2_authority', 'phase4_flywheel', 'repurposing_plan'].includes(action);
+        if (formatGrp) formatGrp.style.display = showFormat ? '' : 'none';
+        if (topicGrp) topicGrp.style.display = showTopic ? '' : 'none';
+        if (prodDetails) prodDetails.open = AETHER_PRODUCTION_ACTIONS.has(action);
+        const briefLbl = $('aetherBriefLabel');
+        if (briefLbl) {
+          briefLbl.textContent = action === 'strategy_session' ? 'Strategy message'
+            : action === 'write' || action === 'outline' ? 'Copy brief / angle'
+            : action === 'repurposing_plan' ? 'Hub content to repurpose'
+            : 'Campaign brief / objective';
+        }
+      }
+
+      actionSel?.addEventListener('change', syncAetherFormUi);
+      syncAetherFormUi();
+      loadAetherOps();
+      wireChatPanel(agentId);
 
       runBtn?.addEventListener('click', async () => {
-        const text   = $('aetherTaskInput')?.value?.trim();
-        const action = $('aetherActionSelect')?.value || 'write';
-        const fmt    = $('aetherFormatSelect')?.value || 'blog_post';
-        if (!text) { alert('Please describe the content task.'); return; }
+        const brand    = $('aetherBrandInput')?.value?.trim() || '';
+        const brief    = $('aetherBriefInput')?.value?.trim() || '';
+        const channels = ($('aetherChannelsInput')?.value || '').split(',').map(s => s.trim()).filter(Boolean);
+        const action   = actionSel?.value || 'campaign_brief';
+        const topic    = $('aetherTopicInput')?.value?.trim() || brief.slice(0, 80) || brand;
+
+        if (!brief && !brand && action !== 'repurposing_plan') {
+          alert('Enter a brand name or campaign brief.');
+          return;
+        }
+
+        const payload = {
+          action,
+          brand,
+          accountName: brand,
+          context: brief,
+          description: brief,
+          channels,
+          topic,
+          topicArea: topic,
+          hubTopic: topic,
+          sessionId: _aetherSessionId,
+          researchBrief: $('aetherResearchBrief')?.value?.trim() || '',
+          playbookSlug:  $('aetherPlaybookSlug')?.value?.trim() || '',
+          frameworkId:   $('aetherFrameworkId')?.value?.trim() || '',
+        };
+
+        if (action === 'strategy_session') payload.message = brief || `Strategy for ${brand}`;
+        if (action === 'write' || action === 'outline') {
+          payload.format = $('aetherFormatSelect')?.value || 'linkedin';
+          payload.contentType = payload.format.replace(/_/g, ' ');
+          payload.title = topic || brand;
+        }
+        if (action === 'repurposing_plan') payload.pillarContent = brief;
+
         runBtn.disabled = true;
-        await runTask('aether', { action, description: text, format: fmt }, {
+        await runTask('aether', payload, {
           statusEl, statusMsgEl: statusMsg, outputEl, outputLabelEl: outputLbl, markdownEl: mdEl,
-          onSuccess () { runBtn.disabled = false; },
+          formatResult: formatAetherResult,
+          onSuccess () {
+            runBtn.disabled = false;
+            if (action === 'strategy_session') _aetherSessionId = payload.sessionId;
+            loadAetherOps();
+          },
         });
         runBtn.disabled = false;
       });
+
+      $('aetherSessionNotesBtn')?.addEventListener('click', async () => {
+        const btn = $('aetherSessionNotesBtn');
+        btn.disabled = true;
+        statusEl.style.display = 'flex';
+        statusMsg.textContent = 'Compiling session brief…';
+        try {
+          const res = await apiFetch(`/api/agents/aether/session-notes/${encodeURIComponent(_aetherSessionId)}`);
+          renderMarkdown(mdEl, formatAetherResult(res));
+          outputEl.style.display = 'flex';
+          if (outputLbl) outputLbl.textContent = `Session brief — ${_aetherSessionId}`;
+        } catch (e) {
+          renderMarkdown(mdEl, `**Error:** ${esc(e.message)}`);
+          outputEl.style.display = 'flex';
+        } finally {
+          statusEl.style.display = 'none';
+          btn.disabled = false;
+        }
+      });
+
       copyBtn?.addEventListener('click', () => copyText(mdEl?.innerText || ''));
 
-      // ── Write & Publish Blog via Aether pipeline ──────────────────────────
       const publishBlogBtn = $('aetherPublishBlogBtn');
       publishBlogBtn?.addEventListener('click', async () => {
-        const topic         = $('aetherTaskInput')?.value?.trim();
+        const topic         = $('aetherBriefInput')?.value?.trim() || $('aetherTopicInput')?.value?.trim();
         const researchBrief = $('aetherResearchBrief')?.value?.trim() || '';
         const playbookSlug  = $('aetherPlaybookSlug')?.value?.trim() || '';
         const frameworkId   = $('aetherFrameworkId')?.value?.trim() || '';
-        if (!topic) { alert('Enter a derivative angle / headline first.'); return; }
+        if (!topic) { alert('Enter a copy angle in the campaign brief field first.'); return; }
         if (!researchBrief && !playbookSlug) {
-          alert('Blog derivatives require IP lineage: paste an Orion research brief OR enter a playbook slug from Intelligence Studio.');
+          alert('Blog derivatives require IP lineage: expand Production inputs and paste Orion research OR a playbook slug.');
           return;
         }
         publishBlogBtn.disabled = true;
         runBtn.disabled = true;
         statusEl.style.display = 'flex';
-        statusMsg.textContent  = 'Aether is writing and publishing your blog derivative…';
+        statusMsg.textContent  = 'Writing blog derivative (approval path)…';
         outputEl.style.display = 'none';
-
         try {
-          const backendUrl = localStorage.getItem('backendUrl') || 'http://localhost:8787';
-          const res = await fetch(`${backendUrl}/api/agents/aether/write-blog`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              topic,
-              researchBrief,
-              playbookSlug,
-              frameworkId,
-              audience:   'business professionals in digital transformation, automation, or media',
-              tone:       'authoritative yet accessible',
-              niche:      'digital_media',
-              ctaGoal:    'Book a free strategy session at digitafusion.com/agency/booking',
-              wordCount:  1200,
-              publish:    true,
-              author:     'Boroji Adebayo-Hopewell, Founder',
+          const data = await apiFetch('/api/agents/aether/write-blog', {
+            method: 'POST',
+            body: JSON.stringify({
+              topic, researchBrief, playbookSlug, frameworkId,
+              audience: 'business professionals in digital transformation, automation, or media',
+              tone: 'authoritative yet accessible',
+              niche: 'digital_media',
+              ctaGoal: 'Book a free strategy session at digitafusion.com/agency/booking',
+              wordCount: 1200,
+              publish: true,
+              author: 'Boroji Adebayo-Hopewell, Founder',
             }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Publish failed');
-
           const post = data.post || {};
-          outputEl.style.display  = 'block';
-          outputLbl.textContent   = `✓ Published: ${post.title || topic}`;
-          mdEl.innerHTML = `
-            <div style="padding:12px 0">
-              <p style="font-size:13px;color:var(--color-accent);margin-bottom:6px">Blog post published to DigiFusion</p>
-              <p style="font-size:15px;font-weight:600;margin-bottom:4px">${esc(post.title || topic)}</p>
-              ${post.url ? `<a href="${post.url}" target="_blank" style="font-size:12px;color:var(--color-accent)">${post.url}</a>` : ''}
-              <p style="font-size:12px;color:var(--color-muted);margin-top:8px">${esc(post.metaDescription || '')}</p>
-            </div>`;
+          outputEl.style.display = 'flex';
+          outputLbl.textContent = `Blog derivative — ${post.title || topic}`;
+          renderMarkdown(mdEl,
+            `**${data.published ? 'Published' : 'Draft ready'}**\n\n**${post.title || topic}**\n\n${post.url ? `[View post](${post.url})\n\n` : ''}${post.metaDescription || ''}`
+          );
         } catch (e) {
           statusMsg.textContent = `✗ ${e.message}`;
         } finally {
@@ -2482,8 +2653,6 @@
           runBtn.disabled = false;
         }
       });
-
-      wireChatPanel(agentId);
     }
 
     /* ── Assistant ── */

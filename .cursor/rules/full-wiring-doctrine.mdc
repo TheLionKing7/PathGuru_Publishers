@@ -1,0 +1,21 @@
+---
+description: PathGuru agent network — full wiring and anti-hallucination standard
+globs: backend/**/*
+alwaysApply: true
+---
+
+# Full Wiring Doctrine
+
+**ANY FUNCTION YOU DESIGN MUST BE FULLY WIRED INTO ITS RELATIVE FEATURE AND FUNCTIONS.**
+
+When adding or changing agent capabilities:
+
+1. **Single source of truth** — Chat fast-paths, API routes, UI panels, and cron jobs must read/write the same store (Supabase table, R2 key, etc.).
+2. **Verify before claiming** — Never return "Done" / "Logged to Notion" / "Research complete" unless the side-effect returned proof (`pageId`, `taskId`, `brief` in `output`, etc.). Use `truthGuard.js` helpers.
+3. **Ground LLM paths** — Default chat must inject LIVE SYSTEM STATE (tasks, deliverables, approvals, Notion config flag) before calling the model.
+4. **Narrow intent matchers** — Regex handlers must not steal unrelated queries (e.g. `still waiting` ≠ blog approval; `log` + `notion` in a quote ≠ imperative log).
+5. **Hygiene** — Stale `pending`/`in_progress` tasks and ghost `completed` rows without output should be reconciled via `taskHygiene.js`, not narrated as blockers in briefings.
+
+Reference modules: `truthGuard.js`, `nexusResearchOps.js`, `nexusNotionOps.js`, `taskHygiene.js`, `researchDeliverables.js`.
+
+**Notion access:** Only Nexus logs Orion research to Notion via `completeResearchDeliverable()` → `nexusNotionOps.logResearchDeliverableToNotion()`. Store `notionPageId` on `tasks.output` and cite it in chat — never claim logged without pageId.

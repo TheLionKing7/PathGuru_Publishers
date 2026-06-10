@@ -57,7 +57,11 @@ export function buildContentAdvocateSystemBlock() {
     'BANNED:', bans,
     '— Fake quotes from unnamed officials or generic "experts say".',
     '',
-    'DIGIFUSION FIVE PROPRIETARY IP FRAMEWORKS:',
+    'BOSS PUBLISHED AUTHOR IP (Aether primary DNA — PathFinda):',
+    '— The Digital Ads Playbook: demand capture vs creation, Schwartz awareness, Google/Meta/TikTok, HSO.',
+    '— Stop Buying Ads. Start Buying Customers.: CAC/LTV/AOV, front-end cash recovery, 100-day post-purchase, Grand Slam Offer.',
+    '',
+    'DIGIFUSION OPERATING FRAMEWORKS:',
     buildFrameworksListBlock(),
   ].join('\n');
 }

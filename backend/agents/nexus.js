@@ -53,6 +53,19 @@ import {
   getNotionCapabilityReply,
 } from '../skills/approvalActions.js';
 import { findPendingApproval } from '../skills/approvalGate.js';
+import {
+  isResearchStatusQuery,
+  buildResearchStatusReply,
+  buildResearchPipelineBlock,
+} from '../skills/nexusResearchOps.js';
+import {
+  parseNotionLogIntent,
+  formatNotionLogReply,
+  formatWorkflowDesignReply,
+  buildHonestyEnforcementBlock,
+  isNotionConfigured,
+} from '../skills/truthGuard.js';
+import { runTaskHygiene } from '../skills/taskHygiene.js';
 
 const CHAT_TIMEOUT_MS = Number(process.env.NEXUS_CHAT_TIMEOUT_MS || 25000);
 
@@ -74,7 +87,7 @@ YOUR TEAM:
 — Synthesizer: internal knowledge engine — PDFs, knowledge base, proprietary frameworks
 — Atlas: Business Developer & Strategist — Deal Engine, Dream 50, pipeline intelligence
 — Nova: AI automation, SaaS architecture, workflow engineering
-— Aether: content, marketing, blog publishing, brand voice
+— Aether: Copywriter & Marketing Specialist — Baldwin author IP (Digital Ads Playbook, Stop Buying Ads) + C2C; blog secondary
 — Pulse: analytics, monitoring, KPI alerts
 — Assistant: client-facing VA, lead qualification, bookings
 
@@ -453,8 +466,8 @@ export class Nexus extends AgentBase {
       }
     }
 
-    const { persistResearchDeliverable } = await import('../lib/researchDeliverables.js');
-    await persistResearchDeliverable({
+    const { completeResearchDeliverable } = await import('../lib/researchDeliverables.js');
+    const deliverableResult = await completeResearchDeliverable({
       taskId,
       instruction,
       brief,
@@ -470,9 +483,21 @@ export class Nexus extends AgentBase {
       workflowSignals,
     });
 
+    if (!deliverableResult.notionOk && deliverableResult.notionReason === 'notion_not_configured') {
+      console.warn(`[Nexus] Research saved but Notion not configured — task ${taskId}`);
+    } else if (!deliverableResult.notionOk) {
+      console.warn(`[Nexus] Research saved but Notion log failed — task ${taskId}`);
+    }
+
     await this.rememberEpisodic({
       summary:    `Orion researched: "${instruction.slice(0, 80)}"`,
-      content:    { instruction, brief: brief?.slice(0, 500), qualityScore: qScore.score, taskId },
+      content:    {
+        instruction,
+        brief: brief?.slice(0, 500),
+        qualityScore: qScore.score,
+        taskId,
+        notionPageId: deliverableResult.notionPageId || null,
+      },
       type:       'research',
       tags:       ['orion', 'research'],
       importance: 3,
@@ -1004,8 +1029,11 @@ Return ONLY a JSON array with fields: title, description, agent_id, type (resear
   // ══════════════════════════════════════════════════════════════════════════
 
   async generateDailyBriefing() {
+    await runTaskHygiene().catch((e) => console.warn('[Nexus] task hygiene:', e.message));
+
     const status = await this.getNetworkStatus();
     const ops    = await buildOpsSnapshot();
+    const researchPipe = await buildResearchPipelineBlock().catch(() => ({ textBlock: 'unavailable' }));
     const db = getSupabase();
 
     let recentLeads = [];
@@ -1039,6 +1067,9 @@ CEO OPS:
 — Stuck tasks (>48h): ${ops.stuckTasks}
 — Content queue: ${ops.contentSchedule.queued} queued, ${ops.contentSchedule.pending} pending approval
 
+ORION RESEARCH (verified from Supabase — do not invent):
+— ${researchPipe.textBlock}
+
 AGENT NETWORK STATUS:
 ${status.agents.map(a => `- ${a.display_name || a.id}: ${a.status}${a.current_task_id ? ' (on task)' : ''}`).join('\n') || 'Status unavailable'}
 
@@ -1054,7 +1085,9 @@ ${recentLeads.map(l => `- ${l.name || l.email}: score ${l.lead_score}, status ${
 PENDING ALERTS (${status.pendingAlerts.length}):
 ${status.pendingAlerts.map(a => `- [${a.severity?.toUpperCase()}] ${a.title}`).join('\n') || 'None'}
 
-Write a direct morning CEO briefing: lead with today's top priority, then pipeline pulse, approvals needed, content cadence, one focus line per active agent. Max 6 sentences unless Boss asked for detail. Apply Minto Pyramid — recommendation first.`;
+Write a direct morning CEO briefing: lead with today's top priority, then pipeline pulse, approvals needed, content cadence, one focus line per active agent. Max 6 sentences unless Boss asked for detail. Apply Minto Pyramid — recommendation first.
+
+TRUTH RULES: Only mention tasks listed under ACTIVE / PENDING TASKS above. If ORION RESEARCH shows deliverables with brief > 0, do NOT say research is stuck or pending. If ghost completed count > 0, say deliverable is missing from storage — do not claim Orion finished. Never mention Notion unless Boss asked.`;
 
     const [briefingRaw, escalations] = await Promise.all([
       callAiProvider(resolveProvider(), briefingPrompt, this.systemPrompt, CEO_LLM_OPTS),
@@ -1087,8 +1120,11 @@ Write a direct morning CEO briefing: lead with today's top priority, then pipeli
 
   /** Evening CEO briefing — what shipped, what's blocked, tomorrow's focus */
   async generateEveningBriefing() {
+    await runTaskHygiene().catch((e) => console.warn('[Nexus] task hygiene:', e.message));
+
     const status = await this.getNetworkStatus();
     const ops    = await buildOpsSnapshot();
+    const researchPipe = await buildResearchPipelineBlock().catch(() => ({ textBlock: 'unavailable' }));
     const db     = getSupabase();
 
     let completedToday = [];
@@ -1119,7 +1155,9 @@ CEO OPS:
 — Pending approvals: ${ops.pendingApprovals}
 — Stuck >48h: ${ops.stuckTasks}
 
-Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first.`;
+ORION RESEARCH (verified): ${researchPipe.textBlock}
+
+Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first. Only cite tasks from SHIPPED/STILL ACTIVE lists — do not invent stuck research if deliverables with brief > 0.`;
 
     let briefing = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, CEO_LLM_OPTS);
     const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
@@ -1181,18 +1219,19 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     let spec = await this.runLLM(designPrompt, { knowledgeQuery: processDescription });
     const quality = scoreCeoOutput({ text: spec, outputType: 'workflow' });
 
-    await notion.logTask({
+    const notionPageId = await notion.logTask({
       agentId:   'nexus',
       agentName: 'Nexus (Digital CEO)',
       taskTitle: `Workflow design: ${processDescription.slice(0, 80)}`,
       taskType:  'workflow_design',
       outcome:   quality.passed ? 'complete' : 'needs_revision',
       notes:     `${formatCeoQualityBadge(quality)}\n\n${spec.slice(0, 1500)}`,
-    }).catch(() => {});
+    }).catch(() => null);
 
     const db = getSupabase();
+    let novaQueued = false;
     if (db) {
-      await db.from('tasks').insert({
+      const { error } = await db.from('tasks').insert({
         title:       `[Nova] Implement workflow: ${processDescription.slice(0, 60)}`,
         description: spec.slice(0, 4000),
         agent_id:    'nova',
@@ -1201,10 +1240,11 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
         priority:    3,
         type:        'analysis',
         input:       JSON.stringify({ workflowSpec: spec, framework: 'ave' }),
-      }).catch(() => {});
+      });
+      novaQueued = !error;
     }
 
-    return { spec, quality, delegatedTo: 'nova', framework: ceoModule.framework };
+    return { spec, quality, delegatedTo: 'nova', framework: ceoModule.framework, notionPageId, novaQueued };
   }
 
   async processDueScheduledContent() {
@@ -1308,7 +1348,12 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     if (/design workflow|analyze workflow|structure workflow|workflow spec|map process/.test(lower)) {
       try {
         const result = await this.designWorkflow({ processDescription: message });
-        return `Boss, workflow spec drafted (${result.quality.grade} quality). Logged to Notion and Nova has a build task queued.\n\n${result.spec.slice(0, 1200)}${result.spec.length > 1200 ? '…' : ''}`;
+        return formatWorkflowDesignReply({
+          spec: result.spec,
+          quality: result.quality,
+          notionPageId: result.notionPageId,
+          novaQueued: result.novaQueued,
+        });
       } catch (e) {
         return `Workflow design failed — ${e.message}`;
       }
@@ -1360,6 +1405,15 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       console.warn('[Nexus] Approval message handling failed:', e.message);
     }
 
+    // ── ACTION: Orion research / deliverable status (fast — no LLM) ────────
+    if (isResearchStatusQuery(message)) {
+      try {
+        return await buildResearchStatusReply(message);
+      } catch (e) {
+        return `I could not read Orion deliverables right now: ${e.message}. Check Agent Console → Orion → Deliverables.`;
+      }
+    }
+
     // ── ACTION: WhatsApp / approval channel guidance (fast — no LLM) ───────
     if (isWhatsAppApprovalQuery(message) || (isApprovalStatusQuery(message) && /whatsapp|got it|got my|via wa/i.test(lower))) {
       try {
@@ -1398,32 +1452,31 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
 
     // ── ACTION: Sync Notion CEO dashboard ──────────────────────────────────
     if (/sync notion|notion dashboard|update notion/.test(lower)) {
-      await this.syncCeoNotionDashboard('manual');
-      return 'Notion CEO dashboard synced, Boss.';
+      if (!isNotionConfigured()) {
+        return 'Notion is not configured (NOTION_API_KEY / NOTION_TASKS_DB_ID). Dashboard sync did not run.';
+      }
+      const syncResult = await this.syncCeoNotionDashboard('manual');
+      if (syncResult?.pageId) {
+        return `Notion CEO dashboard synced, Boss (page \`${String(syncResult.pageId).slice(0, 8)}…\`).`;
+      }
+      return 'Notion sync attempted but did not return a page ID — check Render logs.';
     }
 
-    // ── ACTION: Log to Notion ──────────────────────────────────────────────
-    // Detects "log [X] to notion", "add [X] to notion", "log meeting"
-    const notionLogMatch = lower.match(/log (.+?) (?:to|into|in) notion/i) ||
-                           lower.match(/add (.+?) to notion/i) ||
-                           (lower.includes('log') && lower.includes('notion')) ||
-                           (lower.includes('meeting') && lower.includes('notion'));
-    if (notionLogMatch) {
+    // ── ACTION: Log to Notion (imperative only — verified pageId) ──────────
+    const notionIntent = parseNotionLogIntent(message);
+    if (notionIntent) {
       try {
-        const subject = typeof notionLogMatch === 'object' && notionLogMatch[1]
-          ? notionLogMatch[1]
-          : message.replace(/log|to notion|into notion|in notion/gi, '').trim() || message;
-        await notion.logTask({
+        const pageId = await notion.logTask({
           agentId:   'nexus',
           agentName: 'Nexus',
-          taskTitle: subject.slice(0, 200),
+          taskTitle: notionIntent.subject.slice(0, 200),
           taskType:  'manual_log',
           outcome:   'logged',
           notes:     `Logged via Boss chat at ${new Date().toLocaleString()}. Original message: "${message}"`,
         });
-        return `Done, Boss. "${subject.slice(0, 80)}" is now logged in Notion.`;
+        return formatNotionLogReply({ pageId, subject: notionIntent.subject });
       } catch (e) {
-        return `Notion log failed — ${e.message}. Check your NOTION_TASKS_DB_ID env var on Render.`;
+        return `Notion log failed — ${e.message}. Check NOTION_TASKS_DB_ID on Render.`;
       }
     }
 
@@ -1477,9 +1530,13 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       } else {
         liveContext += '\nPENDING APPROVAL: none';
       }
-      const notionOk = !!(process.env.NOTION_API_KEY && process.env.NOTION_TASKS_DB_ID);
+      const notionOk = isNotionConfigured();
       liveContext += `\nNOTION STATUS: ${notionOk ? 'connected (log tasks, sync CEO dashboard)' : 'not configured'}`;
       liveContext += '\nBOSS APPROVAL CHANNELS: Nexus chat YES, WhatsApp webhook, Command Center Approve button';
+      const researchPipe = await buildResearchPipelineBlock().catch(() => null);
+      if (researchPipe) {
+        liveContext += `\nORION RESEARCH: ${researchPipe.textBlock}`;
+      }
       if (clientSnap) liveContext += clientSnap;
       if (util) liveContext += `\nUTILIZATION: ${util.utilizationPct}%${util.alert ? ' — PAUSE NEW INTAKE' : ''}`;
     }
@@ -1497,11 +1554,8 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     ].filter(Boolean).join('\n\n');
 
     // Hard honesty enforcement: the LLM can ONLY assert facts visible in LIVE SYSTEM STATE above
-    const chatSystem = this.systemPrompt +
-      '\n\nYOU CAN ONLY CONFIRM FACTS VISIBLE IN THE LIVE SYSTEM STATE BLOCK ABOVE.' +
-      ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about WhatsApp, explain replies are ingested via webhook — check whether approval is still pending in LIVE SYSTEM STATE.' +
-      ' If something is NOT in that block, say "I do not have visibility into that right now." Never say "I have confirmed", "I have logged", "I have updated", or "the project is on track" unless the data above proves it.' +
-      ' Be short. Be honest. Wrong but confident is worse than uncertain and honest.';
+    const chatSystem = `${this.systemPrompt}\n\n${buildHonestyEnforcementBlock()}` +
+      ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about Orion research, cite ORION RESEARCH lines only — deliverables live in PathGuru (tasks.output / Deliverables panel), not Notion by default.';
 
     const provider = resolveProvider();
     if (!provider) {

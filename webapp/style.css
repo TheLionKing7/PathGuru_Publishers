@@ -4743,6 +4743,35 @@ body.pg-shell-v3 .module-shell {
   padding: 8px;
 }
 
+/* Marketing studio — Aether */
+.console-marketing-studio .console-production-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+}
+
+.console-marketing-studio .console-production-panel summary {
+  list-style: none;
+}
+
+.console-marketing-studio .console-production-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.btn-tertiary-run {
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: 1px dashed var(--border) !important;
+  font-size: 12px !important;
+  padding: 6px 12px !important;
+}
+
+.btn-tertiary-run:hover {
+  color: var(--text) !important;
+  border-color: var(--accent, #4ecdc4) !important;
+}
+
 
 /* ════════════════════════════════════════════════════════════════
    PRODUCTS TAB — prod-panel-body, prod-toolbar, prod-list
