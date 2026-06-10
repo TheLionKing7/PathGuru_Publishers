@@ -37,6 +37,12 @@ import {
 import { runIpFactory } from '../skills/ipFactory.js';
 import { buildClientBlueprint, listClientBlueprints, getClientBlueprint } from '../skills/clientBlueprint.js';
 import { buildPillarClusterPlan, enqueueC2cCalendar, derivePlaybookTeasers } from '../skills/c2cGrowthEngine.js';
+import {
+  parseWorkflowSignals,
+  createCampaignFromResearch,
+  processDueOrchestrationSteps,
+  listOrchestrationCampaigns,
+} from '../skills/nexusOrchestrationPlan.js';
 import { retuneOpenEngagements } from '../skills/engagementMonitor.js';
 import { buildApprovalStatusReply } from '../skills/approvalStatus.js';
 import {
@@ -423,7 +429,29 @@ export class Nexus extends AgentBase {
       }
     }
 
-    const nextSteps = this._suggestNextSteps(brief);
+    const workflowSignals = parseWorkflowSignals(instruction);
+    const nextSteps       = this._suggestNextSteps(brief, workflowSignals);
+
+    let campaign = null;
+    if (workflowSignals.autoWire) {
+      try {
+        campaign = await createCampaignFromResearch(this, {
+          instruction,
+          researchTaskId: taskId,
+          brief,
+          sources:        researchMeta.sources,
+          priority,
+          signals:        workflowSignals,
+        });
+        if (campaign?.campaignId) {
+          processDueOrchestrationSteps(this).catch(e => {
+            console.warn('[Nexus] Campaign step dispatch:', e.message);
+          });
+        }
+      } catch (e) {
+        console.error('[Nexus] Campaign wiring failed:', e.message);
+      }
+    }
 
     const { persistResearchDeliverable } = await import('../lib/researchDeliverables.js');
     await persistResearchDeliverable({
@@ -438,6 +466,8 @@ export class Nexus extends AgentBase {
       mergedWithKB: researchMeta.mergedWithKB,
       nextSteps,
       qualityBadge: formatQualityBadge(qScore),
+      campaign,
+      workflowSignals,
     });
 
     await this.rememberEpisodic({
@@ -452,8 +482,8 @@ export class Nexus extends AgentBase {
   }
 
   // ── Route to the right agent after research ──────────────────────────────
-  _suggestNextSteps(brief) {
-    return [
+  _suggestNextSteps(brief, workflowSignals = null) {
+    const steps = [
       {
         id:          'blog',
         label:       'Write a blog article — Aether (Marketing)',
@@ -485,6 +515,25 @@ export class Nexus extends AgentBase {
         description: 'Store findings quietly in the Synthesizer KB. No output document produced.',
       },
     ];
+
+    if (workflowSignals?.wantsContentCampaign) {
+      steps.unshift({
+        id:          'content_campaign',
+        label:       'Run full content campaign (calendar + scheduled blogs)',
+        agent:       'nexus',
+        description: `Nexus queues ${workflowSignals.postCount} blog topics every ${workflowSignals.intervalDays} days — Boss approves each before publish.`,
+      });
+    }
+
+    return steps;
+  }
+
+  async processOrchestrationCampaigns(opts = {}) {
+    return processDueOrchestrationSteps(this, opts);
+  }
+
+  async listCampaigns(opts = {}) {
+    return listOrchestrationCampaigns(opts);
   }
 
   async orchestrate(instruction, options = {}) {
@@ -542,12 +591,32 @@ export class Nexus extends AgentBase {
         blog:       { agent_id: 'aether',      title: 'Write blog article from Orion research',               type: 'content'  },
         bd_brief:   { agent_id: 'atlas',       title: 'Build BD strategy brief from Orion research',          type: 'analysis' },
         automation: { agent_id: 'nova',        title: 'Design automation solution from Orion research',       type: 'analysis' },
-        report:     { agent_id: 'synthesizer', title: 'Build intelligence report from Orion research',        type: 'analysis' },
-        save:       { agent_id: 'synthesizer', title: 'Save Orion research to knowledge base',                type: 'research' },
+        report:          { agent_id: 'synthesizer', title: 'Build intelligence report from Orion research',        type: 'analysis' },
+        save:            { agent_id: 'synthesizer', title: 'Save Orion research to knowledge base',                type: 'research' },
+        content_campaign:{ agent_id: 'nexus',       title: 'Run content campaign from Orion research',             type: 'content'  },
         // legacy key kept for backward compat
-        strategy:   { agent_id: 'atlas',       title: 'Create strategy brief from Orion research',            type: 'analysis' },
+        strategy:        { agent_id: 'atlas',       title: 'Create strategy brief from Orion research',            type: 'analysis' },
       };
       const step = stepMap[nextStep] || { agent_id: 'atlas', title: 'Act on Orion research findings', type: 'general' };
+
+      if (nextStep === 'content_campaign') {
+        const signals = parseWorkflowSignals(instruction);
+        const campaign = await createCampaignFromResearch(this, {
+          instruction,
+          researchTaskId: null,
+          brief:          researchBrief,
+          priority,
+          signals:        { ...signals, wantsSynthesizer: true, wantsContentCampaign: true, autoWire: true },
+        });
+        if (campaign?.campaignId) {
+          await processDueOrchestrationSteps(this);
+        }
+        return {
+          type:    'campaign_wired',
+          campaign,
+          message: campaign?.message || 'Content campaign queued. Steps run on schedule; check Activity journal.',
+        };
+      }
 
       if (db) {
         await db.from('tasks').insert({
@@ -1615,6 +1684,8 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
         return this.runContentCadenceCheck();
       case 'process_scheduled_content':
         return this.processDueScheduledContent();
+      case 'process_orchestration':
+        return this.processOrchestrationCampaigns(payload);
       case 'ceo_ops':
         return this.getCeoOpsStatus();
       case 'evening_briefing':

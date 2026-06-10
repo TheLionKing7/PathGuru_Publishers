@@ -1766,8 +1766,14 @@
         _pendingBrief       = out.brief;
         _pendingInstruction = instruction;
         const badge = out.qualityBadge ? `\n\n${out.qualityBadge}` : '';
+        let campaignNote = '';
+        if (out.campaign?.message) {
+          campaignNote = `\n\n---\n**Campaign wired**\n${out.campaign.message}\n\nSteps run automatically; track progress in **Activity** journal. Scheduled blogs go through Boss approval before publish.`;
+        } else if (out.workflowSignals?.autoWire) {
+          campaignNote = '\n\n---\n*Nexus is wiring follow-up steps (Synthesizer + content calendar)…*';
+        }
         renderMarkdown(markdownEl,
-          `**Orion has completed the research.**${badge}\n\n${out.brief || ''}\n\n---\n*What should I do with these findings?*`
+          `**Orion has completed the research.**${badge}\n\n${out.brief || ''}${campaignNote}\n\n---\n*What should I do with these findings?*`
         );
         const btnRow = document.createElement('div');
         btnRow.className = 'nexus-nextstep-row';
@@ -1891,6 +1897,15 @@
           // ── Task queued ──
           } else if (res?.type === 'task_queued') {
             renderMarkdown(markdownEl, `**Task queued successfully**\n\n${res.message}`);
+            outputEl.style.display = 'flex';
+
+          } else if (res?.type === 'campaign_wired') {
+            const lines = [`**Campaign wired**`, '', res.message || ''];
+            if (res.campaign?.steps?.length) {
+              lines.push('', '**Steps:**');
+              res.campaign.steps.forEach((s, i) => lines.push(`${i + 1}. ${s.title} (${s.status || 'pending'})`));
+            }
+            renderMarkdown(markdownEl, lines.join('\n'));
             outputEl.style.display = 'flex';
 
           // ── Execution plan (multi-step) ──

@@ -2592,6 +2592,24 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/cron/process-orchestration — due campaign steps → agent delegation
+  if (req.method === 'GET' && path === '/api/cron/process-orchestration') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      json(res, await AGENTS.nexus.processOrchestrationCampaigns());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/nexus/campaigns — list orchestration campaigns + steps
+  if (req.method === 'GET' && path === '/api/agents/nexus/campaigns') {
+    try {
+      const limit = parseInt(url.searchParams.get('limit') || '10', 10);
+      json(res, await AGENTS.nexus.listCampaigns({ limit }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // GET /api/cron/engagement-retune — weekly client blueprint adjustments
   if (req.method === 'GET' && path === '/api/cron/engagement-retune') {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
@@ -3286,6 +3304,12 @@ async function startup() {
       await AGENTS.nexus.processDueScheduledContent();
     } catch (e) { console.warn('[Nexus CEO] scheduled content error:', e.message); }
   }, 6 * 60 * 60 * 1000);
+  // Process due orchestration campaign steps — every 15 minutes
+  setInterval(async () => {
+    try {
+      await AGENTS.nexus.processOrchestrationCampaigns();
+    } catch (e) { console.warn('[Nexus Campaign] step processor error:', e.message); }
+  }, 15 * 60 * 1000);
   // NOTE: checkEscalationTriggers() is NOT called on startup — it runs inside
   // generateDailyBriefing() at 7am only. Calling it on every restart caused
   // a Chrome notification flood on every Render deploy/spin-up.

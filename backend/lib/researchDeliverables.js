@@ -81,6 +81,8 @@ export async function persistResearchDeliverable({
   mergedWithKB = false,
   nextSteps = null,
   qualityBadge = null,
+  campaign = null,
+  workflowSignals = null,
 }) {
   const db = getSupabase();
   const slug = slugify(instruction);
@@ -142,6 +144,8 @@ export async function persistResearchDeliverable({
         forAgent,
         mergedWithKB,
         instruction,
+        campaign,
+        workflowSignals,
         deliverable: { jsonKey, markdownKey: mdKey, r2Saved },
       },
       status: 'completed',
