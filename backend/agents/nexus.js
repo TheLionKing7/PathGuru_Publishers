@@ -346,6 +346,7 @@ export class Nexus extends AgentBase {
     const lower = instruction.toLowerCase();
     const researchSignals = [
       'research', 'find out', 'investigate', 'look up', 'look into',
+      'coordinate', 'cordinate', 'painpoint', 'pain point', 'playbook',
       'what is', 'what are', 'how does', 'how do', 'tell me about',
       'gather', 'compile', 'analyse', 'analyze', 'study', 'explore',
       'what do we know', 'intelligence on', 'intel on', 'data on',
@@ -353,6 +354,95 @@ export class Nexus extends AgentBase {
       'deep dive', 'audit', 'scan', 'survey', 'review the', 'understand',
     ];
     return researchSignals.some(s => lower.includes(s));
+  }
+
+  /**
+   * Background Orion research — avoids HTTP 502 on long Tavily/Firecrawl runs.
+   */
+  async _runOrionResearchJob(taskId, instruction, priority = 3) {
+    const db = getSupabase();
+    let brief = null;
+    let researchMeta = {};
+
+    try {
+      const { researcher } = await import('./researcher.js');
+      const result = await researcher.research({
+        topic:       instruction,
+        forAgent:    'nexus',
+        depth:       'standard',
+        mergeWithKB: true,
+      });
+      brief        = result?.brief || result?.summary || String(result || '');
+      researchMeta = {
+        sources:      result?.sources      || [],
+        gaps:         result?.gaps         || [],
+        coverStats:   result?.coverStats   || [],
+        mergedWithKB: result?.mergedWithKB || false,
+        depth:        result?.depth        || 'standard',
+      };
+    } catch (e) {
+      console.error('[Nexus] Orion research failed:', e.message);
+      if (db) {
+        await db.from('tasks').update({
+          status: 'failed', error: e.message, completed_at: new Date().toISOString(),
+        }).eq('id', taskId);
+      }
+      return;
+    }
+
+    let qScore = scoreResearchBrief({ brief, ...researchMeta });
+    console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100)`);
+
+    if (!qScore.passed) {
+      console.warn('[Nexus] Research quality too low — re-running Orion at deep depth');
+      try {
+        const { researcher } = await import('./researcher.js');
+        const deepResult = await researcher.research({
+          topic:       instruction,
+          forAgent:    'nexus',
+          depth:       'deep',
+          mergeWithKB: true,
+        });
+        brief        = deepResult?.brief || brief;
+        researchMeta = {
+          sources:      deepResult?.sources      || researchMeta.sources,
+          gaps:         deepResult?.gaps         || researchMeta.gaps,
+          coverStats:   deepResult?.coverStats   || researchMeta.coverStats,
+          mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
+          depth:        'deep',
+        };
+        qScore = scoreResearchBrief({ brief, ...researchMeta });
+      } catch (e) {
+        console.error('[Nexus] Deep re-run failed:', e.message);
+      }
+    }
+
+    const nextSteps = this._suggestNextSteps(brief);
+
+    const { persistResearchDeliverable } = await import('../lib/researchDeliverables.js');
+    await persistResearchDeliverable({
+      taskId,
+      instruction,
+      brief,
+      sources:      researchMeta.sources,
+      gaps:         researchMeta.gaps,
+      qualityScore: qScore,
+      depth:        researchMeta.depth,
+      forAgent:     'nexus',
+      mergedWithKB: researchMeta.mergedWithKB,
+      nextSteps,
+      qualityBadge: formatQualityBadge(qScore),
+    });
+
+    await this.rememberEpisodic({
+      summary:    `Orion researched: "${instruction.slice(0, 80)}"`,
+      content:    { instruction, brief: brief?.slice(0, 500), qualityScore: qScore.score, taskId },
+      type:       'research',
+      tags:       ['orion', 'research'],
+      importance: 3,
+    });
+
+    console.log(`[Nexus] Orion research complete — task ${taskId}`);
   }
 
   // ── Route to the right agent after research ──────────────────────────────
@@ -620,14 +710,15 @@ No full article. Brief only.`;
       };
     }
 
-    // ── PHASE 1A: Pure research intent — run Orion immediately ───────────────
+    // ── PHASE 1A: Pure research intent — dispatch Orion asynchronously ─────
+    // Research can exceed Render's 30s proxy timeout; return taskId immediately.
     if (this._isResearchIntent(instruction)) {
-      console.log(`[Nexus] Research intent detected — dispatching Orion immediately`);
+      console.log(`[Nexus] Research intent detected — dispatching Orion (async)`);
       const db2 = getSupabase();
+      let taskId = null;
 
-      // Log a parent task
       if (db2) {
-        await db2.from('tasks').insert({
+        const { data: taskRow, error: taskErr } = await db2.from('tasks').insert({
           title:       `[Orion] Research: ${instruction.slice(0, 80)}`,
           description: instruction,
           agent_id:    'researcher',
@@ -635,84 +726,22 @@ No full article. Brief only.`;
           status:      'in_progress',
           priority,
           type:        'research',
+        }).select('id').single();
+        if (taskErr) console.warn('[Nexus] Research task insert failed:', taskErr.message);
+        taskId = taskRow?.id || null;
+      }
+
+      if (taskId) {
+        this._runOrionResearchJob(taskId, instruction, priority).catch(e => {
+          console.error('[Nexus] Background Orion job failed:', e.message);
         });
       }
-
-      let brief = null;
-      let researchMeta = {};
-      try {
-        const { researcher } = await import('./researcher.js');
-        const result = await researcher.research({
-          topic:        instruction,
-          forAgent:     'nexus',
-          depth:        'standard',
-          mergeWithKB:  true,
-        });
-        brief         = result?.brief || result?.summary || String(result || '');
-        researchMeta  = {
-          sources:     result?.sources      || [],
-          gaps:        result?.gaps         || [],
-          coverStats:  result?.coverStats   || [],
-          mergedWithKB: result?.mergedWithKB || false,
-          depth:       result?.depth        || 'standard',
-        };
-      } catch (e) {
-        console.error('[Nexus] Orion research failed:', e.message);
-        brief = `Research could not be completed: ${e.message}`;
-      }
-
-      // ── Research Quality Gate ──────────────────────────────────────────────
-      // Score brief before showing Boss. Grade D → re-run deeper automatically.
-      const qScore = scoreResearchBrief({ brief, ...researchMeta });
-      console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100) — ${qScore.gradeLabel}`);
-
-      if (!qScore.passed) {
-        // Grade D — too poor to show Boss. Re-run at deep depth.
-        console.warn('[Nexus] Research quality too low — re-running Orion at deep depth');
-        try {
-          const { researcher } = await import('./researcher.js');
-          const deepResult = await researcher.research({
-            topic:       instruction,
-            forAgent:    'nexus',
-            depth:       'deep',
-            mergeWithKB: true,
-          });
-          brief        = deepResult?.brief || brief;
-          researchMeta = {
-            sources:     deepResult?.sources      || researchMeta.sources,
-            gaps:        deepResult?.gaps         || researchMeta.gaps,
-            coverStats:  deepResult?.coverStats   || researchMeta.coverStats,
-            mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
-            depth:       'deep',
-          };
-        } catch (e) {
-          console.error('[Nexus] Deep re-run failed:', e.message);
-        }
-        // Re-score after deep run
-        const qScore2 = scoreResearchBrief({ brief, ...researchMeta });
-        console.log(`[Nexus] Re-run quality: ${qScore2.grade} (${qScore2.score}/100)`);
-        Object.assign(qScore, qScore2);
-      }
-
-      const qualityBadge = formatQualityBadge(qScore);
-      const nextSteps    = this._suggestNextSteps(brief);
-
-      await this.rememberEpisodic({
-        summary:    `Orion researched: "${instruction.slice(0, 80)}"`,
-        content:    { instruction, brief: brief?.slice(0, 500), qualityScore: qScore.score },
-        type:       'research',
-        tags:       ['orion', 'research'],
-        importance: 3,
-      });
 
       return {
-        type:         'research_complete',
-        agent:        'orion',
-        brief,
-        nextSteps,
-        qualityScore: qScore,
-        qualityBadge,
-        message:      `Orion has completed the research. What should I do with these findings?`,
+        type:    'research_started',
+        taskId,
+        agent:   'orion',
+        message: 'Orion research started. This may take 1–3 minutes — polling for results.',
       };
     }
 

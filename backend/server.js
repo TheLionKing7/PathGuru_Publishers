@@ -1246,10 +1246,11 @@ const server = createServer(async (req, res) => {
 
       json(res, {
         ...data,
-        taskId:  data.id,
+        taskId:    data.id,
         status,
         result,
-        error:   data.error_message || data.error || null,
+        output:    data.output || null,
+        error:     data.error_message || data.error || null,
       });
     } catch (e) { err(res, e.message, 500); }
     return;
@@ -2796,13 +2797,70 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/agents/research/deliverables — list Orion research deliverables
+  if (req.method === 'GET' && path === '/api/agents/research/deliverables') {
+    try {
+      const limit  = parseInt(url.searchParams.get('limit')  || '30', 10);
+      const offset = parseInt(url.searchParams.get('offset') || '0',  10);
+      const { listResearchDeliverables } = await import('./lib/researchDeliverables.js');
+      json(res, await listResearchDeliverables({ limit, offset }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  const deliverableMatch = path.match(/^\/api\/agents\/research\/deliverables\/([\w-]+)$/);
+  if (req.method === 'GET' && deliverableMatch) {
+    try {
+      const { getResearchDeliverable } = await import('./lib/researchDeliverables.js');
+      const item = await getResearchDeliverable(deliverableMatch[1]);
+      if (!item) { err(res, 'Deliverable not found', 404); return; }
+      json(res, item);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // POST /api/agents/researcher/research  — direct Researcher call
   //   body: { topic, forAgent?, context?, focusAreas?, depth?, mergeWithKB? }
   if (req.method === 'POST' && path === '/api/agents/researcher/research') {
     try {
       const body = await readBody(req);
       if (!body.topic) { err(res, 'topic is required', 400); return; }
-      json(res, await AGENTS.researcher.research(body));
+
+      const db = getSupabase();
+      let taskId = null;
+      if (db && body.persist !== false) {
+        const { data: taskRow } = await db.from('tasks').insert({
+          title:       `[Orion] ${body.topic.slice(0, 80)}`,
+          description: body.topic,
+          agent_id:    'researcher',
+          created_by:  'team',
+          status:      'in_progress',
+          priority:    3,
+          type:        'research',
+        }).select('id').single();
+        taskId = taskRow?.id || null;
+      }
+
+      const result = await AGENTS.researcher.research(body);
+
+      if (taskId) {
+        const { scoreResearchBrief } = await import('./skills/researchQualityGate.js');
+        const qScore = scoreResearchBrief(result);
+        const { persistResearchDeliverable } = await import('./lib/researchDeliverables.js');
+        await persistResearchDeliverable({
+          taskId,
+          instruction: body.topic,
+          brief:       result.brief,
+          sources:     result.sources,
+          gaps:        result.gaps,
+          qualityScore: qScore,
+          depth:       result.depth || body.depth || 'standard',
+          forAgent:    body.forAgent || 'nexus',
+          mergedWithKB: result.mergedWithKB,
+        });
+      }
+
+      json(res, { ...result, taskId });
     } catch (e) { err(res, e.message, 500); }
     return;
   }

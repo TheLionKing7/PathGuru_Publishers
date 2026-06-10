@@ -883,6 +883,13 @@
             </button>
           </div>
 
+          <div class="console-form-group" style="margin-top:20px">
+            <label class="console-label">Research Deliverables <span style="opacity:.5">(saved briefs from Orion)</span></label>
+            <div id="researcher-deliverables" class="research-deliverables-list" style="font-size:12px;max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px">
+              <span style="opacity:.5">Loading…</span>
+            </div>
+          </div>
+
           <div id="researcher-status" class="console-status" style="display:none"></div>
           <div id="researcher-output" class="console-output" style="display:none">
             <div class="console-output-header">
@@ -1597,6 +1604,48 @@
       const briefEl   = $('researcher-brief');
       const metaEl    = $('researcher-meta');
       const sourcesEl = $('researcher-sources');
+      const delivEl   = $('researcher-deliverables');
+
+      async function loadResearchDeliverables() {
+        if (!delivEl) return;
+        try {
+          const data = await apiFetch('/api/agents/research/deliverables?limit=20');
+          const items = data.items || [];
+          if (!items.length) {
+            delivEl.innerHTML = '<span style="opacity:.5">No saved deliverables yet — run research via Nexus or Orion.</span>';
+            return;
+          }
+          delivEl.innerHTML = items.map(d => {
+            const date = d.completedAt || d.createdAt || '';
+            const grade = d.qualityGrade ? ` · ${esc(d.qualityGrade)}` : '';
+            const st = d.status === 'completed' ? '✓' : d.status === 'in_progress' ? '…' : '✗';
+            return `<div class="research-deliverable-row" data-task-id="${esc(d.taskId)}" style="padding:6px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+              <strong>${st}</strong> ${esc(d.title || 'Research')}${grade}
+              <span style="opacity:.5;display:block;font-size:10px">${esc(date.slice(0, 16))} · ${esc(d.depth || 'standard')}</span>
+            </div>`;
+          }).join('');
+          delivEl.querySelectorAll('.research-deliverable-row').forEach(row => {
+            row.addEventListener('click', async () => {
+              const id = row.dataset.taskId;
+              try {
+                const full = await apiFetch(`/api/agents/research/deliverables/${id}`);
+                outputEl.style.display = 'block';
+                briefEl.innerHTML = '';
+                renderMarkdown(briefEl, full.brief || 'No brief stored.');
+                metaEl.textContent = `${full.sources?.length || 0} sources · task ${id.slice(0, 8)}…`;
+                if (full.sources?.length) {
+                  sourcesEl.innerHTML = `<strong>Sources:</strong> ${full.sources.map(s =>
+                    `<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:var(--accent);margin-right:8px">${esc(s.title || s.url)}</a>`
+                  ).join('')}`;
+                }
+              } catch (e) { alert(e.message); }
+            });
+          });
+        } catch (e) {
+          delivEl.innerHTML = `<span style="color:var(--danger)">${esc(e.message)}</span>`;
+        }
+      }
+      loadResearchDeliverables();
 
       runBtn?.addEventListener('click', async () => {
         const topic      = $('researcher-topic')?.value?.trim();
@@ -1634,6 +1683,7 @@
           } else {
             sourcesEl.innerHTML = '';
           }
+          loadResearchDeliverables();
         } catch (e) {
           statusEl.textContent = `✗ ${e.message}`;
         } finally {
@@ -1712,6 +1762,56 @@
       let _pendingBrief = null;
       let _pendingInstruction = null;
 
+      function showResearchComplete(out, instruction) {
+        _pendingBrief       = out.brief;
+        _pendingInstruction = instruction;
+        const badge = out.qualityBadge ? `\n\n${out.qualityBadge}` : '';
+        renderMarkdown(markdownEl,
+          `**Orion has completed the research.**${badge}\n\n${out.brief || ''}\n\n---\n*What should I do with these findings?*`
+        );
+        const btnRow = document.createElement('div');
+        btnRow.className = 'nexus-nextstep-row';
+        btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;';
+        (out.nextSteps || []).forEach(step => {
+          const btn = document.createElement('button');
+          btn.className   = 'btn-console-run';
+          btn.style.cssText = 'font-size:13px;padding:6px 14px;';
+          btn.textContent = step.label;
+          btn.title       = step.description || '';
+          btn.addEventListener('click', async () => {
+            btnRow.remove();
+            await callOrchestrate(_pendingInstruction, {
+              researchBrief: _pendingBrief,
+              nextStep:      step.id,
+            });
+          });
+          btnRow.appendChild(btn);
+        });
+        outputEl.style.display = 'flex';
+        outputEl.querySelectorAll('.nexus-nextstep-row').forEach(el => el.remove());
+        outputEl.appendChild(btnRow);
+      }
+
+      async function pollOrionResearch(taskId, instruction) {
+        let attempts = 0;
+        while (attempts < 120) {
+          attempts++;
+          const task = await pollTask(taskId);
+          const elapsed = attempts * 3;
+          if (statusMsg) statusMsg.textContent = `Orion researching… (${elapsed}s)`;
+          if (task.status === 'done' || task.status === 'completed') {
+            let out = task.output;
+            if (!out && task.result) {
+              try { out = JSON.parse(task.result); } catch { out = { brief: task.result }; }
+            }
+            return out || {};
+          }
+          if (task.status === 'failed') throw new Error(task.error || 'Orion research failed');
+          await new Promise(r => setTimeout(r, 3000));
+        }
+        throw new Error('Research timed out — check Orion → Research Deliverables for the saved brief.');
+      }
+
       async function callOrchestrate(instruction, extraOpts = {}) {
         const priority = parseInt($('nexusPrioritySelect')?.value) || 3;
         runBtn.disabled = true;
@@ -1741,37 +1841,30 @@
             method: 'POST',
             body:   JSON.stringify({ instruction, priority, ...extraOpts }),
           });
+          // ── Research started async — poll until Orion finishes ──
+          if (res?.type === 'research_started' && res.taskId) {
+            if (statusMsg) statusMsg.textContent = 'Orion dispatched — research running in background…';
+            try {
+              const out = await pollOrionResearch(res.taskId, instruction);
+              clearInterval(statusEl._stepInterval);
+              statusEl.style.display = 'none';
+              showResearchComplete(out, instruction);
+            } catch (pollErr) {
+              clearInterval(statusEl._stepInterval);
+              statusEl.style.display = 'none';
+              renderMarkdown(markdownEl, `**Error:** ${esc(pollErr.message)}`);
+              outputEl.style.display = 'flex';
+            }
+            runBtn.disabled = false;
+            return;
+          }
+
           clearInterval(statusEl._stepInterval);
           statusEl.style.display = 'none';
 
           // ── Research complete — show brief + next-step buttons ──
           if (res?.type === 'research_complete') {
-            _pendingBrief       = res.brief;
-            _pendingInstruction = instruction;
-            renderMarkdown(markdownEl,
-              `**Orion has completed the research.**\n\n${res.brief || ''}\n\n---\n*What should I do with these findings?*`
-            );
-            // Inject next-step buttons below the output
-            const btnRow = document.createElement('div');
-            btnRow.className = 'nexus-nextstep-row';
-            btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;';
-            (res.nextSteps || []).forEach(step => {
-              const btn = document.createElement('button');
-              btn.className   = 'btn-console-run';
-              btn.style.cssText = 'font-size:13px;padding:6px 14px;';
-              btn.textContent = step.label;
-              btn.title       = step.description || '';
-              btn.addEventListener('click', async () => {
-                btnRow.remove();
-                await callOrchestrate(_pendingInstruction, {
-                  researchBrief: _pendingBrief,
-                  nextStep:      step.id,
-                });
-              });
-              btnRow.appendChild(btn);
-            });
-            outputEl.style.display = 'flex';
-            outputEl.appendChild(btnRow);
+            showResearchComplete(res, instruction);
 
           // ── Blog published ──
           } else if (res?.type === 'blog_published') {

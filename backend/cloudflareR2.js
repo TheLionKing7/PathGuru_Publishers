@@ -688,3 +688,28 @@ export async function getFirmIpMeta (slug) {
   const manifest = await readFirmIpManifest();
   return manifest.find(e => e.slug === slug) ?? null;
 }
+
+/** Upload Orion research deliverables (JSON / markdown). */
+export async function uploadResearchAsset(key, body, contentType) {
+  const credentialed = Boolean(apiToken || (accessKeyId && secretKey));
+  if (!accountId || !bucket || !credentialed) {
+    throw new Error('R2 is not configured for research deliverables');
+  }
+  return uploadToR2(key, body, contentType);
+}
+
+/** Fetch a research deliverable JSON blob from R2 (public URL or direct). */
+export async function fetchResearchAsset(key) {
+  if (!accountId || !bucket) return null;
+  if (publicUrl) {
+    const r = await fetch(`${publicUrl.replace(/\/$/, '')}/${encodeKey(key)}`);
+    if (r.ok) return r.json().catch(() => null);
+  }
+  try {
+    const r = await fetch(getObjectUrl(key), {
+      headers: apiToken ? { Authorization: `Bearer ${apiToken}` } : {},
+    });
+    if (r.ok) return r.json().catch(() => null);
+  } catch { /* ignore */ }
+  return null;
+}
