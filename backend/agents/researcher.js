@@ -22,7 +22,7 @@
  */
 
 import { AgentBase }    from './agentBase.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 
 const RESEARCHER_SYSTEM = `You are Researcher — the web intelligence specialist of the DigiFusion Intelligence Network.
 

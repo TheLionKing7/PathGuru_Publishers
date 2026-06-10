@@ -16,7 +16,7 @@
  */
 
 import { getSupabase }    from '../supabaseClient.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 
 /** DeepSeek primary, Groq fallback — resolved fresh each call (env changes without restart). */
 const LLM_CALL_OPTS = { fallback: true };
@@ -499,7 +499,18 @@ Return ONLY the JSON array, no other text.`;
         input:       taskInput,
       });
       if (taskId && typeof this.startTask === 'function') await this.startTask(taskId);
-      const result = await this.execute(taskInput);
+      let result = await this.execute({ ...taskInput, id: taskId });
+      if (result?.document?.buffer && taskId) {
+        try {
+          const { persistAtlasDocument } = await import('../lib/atlasDeliverables.js');
+          const docMeta = await persistAtlasDocument(taskId, result.document);
+          result = { ...result, document: docMeta };
+        } catch (e) {
+          console.warn(`[${this.displayName}] Atlas doc persist skipped:`, e.message);
+          const { filename, format } = result.document;
+          result = { ...result, document: { filename, format, hasDoc: true } };
+        }
+      }
       if (taskId && typeof this.completeTask === 'function') await this.completeTask(taskId, result || {});
       return { success: true, taskId, result };
     } catch (e) {

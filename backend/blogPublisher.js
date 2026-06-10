@@ -22,7 +22,7 @@ import {
 import { searchPexels } from './pexelsAssets.js';
 import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
 import { selectPersonaForNiche } from './skills/personas.js';
-import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiPipeline.js';
+import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiProviders.js';
 import { synthesizer } from './agents/synthesizer.js';
 import { injectAdvocateIntoBlogPrompt, buildContentAdvocateSystemBlock } from './skills/contentAdvocate.js';
 import { extractPostBody } from './lib/extractPostBody.js';

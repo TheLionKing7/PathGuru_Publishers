@@ -9,7 +9,7 @@
  */
 
 import { getSupabase, supabaseWrite } from '../supabaseClient.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { enqueueC2cCalendar } from './c2cGrowthEngine.js';
 import { BLOG_CADENCE_DAYS } from './nexusCeoDoctrine.js';
 

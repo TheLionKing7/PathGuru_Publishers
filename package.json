@@ -17,7 +17,9 @@
     "test:review":  "node --env-file=.env scripts/test-blog.mjs --review",
     "publish:post": "node --env-file=.env scripts/publish-html-post.mjs",
     "delete:post":  "node --env-file=.env scripts/delete-post.mjs",
-    "seed:digifusion": "node --env-file=.env.local scripts/seed-digifusion-content.mjs"
+    "seed:digifusion": "node --env-file=.env.local scripts/seed-digifusion-content.mjs",
+    "desktop:dev": "electron desktop/main.js",
+    "desktop:build": "electron-builder --config desktop/electron-builder.yml"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
@@ -31,6 +33,8 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3"
   },

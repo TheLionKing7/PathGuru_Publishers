@@ -7,9 +7,7 @@
   'use strict';
 
   function getBackendUrl () {
-    try {
-      return (JSON.parse(localStorage.getItem('pg_settings') || '{}').backendUrl || window.location.origin).replace(/\/$/, '');
-    } catch { return window.location.origin; }
+    return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
   function $ (id) { return document.getElementById(id); }
 

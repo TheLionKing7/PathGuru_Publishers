@@ -1,0 +1,215 @@
+/* Product launcher — sign in to Publisher or DigiFusion Command */
+
+.pg-launcher-active .app-chrome,
+.pg-launcher-active .sidebar {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#productLauncher {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(124, 92, 252, 0.12), transparent),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(43, 179, 163, 0.08), transparent),
+    var(--bg, #0d0f14);
+}
+
+#productLauncher[hidden] {
+  display: none !important;
+}
+
+.pg-launcher-inner {
+  width: 100%;
+  max-width: 880px;
+}
+
+.pg-launcher-brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.pg-launcher-brand h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 700;
+  color: var(--fg, #f4f4f5);
+  margin: 0 0 8px;
+}
+
+.pg-launcher-brand p {
+  color: var(--muted, #9ca3af);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.pg-launcher-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.pg-launcher-card {
+  text-align: left;
+  padding: 28px 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+  color: inherit;
+  font: inherit;
+}
+
+.pg-launcher-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.pg-launcher-card--publisher:hover { border-color: rgba(201, 168, 76, 0.45); }
+.pg-launcher-card--digifusion:hover { border-color: rgba(43, 179, 163, 0.45); }
+
+.pg-launcher-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 16px;
+}
+
+.pg-launcher-card--publisher .pg-launcher-card-icon {
+  background: rgba(201, 168, 76, 0.15);
+  color: #c9a84c;
+}
+
+.pg-launcher-card--digifusion .pg-launcher-card-icon {
+  background: rgba(43, 179, 163, 0.15);
+  color: #2bb3a3;
+}
+
+.pg-launcher-card h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--fg, #f4f4f5);
+}
+
+.pg-launcher-card p {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--muted, #9ca3af);
+  margin: 0 0 16px;
+}
+
+.pg-launcher-card ul {
+  margin: 0;
+  padding: 0 0 0 18px;
+  font-size: 0.8rem;
+  color: var(--muted, #9ca3af);
+  line-height: 1.6;
+}
+
+.pg-launcher-card-cta {
+  display: inline-block;
+  margin-top: 18px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent, #7c5cfc);
+}
+
+.pg-launcher-footer {
+  margin-top: 28px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--muted, #6b7280);
+}
+
+.pg-launcher-footer button {
+  background: none;
+  border: none;
+  color: var(--muted, #9ca3af);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 4px 8px;
+}
+
+.pg-launcher-footer button:hover {
+  color: var(--fg, #f4f4f5);
+}
+
+.pg-launcher-status {
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--muted, #6b7280);
+  margin-top: 12px;
+}
+
+.pg-launcher-status.ok { color: #34d399; }
+.pg-launcher-status.err { color: #f87171; }
+
+/* Product badge in sidebar */
+.pg-product-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 0 8px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.75rem;
+}
+
+.pg-product-badge strong {
+  display: block;
+  color: var(--fg, #f4f4f5);
+  font-size: 0.8rem;
+}
+
+.pg-product-badge span {
+  color: var(--muted, #9ca3af);
+}
+
+.pg-product-switch {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--accent, #7c5cfc);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+body.pg-product-publisher .sidebar-brand .brand-sub::after {
+  content: ' · Publisher';
+  opacity: 0.7;
+}
+
+body.pg-product-digifusion .sidebar-brand .brand-sub::after {
+  content: ' · Command';
+  opacity: 0.7;
+}
+
+/* Hide nav items not in active product */
+body.pg-product-publisher .nav-btn[data-dept]:not([data-dept="publisher"]) {
+  display: none;
+}
+
+body.pg-product-digifusion .nav-btn[data-dept="publisher"] {
+  display: none;
+}

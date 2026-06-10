@@ -20,7 +20,7 @@
 
 import { AgentBase }      from './agentBase.js';
 import { getSupabase }    from '../supabaseClient.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';

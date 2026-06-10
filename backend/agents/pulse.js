@@ -9,7 +9,7 @@
  */
 
 import { AgentBase }      from './agentBase.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { dispatchPendingNotifications } from '../skills/notifier.js';
 import { nexus }          from './nexus.js';

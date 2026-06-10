@@ -2,19 +2,11 @@
 try { const { createRequire } = await import('node:module'); createRequire(import.meta.url)('dotenv').config({ path: new URL('../.env', import.meta.url) }); } catch {}
 
 /**
- * PathGuru Publishers — API Server (Phase 3)
+ * PathGuru Publishers — API Server (DigiFusion Command)
  *
- * GET  /              → web app UI
- * GET  /style.css              → webapp styles
- * GET  /css/...css             → webapp/css (auto-served)
- * GET  /js/...js               → webapp/js (auto-served)
- * GET  /app.js                 → webapp logic
- * GET  /ping            → lightweight keep-alive (UptimeRobot — use this, not /health)
- * GET  /health          → full status (+ font diagnostics)
- * POST /api/generate  → book pipeline
- * GET  /api/assets    → Pexels image search
- * POST /api/upload-assets → R2 upload
- * POST /api/epub      → EPUB-only build
+ * GET  /              → desktop shell UI
+ * GET  /ping            → lightweight keep-alive
+ * GET  /health          → status
  * POST /api/blog      → blog post generation + publish
  *
  * ── Blog CMS API ─────────────────────────────────────
@@ -32,12 +24,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname }            from 'node:path';
 import { fileURLToPath }            from 'node:url';
 
-import { buildProject }                   from './designGuru.js';
-import {
-  createJob, getJob, shouldRunAsync, runGenerateJob,
-} from './skills/kdp/generateJobs.js';
-import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
-import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
 import { createPost as dbCreatePost, updatePost as dbUpdatePost, getSupabase, supabaseWrite } from './supabaseClient.js';
@@ -53,20 +39,11 @@ import { pulse }       from './agents/pulse.js';
 import { assistant }   from './agents/assistant.js';
 
 const AGENTS = { synthesizer, nexus, researcher, atlas, nova, aether, pulse, assistant };
-import { prewarmFonts, describeEmbeddedFonts } from './fontEmbedder.js';
-import {
-  getLibrarySummary, ensureLibraryDir,
-  listIntentFolder, saveIntentFile, deleteIntentFile, isValidIntentFolder,
-} from './referenceLibrary.js';
-import { extractPdfProfile }                     from './pdfDesignExtractor.js';
 import {
   isR2Enabled,
   uploadMediaAsset,
   listMediaAssets,
   deleteMediaAsset,
-  uploadLibraryFile,
-  listLibraryFiles  as listLibraryFilesR2,
-  deleteLibraryFile as deleteLibraryFileR2,
   putJsonCache,
   getJsonCache,
   saveAgencyPlaybook,
@@ -79,10 +56,10 @@ import {
   getFirmIpDocumentBytes,
 } from './cloudflareR2.js';
 import { verifyCronAuth, cronAuthFail, isCronAuthRequired } from './http/cronAuth.js';
+import { buildPlatformConfig } from './skills/productRegistry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
-const IMPRINTS  = join(__dirname, 'assets', 'imprints');
 const PORT      = parseInt(process.env.PORT || '8787', 10);
 
 const MIME_BY_EXT = {
@@ -170,91 +147,31 @@ const server = createServer(async (req, res) => {
   const url  = new URL(req.url, `http://localhost:${PORT}`);
   const path = url.pathname;
 
-  // ── Reference Library ───────────────────────────
-  if (path === '/api/library' && req.method === 'GET') {
-    try {
-      const summary = await getLibrarySummary();
-      json(res, summary);
-    } catch (e) { err(res, e.message); }
-    return;
-  }
-
-  // POST /api/library/extract — extract design profile from a PDF in the library
-  // Body: { pdfPath: string, profileName: string }
-  if (path === '/api/library/extract' && req.method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const { pdfPath, profileName } = body;
-      if (!pdfPath || !profileName) {
-        return err(res, 'pdfPath and profileName are required', 400);
-      }
-      const safeProfile = profileName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-      console.log(`[Library] Extracting profile "${safeProfile}" from: ${pdfPath}`);
-      const profile = await extractPdfProfile(pdfPath, safeProfile);
-      json(res, {
-        ok: true,
-        message: `Profile "${safeProfile}" extracted and saved.`,
-        profile: {
-          name:      profile.name,
-          style:     profile.style,
-          books:     profile.books,
-          extractedAt: profile.extractedAt,
-          calloutTypes: profile.calloutTypes,
-          colorPalette: profile.colorPalette,
-          typography:   profile.typography,
-        },
-        usage: `Use in generation: { "publisher": "${safeProfile}" }`,
-      });
-    } catch (e) { err(res, e.message); }
-    return;
-  }
-
   // ── Ping (lightweight — point UptimeRobot here, 60s timeout) ─────────────
   if (path === '/ping' || path === '/api/cron/ping') {
-    json(res, { ok: true, service: 'pathguru-publishers', ts: new Date().toISOString() });
+    json(res, { ok: true, service: 'digifusion-command', ts: new Date().toISOString() });
+    return;
+  }
+
+  // ── Platform config (product launcher + desktop hybrid bootstrap) ───────
+  if (path === '/api/platform/config' || path === '/api/platform') {
+    json(res, buildPlatformConfig());
     return;
   }
 
   // ── Health (full diagnostics — Render dashboard; avoid for 5-min keep-alive) ──
   if (path === '/health') {
-    const fonts = await describeEmbeddedFonts().catch(() => []);
-    json(res, { status: 'ok', service: 'PathGuru Publishers', version: '3.0', ts: new Date().toISOString(),
-                fonts: fonts.map(f => ({ family: f.family, italic: f.italic, weight: f.weightRange.join('-'), loaded: f.loaded, kb: Math.round(f.bytes / 1024) })) });
-    return;
-  }
-
-  // ── Imprint assets (logos, why-the-a.md) ────────
-  if (req.method === 'GET' && path.startsWith('/assets/imprints/')) {
-    const rel = decodeURIComponent(path.slice('/assets/imprints/'.length)).replace(/\.\./g, '');
-    const filePath = join(IMPRINTS, rel);
-    if (rel && existsSync(filePath)) {
-      const ext = rel.slice(rel.lastIndexOf('.')).toLowerCase();
-      res.writeHead(200, {
-        'Content-Type': MIME_BY_EXT[ext] || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=86400',
-      });
-      res.end(readFileSync(filePath));
-    } else {
-      err(res, `Not found: ${path}`, 404);
-    }
-    return;
-  }
-
-  // ── GET /api/generate/status/:id ────────────────
-  if (req.method === 'GET' && path.startsWith('/api/generate/status/')) {
-    try {
-      const id = path.slice('/api/generate/status/'.length);
-      const job = await getJob(id);
-      if (!job) { err(res, 'Job not found', 404); return; }
-      json(res, {
-        id:       job.id,
-        status:   job.status,
-        progress: job.progress,
-        message:  job.message,
-        error:    job.error,
-        result:   job.status === 'complete' ? job.result : null,
-      });
-    } catch (e) { err(res, e.message); }
+    const platform = buildPlatformConfig();
+    json(res, {
+      status:  'ok',
+      service: 'DigiFusion Command',
+      version: '3.0',
+      ts:      new Date().toISOString(),
+      platform: {
+        products: platform.products.map(p => p.id),
+        hybrid:   platform.hybrid,
+      },
+    });
     return;
   }
 
@@ -283,101 +200,6 @@ const server = createServer(async (req, res) => {
     const { file, mime } = STATIC[path];
     if (serveWebappFile(res, file, mime)) return;
     err(res, `Not found: ${path}`, 404);
-    return;
-  }
-
-  // ── POST /api/generate ──────────────────────────
-  if (req.method === 'POST' && path === '/api/generate') {
-    try {
-      const input = await readBody(req);
-      const isRefine = input.jobMode === 'refine'
-        || Boolean(input.sourceManuscript?.text || input.manuscriptText || input.importedText);
-      if (!isRefine && !input.topic && !input.title) { err(res, 'A topic or title is required.', 400); return; }
-      if (isRefine && !input.sourceManuscript?.text && !input.manuscriptText && !input.importedText) {
-        err(res, 'Refine mode requires an imported manuscript (upload or paste).', 400);
-        return;
-      }
-      input.assetBaseUrl = input.assetBaseUrl
-        || process.env.PATHGURU_PUBLIC_URL
-        || `http://localhost:${PORT}`;
-      console.log(`[PathGuru] Generating book: "${input.title || input.topic}"`);
-
-      if (shouldRunAsync(input) && input.async !== false) {
-        const job = await createJob(input);
-        runGenerateJob(job.id, buildProject).catch(e => console.error('[PathGuru] Job failed:', e.message));
-        json(res, {
-          jobId:    job.id,
-          status:   'queued',
-          async:    true,
-          pollUrl:  `/api/generate/status/${job.id}`,
-          message:  'Generation started — poll for status',
-        });
-        return;
-      }
-
-      const result = await buildProject(input);
-      const fmt = (input.format || 'pdf').toLowerCase();
-      if (fmt === 'epub' || fmt === 'both') {
-        try {
-          const buf = await buildEpub(result.project, result.manuscript, result.design);
-          result.epubBase64 = buf.toString('base64');
-        } catch (e) { result.epubWarning = e.message; }
-      }
-      json(res, result);
-    } catch (e) { err(res, e.message || 'Generation failed'); }
-    return;
-  }
-
-  // ── POST /api/docx ──────────────────────────────
-  if (req.method === 'POST' && path === '/api/docx') {
-    try {
-      const body = await readBody(req);
-      const html = body.html;
-      if (!html) { err(res, 'html required', 400); return; }
-      const { buildKdpDocx } = await import('./skills/kdp/docxExport.js');
-      const doc = await buildKdpDocx(html, body.project || {});
-      res.writeHead(200, {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': `attachment; filename="${doc.filename}"`,
-        'Content-Length': doc.buffer.length,
-      });
-      res.end(doc.buffer);
-    } catch (e) { err(res, e.message || 'DOCX build failed'); }
-    return;
-  }
-
-  // ── GET /api/assets ─────────────────────────────
-  if (req.method === 'GET' && path === '/api/assets') {
-    try {
-      const query = url.searchParams.get('query') || '';
-      const orientation = url.searchParams.get('orientation') || '';
-      if (!query) { err(res, 'query param required', 400); return; }
-      const images = await searchPexels(query, { orientation });
-      json(res, { images });
-    } catch (e) { err(res, e.message || 'Asset search failed'); }
-    return;
-  }
-
-  // ── POST /api/upload-assets ─────────────────────
-  if (req.method === 'POST' && path === '/api/upload-assets') {
-    try {
-      const body = await readBody(req);
-      if (!(body.assets || []).length) { err(res, 'No assets provided', 400); return; }
-      const results = await uploadAssetsToR2(body.assets);
-      json(res, { uploaded: results.filter(r => !r.error).length, results });
-    } catch (e) { err(res, e.message || 'Upload failed'); }
-    return;
-  }
-
-  // ── POST /api/epub ──────────────────────────────
-  if (req.method === 'POST' && path === '/api/epub') {
-    try {
-      const body = await readBody(req);
-      if (!body.manuscript) { err(res, 'manuscript required', 400); return; }
-      const buf = await buildEpub(body.project || {}, body.manuscript, body.design || {});
-      res.writeHead(200, { 'Content-Type': 'application/epub+zip', 'Content-Disposition': `attachment; filename="pathguru-${Date.now()}.epub"`, 'Content-Length': buf.length });
-      res.end(buf);
-    } catch (e) { err(res, e.message || 'EPUB build failed'); }
     return;
   }
 
@@ -878,6 +700,34 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── PATCH /api/shop/vektor/plan ──────────────────
+  // Proxy plan changes to Vektor admin API (avoids browser CORS).
+  if (req.method === 'PATCH' && path === '/api/shop/vektor/plan') {
+    const adminKey   = process.env.VEKTOR_ADMIN_KEY;
+    const serviceKey = process.env.VEKTOR_SERVICE_KEY;
+    if (!adminKey || !serviceKey) { err(res, 'Vektor keys not set in environment', 500); return; }
+    try {
+      const body = await readBody(req);
+      if (!body.email || !body.plan) { err(res, 'email and plan required', 400); return; }
+      const vRes = await fetch('https://vektor-xr-1.onrender.com/admin/users/plan', {
+        method:  'PATCH',
+        headers: {
+          'Content-Type':   'application/json',
+          'x-api-key':      serviceKey,
+          'x-admin-secret': adminKey,
+        },
+        body: JSON.stringify({ email: body.email, plan: body.plan }),
+        signal: AbortSignal.timeout(35_000),
+      });
+      const data = await vRes.json().catch(() => ({}));
+      if (!vRes.ok) { err(res, data.error || `Vektor API returned ${vRes.status}`, vRes.status); return; }
+      _vektorUsersCache   = null;
+      _vektorUsersCacheTs = 0;
+      json(res, data);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ═══════════════════════════════════════════════════
   // MEDIA LIBRARY — Cloudflare R2 blog-media/ prefix
   // ═══════════════════════════════════════════════════
@@ -912,71 +762,6 @@ const server = createServer(async (req, res) => {
     try {
       const key    = decodeURIComponent(mediaDeleteMatch[1]);
       const result = await deleteMediaAsset(key);
-      json(res, result);
-    } catch (e) { err(res, e.message || 'Delete failed'); }
-    return;
-  }
-
-  // ═══════════════════════════════════════════════════
-  // LEARNING LIBRARY — /api/library/:folder
-  // Uses R2 when credentials are available, local disk otherwise
-  // ═══════════════════════════════════════════════════
-
-  // ── POST /api/manuscript/parse ───────────────────
-  // Extract text + sections from uploaded DOCX/PDF/TXT/MD
-  if (req.method === 'POST' && path === '/api/manuscript/parse') {
-    try {
-      const filename = url.searchParams.get('filename') || 'manuscript.txt';
-      const body = await readRawBody(req);
-      if (!body.length) { err(res, 'Empty file body', 400); return; }
-      const { extractManuscriptText } = await import('./skills/kdp/manuscriptImport.js');
-      const parsed = await extractManuscriptText(body, filename, {
-        title: url.searchParams.get('title') || '',
-      });
-      json(res, { ok: true, ...parsed });
-    } catch (e) { err(res, e.message || 'Parse failed'); }
-    return;
-  }
-
-  // ── GET /api/library/:folder ─────────────────────
-  const libListMatch = path.match(/^\/api\/library\/(.+)$/);
-  if (req.method === 'GET' && libListMatch && !libListMatch[1].includes('upload')) {
-    const folder = decodeURIComponent(libListMatch[1]).replace(/\/upload$/, '');
-    if (!isValidIntentFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
-    try {
-      const files = isR2Enabled()
-        ? await listLibraryFilesR2(folder)
-        : await listIntentFolder(folder);
-      json(res, { folder, files, storage: isR2Enabled() ? 'r2' : 'local' });
-    } catch (e) { err(res, e.message || 'List failed'); }
-    return;
-  }
-
-  // ── POST /api/library/:folder/upload ─────────────
-  const libUploadMatch = path.match(/^\/api\/library\/(.+)\/upload$/);
-  if (req.method === 'POST' && libUploadMatch) {
-    const folder = decodeURIComponent(libUploadMatch[1]);
-    if (!isValidIntentFolder(folder)) { err(res, `Invalid folder: ${folder}`, 400); return; }
-    try {
-      const filename = url.searchParams.get('filename') || 'upload.pdf';
-      const body     = await readRawBody(req);
-      if (!body.length) { err(res, 'Empty file body', 400); return; }
-      const file = isR2Enabled()
-        ? await uploadLibraryFile(folder, filename, body)
-        : await saveIntentFile(folder, filename, body);
-      json(res, { ...file, storage: isR2Enabled() ? 'r2' : 'local' }, 201);
-    } catch (e) { err(res, e.message || 'Upload failed'); }
-    return;
-  }
-
-  // ── DELETE /api/library-file/:key* ───────────────
-  const libDeleteMatch = path.match(/^\/api\/library-file\/(.+)$/);
-  if (req.method === 'DELETE' && libDeleteMatch) {
-    try {
-      const key    = decodeURIComponent(libDeleteMatch[1]);
-      const result = isR2Enabled()
-        ? await deleteLibraryFileR2(key)
-        : await deleteIntentFile(key);
       json(res, result);
     } catch (e) { err(res, e.message || 'Delete failed'); }
     return;
@@ -1035,6 +820,10 @@ const server = createServer(async (req, res) => {
       if (!title) { err(res, 'title is required', 400); return; }
 
       const db = getSupabase();
+      if (!db) {
+        err(res, 'Task storage unavailable — configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on Render', 503);
+        return;
+      }
       const taskRow = {
         title,
         description:  description || null,
@@ -1333,6 +1122,25 @@ const server = createServer(async (req, res) => {
         ? { filename: output.document.filename, format: output.document.format, hasDoc: true }
         : null;
       json(res, { result: output.result || output, sources: output.sources || [], document: docMeta });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/atlas/download/:filename ─────────────────────────────
+  // Serve persisted Atlas DOCX/PDF from R2 (see atlasDeliverables.js).
+  const atlasDlMatch = path.match(/^\/api\/agents\/atlas\/download\/(.+)$/);
+  if (req.method === 'GET' && atlasDlMatch) {
+    try {
+      const filename = decodeURIComponent(atlasDlMatch[1]);
+      const { getAtlasDocumentByFilename } = await import('./lib/atlasDeliverables.js');
+      const doc = await getAtlasDocumentByFilename(filename);
+      if (!doc?.buffer) { err(res, 'Document not found or R2 not configured', 404); return; }
+      const ct = doc.format === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      res.setHeader('Content-Type', ct);
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.filename}"`);
+      res.end(doc.buffer);
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -3372,8 +3180,6 @@ Write the full article now.`;
   err(res, `Not found: ${path}`, 404);
 });
 
-prewarmFonts().catch((e) => console.warn('[fontEmbedder] prewarm failed:', e.message));
-
 server.listen(PORT, () => {
   console.log(`
   ┌──────────────────────────────────────────────────┐
@@ -3429,7 +3235,6 @@ server.listen(PORT, () => {
 server.on('error', e => { console.error('[PathGuru] Server error:', e); process.exit(1); });
 
 async function startup() {
-  prewarmFonts().catch(() => {});
   try {
     const db = getSupabase();
     if (db) {

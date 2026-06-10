@@ -17,7 +17,7 @@
  */
 
 import { AgentBase }       from './agentBase.js';
-import { callAiProvider }  from '../aiPipeline.js';
+import { callAiProvider }  from '../aiProviders.js';
 import { synthesizer }     from './synthesizer.js';
 import { getSupabase }     from '../supabaseClient.js';
 

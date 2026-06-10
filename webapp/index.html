@@ -1,15 +1,16 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PathGuru Publishers</title>
+  <title>DigiFusion Command</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="css/departments.css">
   <link rel="stylesheet" href="css/command-dashboard.css">
+  <link rel="stylesheet" href="css/launcher.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -18,7 +19,34 @@
 </head>
 <body>
 
-  <!-- Sidebar — Department offices -->
+  <!-- Product launcher â€” DigiFusion Command (Publisher shelved until redesign) -->
+  <div id="productLauncher" hidden>
+    <div class="pg-launcher-inner">
+      <div class="pg-launcher-brand">
+        <h1>DigiFusion Command</h1>
+        <p>CMS, agent network &amp; firm operations â€” one shared cloud backend</p>
+      </div>
+      <div class="pg-launcher-cards">
+        <button type="button" class="pg-launcher-card pg-launcher-card--digifusion" data-product-id="digifusion">
+          <div class="pg-launcher-card-icon">DF</div>
+          <h2>DigiFusion Command</h2>
+          <p>CMS, agent network &amp; firm operations. Cloud keeps running when your desktop is off.</p>
+          <ul>
+            <li>Nexus command &amp; agent roster</li>
+            <li>Blog-room &amp; intelligence library</li>
+            <li>Products, shop &amp; site analytics</li>
+          </ul>
+          <span class="pg-launcher-card-cta">Open Command â†’</span>
+        </button>
+      </div>
+      <p class="pg-launcher-status" id="launcherBackendStatus">Connecting to shared backendâ€¦</p>
+      <div class="pg-launcher-footer">
+        <button type="button" id="productFullSuiteBtn">Owner: open full platform (all departments)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar â€” Department offices -->
   <aside class="sidebar" role="navigation" aria-label="Department navigation">
     <div class="sidebar-brand">
       <div class="brand-lockup">
@@ -32,9 +60,9 @@
     <nav class="sidebar-nav">
       <p class="nav-section-label">Departments</p>
 
-      <button class="nav-btn active" data-dept="publisher" data-module="publishing" title="KDP-ready PDF &amp; EPUB from Vektor prompts" aria-label="Publisher department">
-        <span class="nav-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span>
-        <span class="nav-label-block"><span class="nav-label">Publisher</span><span class="nav-desc">KDP books &amp; ebooks</span></span>
+      <button class="nav-btn active" data-dept="blogroom" data-module="blog" title="DigiFusion CMS â€” compose, draft &amp; publish posts" aria-label="Blog Room">
+        <span class="nav-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
+        <span class="nav-label-block"><span class="nav-label">Blog Room</span><span class="nav-desc">CMS &amp; posts</span></span>
         <span class="nav-badge">Core</span>
       </button>
 
@@ -59,6 +87,13 @@
       </button>
     </nav>
     <div class="sidebar-footer">
+      <div class="pg-product-badge" id="productBadge" hidden>
+        <div>
+          <strong data-product-name>â€”</strong>
+          <span data-product-tag>â€”</span>
+        </div>
+        <button type="button" class="pg-product-switch" id="productSwitchBtn" title="Switch product">Switch</button>
+      </div>
       <p class="sidebar-backend" id="backendUrlDisplay" title="API backend">No backend configured</p>
       <button class="nav-btn" id="settingsBtn" title="Settings" aria-label="Settings">
         <span class="nav-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
@@ -70,729 +105,25 @@
   <!-- App chrome + main panel -->
   <div class="app-chrome">
   <main class="main-panel" role="main">
-    <!-- Intelligence sub-routes — reparented into active module header row by shell.js -->
+    <!-- Intelligence sub-routes â€” reparented into active module header row by shell.js -->
     <nav class="dept-route-nav" id="deptRouteNav" role="tablist" aria-label="Intelligence sections" hidden>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
-      <button type="button" class="dept-route-tab" data-dept-tab="blog" role="tab" aria-selected="false">Blog-room</button>
     </nav>
 
-    <!-- ══════════════════════════════════════════════
-         MODULE: PDF PUBLISHING  (Brief / Assets / Export)
-    ══════════════════════════════════════════════ -->
-    <div class="module-shell active" id="module-publishing" data-module="publishing">
 
-      <!-- Per-tab headers — only the active one is shown. Sits ABOVE the topnav. -->
-      <div class="module-headers">
-        <header class="panel-header active" data-for="brief">
-          <div>
-            <p class="panel-eyebrow">Publishing</p>
-            <h1 class="panel-title">Brief &amp; Research</h1>
-          </div>
-        </header>
-        <header class="panel-header" data-for="assets">
-          <div>
-            <p class="panel-eyebrow">Publishing</p>
-            <h1 class="panel-title">Publishing Repository</h1>
-          </div>
-        </header>
-        <header class="panel-header" data-for="compile">
-          <div>
-            <p class="panel-eyebrow">Publishing</p>
-            <h1 class="panel-title">Compile &amp; Export</h1>
-          </div>
-          <div class="header-actions">
-            <button class="btn-secondary btn-sm" id="downloadHtmlBtn" disabled>HTML</button>
-            <button class="btn-secondary btn-sm" id="downloadJsonBtn" disabled>JSON</button>
-            <button class="btn-secondary btn-sm" id="downloadDocxBtn" disabled>DOCX</button>
-            <button class="btn-primary btn-sm" id="downloadPdfBtn" disabled>Download PDF</button>
-            <button class="btn-primary btn-sm" id="downloadEpubBtn" disabled>Download EPUB</button>
-          </div>
-        </header>
-      </div>
-
-      <div class="module-topnav" role="tablist" aria-label="Publishing sections">
-        <button class="module-tab active" data-subtab="brief" role="tab" aria-selected="true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Brief
-        </button>
-        <button class="module-tab" data-subtab="assets" role="tab" aria-selected="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Assets
-        </button>
-        <button class="module-tab" data-subtab="compile" role="tab" aria-selected="false">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>
-          Export
-        </button>
-      </div>
-
-      <div class="module-body">
-
-    <!-- ── TAB 1: BRIEF & RESEARCH ── -->
-    <section class="tab-panel active" id="tab-brief" aria-label="Brief and Research">
-      <div class="form-scroll">
-        <div class="publisher-welcome">
-          <div>
-            <h2>Publisher — KDP Production Studio</h2>
-            <p>The original PathGuru workflow. Enter a Vektor-grade brief, run Orion-backed research, and export Amazon-ready PDF &amp; EPUB. Learning Library teaches the pipeline your house style.</p>
-          </div>
-          <div class="publisher-welcome-steps">
-            <span class="publisher-step"><strong>1</strong> Brief</span>
-            <span class="publisher-step"><strong>2</strong> Assets</span>
-            <span class="publisher-step"><strong>3</strong> Export</span>
-          </div>
-        </div>
-        <form id="briefForm" novalidate>
-
-          <div class="form-section">
-            <h2 class="form-section-title">Job Mode</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="jobMode">What are you starting with?</label>
-                <select id="jobMode" name="jobMode">
-                  <option value="generate">Generate from brief — AI writes a new manuscript</option>
-                  <option value="refine">Refine existing manuscript — proofread, restructure &amp; polish</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section hidden" id="manuscriptImportSection">
-            <h2 class="form-section-title">Import Manuscript</h2>
-            <p class="field-hint" style="margin-bottom:12px">Upload or paste your draft. PathGuru will analyze structure, proofread, reorganize sections, apply your imprint, and export a finished KDP book.</p>
-            <div class="field">
-              <label>Upload file</label>
-              <div class="upload-zone" id="manuscriptZone">
-                <input type="file" id="manuscriptFile" accept=".txt,.md,.markdown,.docx,.pdf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-                <svg class="upload-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 12 15 15"/></svg>
-                <span class="upload-zone-title">Drop manuscript here</span>
-                <span class="upload-zone-hint">TXT · MD · DOCX · PDF</span>
-                <span class="upload-zone-filename" id="manuscriptFilename"></span>
-                <button type="button" class="upload-zone-clear" id="manuscriptClear" title="Remove">×</button>
-              </div>
-            </div>
-            <div class="field">
-              <label for="manuscriptPaste">Or paste manuscript text</label>
-              <textarea id="manuscriptPaste" name="manuscriptPaste" rows="10" placeholder="Paste your full manuscript here. Use Chapter 1, Chapter 2… or markdown headings to help PathGuru detect sections."></textarea>
-            </div>
-            <div class="field">
-              <label for="refineInstructions">Refinement instructions</label>
-              <textarea id="refineInstructions" name="refineInstructions" rows="3" placeholder="e.g. UK spelling throughout · keep my anecdotes · tighten chapter 3 · more depth on case studies · match premium strategist voice"></textarea>
-              <p class="field-hint">Specific edits, depth, and style overrides. Tone, voice, audience, and length below also guide the agent.</p>
-            </div>
-            <p class="field-hint" id="manuscriptStats"></p>
-          </div>
-
-          <div class="form-section" id="bookConceptSection">
-            <h2 class="form-section-title">The Book Concept</h2>
-            <div class="field">
-              <label for="topic">Topic prompt <span class="required" id="topicRequired">*</span></label>
-              <textarea id="topic" name="topic" rows="4" placeholder="Example: A conversion-focused guide for salon owners who want to use Instagram Reels to book more high-ticket clients — without dancing or going viral."></textarea>
-              <p class="field-hint">Be specific about the reader, the result, and the emotional hook.</p>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="title">Book title</label>
-                <input id="title" name="title" type="text" placeholder="Auto-generated if blank">
-              </div>
-              <div class="field">
-                <label for="subtitle">Subtitle</label>
-                <input id="subtitle" name="subtitle" type="text" placeholder="Auto-generated if blank">
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section" id="audienceSection">
-            <h2 class="form-section-title">Audience, Voice &amp; Style</h2>
-            <p class="field-hint refine-style-hint hidden" id="refineStyleHint">In refine mode, these settings control proofreading tone, voice personality, depth, and how aggressively the agent restructures your manuscript.</p>
-            <div class="field-row">
-              <div class="field">
-                <label for="audience">Target audience</label>
-                <input id="audience" name="audience" type="text" placeholder="salon owners, coaches, first-time authors">
-              </div>
-              <div class="field">
-                <label for="outcome">Reader outcome</label>
-                <input id="outcome" name="outcome" type="text" placeholder="book 5 new clients per month from Reels">
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="writingMode">Writing mode</label>
-                <select id="writingMode" name="writingMode">
-                  <option value="nonfiction guide">Nonfiction guide</option>
-                  <option value="workbook">Workbook</option>
-                  <option value="sales lead magnet">Sales lead magnet</option>
-                  <option value="memoir">Memoir</option>
-                  <option value="fiction">Fiction</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="writingPersonality">Voice personality</label>
-                <select id="writingPersonality" name="writingPersonality">
-                  <option value="trusted mentor: clear, reassuring, practical">Trusted mentor</option>
-                  <option value="premium strategist: polished, persuasive, commercially sharp">Premium strategist</option>
-                  <option value="friendly coach: warm, energetic, action-oriented">Friendly coach</option>
-                  <option value="bold copywriter: direct, punchy, benefit-led, conversion-focused">Bold copywriter</option>
-                  <option value="academic explainer: precise, structured, evidence-aware">Academic explainer</option>
-                </select>
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="tone">Tone</label>
-                <select id="tone" name="tone">
-                  <option value="expert, clear, persuasive">Expert &amp; clear</option>
-                  <option value="warm, practical, encouraging">Warm &amp; practical</option>
-                  <option value="bold, direct, conversion-focused">Bold &amp; direct</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="style">Design style</label>
-                <select id="style" name="style">
-                  <option value="modern">Modern authority</option>
-                  <option value="premium">Premium editorial</option>
-                  <option value="bold">Bold conversion</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h2 class="form-section-title">Publishing Details</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="author">Author name</label>
-                <input id="author" name="author" type="text" placeholder="Author name">
-              </div>
-              <div class="field">
-                <label for="publisher">Publisher</label>
-                <input id="publisher" name="publisher" type="text" placeholder="PathGuru Publishers">
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="publisherProfile">Publisher profile</label>
-                <select id="publisherProfile" name="publisherProfile">
-                  <option value="custom">Custom / freeform</option>
-                  <option value="pathfinda">PathFinda Publishers</option>
-                  <option value="digitalNation">Digital Nation Inc.</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="copyright">Copyright line</label>
-                <input id="copyright" name="copyright" type="text" placeholder="Copyright 2026 Author Name. All rights reserved.">
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h2 class="form-section-title">Back Cover &amp; Metadata</h2>
-            <div class="field">
-              <label for="backCoverBlurb">Back cover blurb</label>
-              <textarea id="backCoverBlurb" name="backCoverBlurb" rows="3" placeholder="Optional — leave blank and PathGuru writes copy using your book + back-cover samples from Assets → Format Library → eBook › Back cover."></textarea>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="backCoverBullets">Back cover bullets (one per line)</label>
-                <textarea id="backCoverBullets" name="backCoverBullets" rows="4" placeholder="What readers will learn&#10;Actionable frameworks&#10;Real-world examples"></textarea>
-              </div>
-              <div class="field">
-                <label for="backCoverAuthorBio">Author bio (back cover)</label>
-                <textarea id="backCoverAuthorBio" name="backCoverAuthorBio" rows="4" placeholder="Short author credential line for the back cover."></textarea>
-              </div>
-            </div>
-            <div class="field-row">
-              <div class="field">
-                <label for="bisacCodes">BISAC categories</label>
-                <input id="bisacCodes" name="bisacCodes" type="text" placeholder="BUS043000, COM060000 (comma-separated)">
-              </div>
-              <div class="field">
-                <label for="keywords">KDP keywords</label>
-                <input id="keywords" name="keywords" type="text" placeholder="digital marketing, KDP, playbook (comma-separated)">
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section">
-            <h2 class="form-section-title">Format &amp; KDP Spec</h2>
-            <div class="field-row">
-              <div class="field">
-                <label for="publishingIntent">Publishing intent</label>
-                <select id="publishingIntent" name="publishingIntent">
-                  <option value="playbook">Playbook — high-fidelity PDF, bold graphics (60–70 pages)</option>
-                  <option value="research">Research report — charts &amp; data-dense (60–70 pages)</option>
-                  <option value="case-study">Case study — narrative-led with supporting data</option>
-                  <option value="ebook">eBook — KDP prose format (fiction or non-fiction)</option>
-                </select>
-              </div>
-              <div class="field hidden" id="ebookGenreField">
-                <label for="ebookGenre">eBook category</label>
-                <select id="ebookGenre" name="ebookGenre">
-                  <option value="non-fiction">Non-fiction</option>
-                  <option value="fiction">Fiction</option>
-                </select>
-                <p class="field-hint">Reference samples load from the eBook → Non-fiction or Fiction library folder.</p>
-              </div>
-            </div>
-            <div class="field-row three-col">
-              <div class="field">
-                <label for="format">Output format</label>
-                <select id="format" name="format">
-                  <option value="pdf">PDF</option>
-                  <option value="epub">EPUB</option>
-                  <option value="docx">DOCX</option>
-                  <option value="both">PDF + EPUB</option>
-                  <option value="pdf+docx">PDF + DOCX</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="trimSize">KDP trim size</label>
-                <select id="trimSize" name="trimSize">
-                  <option value="6x9">6 × 9 in (standard)</option>
-                  <option value="5.5x8.5">5.5 × 8.5 in (trade)</option>
-                  <option value="8.5x11">8.5 × 11 in (workbook)</option>
-                  <option value="5x8">5 × 8 in (compact)</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="length">Content length</label>
-                <select id="length" name="length">
-                  <option value="concise">Concise (20–30 pages)</option>
-                  <option value="standard">Standard (40–60 pages)</option>
-                  <option value="deep">Deep guide (80–120 pages)</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="generate-zone">
-            <div class="generate-status" id="generateStatus" aria-live="polite">
-              <div class="status-idle" id="statusIdle"><p>Ready to generate your publish-ready draft.</p></div>
-              <div class="status-loading hidden" id="statusLoading">
-                <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
-                <p class="status-message" id="statusMessage">Initialising agents...</p>
-              </div>
-              <div class="status-error hidden" id="statusError"><p id="errorMessage"></p></div>
-            </div>
-            <button type="submit" class="btn-generate" id="generateBtn">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Generate Draft
-            </button>
-          </div>
-
-        </form>
-      </div>
-    </section>
-
-    <!-- ── TAB 2: PROJECT ASSETS ── -->
-    <section class="tab-panel" id="tab-assets" aria-label="Project assets">
-
-      <!-- Sub-nav — now properly styled via assets-subnav / assets-subtab CSS -->
-      <div class="assets-subnav" role="tablist" aria-label="Publishing asset categories">
-        <button class="assets-subtab active" data-asubtab="pa-branding"  role="tab" aria-selected="true">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-          Media Repository
-        </button>
-        <button class="assets-subtab" data-asubtab="pa-templates" role="tab" aria-selected="false">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          Layout Samples
-        </button>
-        <button class="assets-subtab" data-asubtab="pa-library" role="tab" aria-selected="false">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-          Format Library
-        </button>
-      </div>
-
-      <div class="assets-subpanels">
-
-        <!-- ── BRAND & MEDIA sub-panel ── -->
-        <div class="assets-subpanel active" id="pa-branding">
-
-          <!-- Section 1: Brand Identity -->
-          <p class="assets-section-eyebrow">Identity</p>
-          <h2 class="assets-section-heading">Job media repository</h2>
-          <p class="assets-section-desc">Brand marks, cover art, and scene references for this publishing job — browse uploads like a project folder.</p>
-
-          <div class="brand-grid">
-            <!-- Logo upload -->
-            <div class="field">
-              <label>Publisher logo / mark</label>
-              <div class="upload-zone" id="logoZone">
-                <input type="file" id="projBrandLogo" accept="image/*">
-                <img class="upload-zone-preview" id="logoPreview" alt="Logo preview">
-                <svg class="upload-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                <span class="upload-zone-title">Upload logo or mark</span>
-                <span class="upload-zone-hint">PNG or SVG · transparent background</span>
-                <span class="upload-zone-filename" id="logoFilename"></span>
-                <button type="button" class="upload-zone-clear" id="logoClear" title="Remove">×</button>
-              </div>
-            </div>
-
-            <!-- Colour palette -->
-            <div class="field">
-              <label>Colour palette</label>
-              <div class="palette-field">
-                <div class="palette-swatches">
-                  <div class="swatch-item">
-                    <input type="color" class="swatch-picker" id="swatch1" value="#1b2a4a" title="Primary">
-                    <span class="swatch-label">Primary</span>
-                  </div>
-                  <div class="swatch-item">
-                    <input type="color" class="swatch-picker" id="swatch2" value="#c9a446" title="Accent">
-                    <span class="swatch-label">Accent</span>
-                  </div>
-                  <div class="swatch-item">
-                    <input type="color" class="swatch-picker" id="swatch3" value="#f5f0dc" title="Callout">
-                    <span class="swatch-label">Callout</span>
-                  </div>
-                </div>
-                <div class="palette-hex-row" id="paletteHexRow">
-                  <span class="palette-hex-chip"><span class="palette-hex-dot" style="background:#1b2a4a"></span>#1b2a4a</span>
-                  <span class="palette-hex-chip"><span class="palette-hex-dot" style="background:#c9a446"></span>#c9a446</span>
-                  <span class="palette-hex-chip"><span class="palette-hex-dot" style="background:#f5f0dc"></span>#f5f0dc</span>
-                </div>
-                <!-- Hidden text input kept for API compatibility -->
-                <input type="text" id="projBrandPalette" class="palette-text-input" value="#1b2a4a, #c9a446, #f5f0dc">
-              </div>
-            </div>
-          </div>
-
-          <!-- Section 2: Book Media -->
-          <div class="assets-section-divider"></div>
-          <p class="assets-section-eyebrow">Media</p>
-          <h2 class="assets-section-heading">Book media</h2>
-          <p class="assets-section-desc">Optional custom cover image and scene references for the design agent to draw from.</p>
-
-          <div class="brand-grid">
-            <!-- Custom cover image -->
-            <div class="field">
-              <label>Custom cover image <span style="color:var(--text-muted);font-weight:400;text-transform:none">(optional)</span></label>
-              <div class="upload-zone" id="coverZone">
-                <input type="file" id="projCoverImage" accept="image/*">
-                <img class="upload-zone-preview" id="coverPreview" alt="Cover preview">
-                <svg class="upload-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                <span class="upload-zone-title">Upload cover image</span>
-                <span class="upload-zone-hint">JPG or PNG · min 1600 × 2560 px</span>
-                <span class="upload-zone-filename" id="coverFilename"></span>
-                <button type="button" class="upload-zone-clear" id="coverClear" title="Remove">×</button>
-              </div>
-            </div>
-
-            <!-- Scene / character references -->
-            <div class="field">
-              <label>Scene &amp; character references</label>
-              <div class="upload-zone multi" id="refsZone">
-                <input type="file" id="projCharacterRefs" accept="image/*,application/pdf" multiple>
-                <svg class="upload-zone-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                <span class="upload-zone-title">Upload references</span>
-                <span class="upload-zone-hint">Images or PDFs · multiple files accepted</span>
-                <span class="upload-zone-count" id="refsCount"></span>
-                <button type="button" class="upload-zone-clear" id="refsClear" title="Remove all">×</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Section 3: Stock imagery -->
-          <div class="assets-section-divider"></div>
-          <p class="assets-section-eyebrow">Stock imagery</p>
-          <h2 class="assets-section-heading">Pexels image search</h2>
-          <p class="assets-section-desc">Pull royalty-free images for chapter openers, interior art, and supporting visuals. Selected images are attached to this project.</p>
-
-          <div class="assets-search-bar">
-            <div class="search-input-wrap">
-              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="pexelsQuery" placeholder="e.g. business strategy, financial data, wellness..." class="search-input">
-            </div>
-            <select id="aspectFilter" class="select-sm">
-              <option value="">Any ratio</option>
-              <option value="landscape">Landscape</option>
-              <option value="portrait">Portrait (cover)</option>
-              <option value="square">Square</option>
-            </select>
-            <button class="btn-primary btn-sm" id="searchAssetsBtn">Search</button>
-          </div>
-
-          <div class="assets-grid" id="assetsGrid">
-            <div class="assets-empty">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              <p>Search above to browse Pexels images, or generate your book brief first to get AI-suggested search terms.</p>
-            </div>
-          </div>
-
-          <div class="selected-assets-tray" id="selectedAssetsTray" style="display:none">
-            <h3 class="tray-title">Selected <span id="selectedCount">0</span></h3>
-            <div class="tray-items" id="trayItems"></div>
-            <button class="btn-secondary btn-sm" id="uploadToR2Btn">Upload to R2</button>
-          </div>
-
-        </div><!-- /pa-branding -->
-
-        <!-- ── PDF TEMPLATES sub-panel ── -->
-        <div class="assets-subpanel" id="pa-templates">
-          <p class="assets-section-eyebrow">Layout samples</p>
-          <h2 class="assets-section-heading">PDF structure templates</h2>
-          <p class="assets-section-desc">Reference PDFs that teach the publisher how to structure chapters, typography, and visual rhythm — browse and select like files in a project folder.</p>
-          <div class="template-grid" id="templateGrid">
-            <div class="template-card" data-template="modern-business">
-              <div class="template-thumb" style="background:linear-gradient(135deg,#1a2236,#263047)"></div>
-              <div class="template-meta">
-                <div class="template-name">Modern Business</div>
-                <div class="template-desc">Sharp typography, geometric chapter openers, data-friendly callouts.</div>
-              </div>
-            </div>
-            <div class="template-card" data-template="editorial-luxe">
-              <div class="template-thumb" style="background:linear-gradient(135deg,#2a1f10,#3a2810)"></div>
-              <div class="template-meta">
-                <div class="template-name">Editorial Luxe</div>
-                <div class="template-desc">Playfair display, generous white space, magazine-style pull quotes.</div>
-              </div>
-            </div>
-            <div class="template-card" data-template="wellness-warmth">
-              <div class="template-thumb" style="background:linear-gradient(135deg,#2d3a1f,#3e5028)"></div>
-              <div class="template-meta">
-                <div class="template-name">Wellness Warmth</div>
-                <div class="template-desc">Rounded shapes, earth tones, gentle pacing for self-help and wellness.</div>
-              </div>
-            </div>
-            <div class="template-card" data-template="technical-bench">
-              <div class="template-thumb" style="background:linear-gradient(135deg,#1a1f2e,#2c3340)"></div>
-              <div class="template-meta">
-                <div class="template-name">Technical Bench</div>
-                <div class="template-desc">Monospaced accents, diagram captions, footnote-heavy technical books.</div>
-              </div>
-            </div>
-          </div>
-        </div><!-- /pa-templates -->
-
-        <!-- ── LEARNING LIBRARY sub-panel ── -->
-        <div class="assets-subpanel" id="pa-library">
-          <p class="assets-section-eyebrow">Format library</p>
-          <h2 class="assets-section-heading">Output format samples</h2>
-          <p class="assets-section-desc">Upload PDF examples per output type (playbooks, research, case studies). The publisher studies these folders to match structure and quality — browse uploads like Windows Explorer.</p>
-
-          <!-- ── PLAYBOOKS folder ── -->
-          <div class="lib-folder" data-folder="playbooks">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">Playbooks <span class="lib-file-count" id="libCount-playbooks"></span></h3>
-                  <p class="lib-folder-desc">High-fidelity PDFs · bold graphics · 60–70 pages · high contrast layouts</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-playbooks">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-playbooks" data-folder="playbooks" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-playbooks" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-playbooks">
-              <div class="library-empty">No playbook examples yet. Upload PDFs to train the agent.</div>
-            </div>
-          </div>
-
-          <!-- ── RESEARCH folder ── -->
-          <div class="lib-folder" data-folder="research">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">Research Reports <span class="lib-file-count" id="libCount-research"></span></h3>
-                  <p class="lib-folder-desc">Data-dense PDFs · charts &amp; tables · 60–70 pages · analytical structure</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-research">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-research" data-folder="research" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-research" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-research">
-              <div class="library-empty">No research examples yet. Upload PDFs to train the agent.</div>
-            </div>
-          </div>
-
-          <!-- ── CASE STUDIES folder ── -->
-          <div class="lib-folder" data-folder="case-studies">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">Case Studies <span class="lib-file-count" id="libCount-case-studies"></span></h3>
-                  <p class="lib-folder-desc">Narrative-led PDFs · supporting data · real-world evidence structure</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-case-studies">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-case-studies" data-folder="case-studies" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-case-studies" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-case-studies">
-              <div class="library-empty">No case study examples yet. Upload PDFs to train the agent.</div>
-            </div>
-          </div>
-
-          <!-- ── FRAMEWORKS folder ── -->
-          <div class="lib-folder" data-folder="frameworks">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">Frameworks <span class="lib-file-count" id="libCount-frameworks"></span></h3>
-                  <p class="lib-folder-desc">Consulting frameworks · models · structured methodology PDFs</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-frameworks">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-frameworks" data-folder="frameworks" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-frameworks" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-frameworks">
-              <div class="library-empty">No framework examples yet. Upload PDFs to train the agent.</div>
-            </div>
-          </div>
-
-          <!-- ── eBOOK category (non-fiction + fiction sub-folders) ── -->
-          <p class="assets-section-eyebrow" style="margin-top:24px">eBook</p>
-          <h3 class="lib-group-heading">eBook reference samples</h3>
-          <p class="assets-section-desc" style="margin-bottom:16px">Upload interior PDFs under Non-fiction or Fiction — the publisher uses these when Publishing intent is set to eBook.</p>
-
-          <div class="lib-folder" data-folder="ebook/non-fiction">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">eBook › Non-fiction <span class="lib-file-count" id="libCount-ebook--non-fiction"></span></h3>
-                  <p class="lib-folder-desc">Prose guides, memoirs, business books — chapter pacing &amp; interior rhythm</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-ebook--non-fiction">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-ebook--non-fiction" data-folder="ebook/non-fiction" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-ebook--non-fiction" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-ebook--non-fiction">
-              <div class="library-empty">No non-fiction eBook examples yet.</div>
-            </div>
-          </div>
-
-          <div class="lib-folder" data-folder="ebook/fiction">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">eBook › Fiction <span class="lib-file-count" id="libCount-ebook--fiction"></span></h3>
-                  <p class="lib-folder-desc">Novels, short fiction — scene breaks, dialogue rhythm, chapter hooks</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-ebook--fiction">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-ebook--fiction" data-folder="ebook/fiction" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-ebook--fiction" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-ebook--fiction">
-              <div class="library-empty">No fiction eBook examples yet.</div>
-            </div>
-          </div>
-
-          <div class="lib-folder" data-folder="ebook/back-cover">
-            <div class="lib-folder-header">
-              <div class="lib-folder-info">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                <div>
-                  <h3 class="lib-folder-name">eBook › Back cover <span class="lib-file-count" id="libCount-ebook--back-cover"></span></h3>
-                  <p class="lib-folder-desc">Back-cover copy references — blurb rhythm, bullet style, author bio length. Used by the back-cover generator.</p>
-                </div>
-              </div>
-              <label class="lib-upload-btn" for="libUpload-ebook--back-cover">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 5 5 12"/></svg>
-                Upload PDF
-                <input type="file" id="libUpload-ebook--back-cover" data-folder="ebook/back-cover" accept="application/pdf" multiple style="display:none">
-              </label>
-            </div>
-            <div id="libStatus-ebook--back-cover" class="lib-folder-status"></div>
-            <div class="lib-folder-list" id="libList-ebook--back-cover">
-              <div class="library-empty">Upload back-cover PDF samples — the generator matches their copy patterns.</div>
-            </div>
-          </div>
-
-        </div><!-- /pa-library -->
-
-      </div><!-- /assets-subpanels -->
-    </section>
-
-    <!-- ── TAB 3: COMPILE & EXPORT ── -->
-    <section class="tab-panel" id="tab-compile" aria-label="Compile and Export">
-      <div class="compile-layout">
-        <div class="compile-sidebar">
-          <div class="compile-card">
-            <h2 class="compile-card-title">KDP Compliance</h2>
-            <div id="complianceChecks" class="compliance-list">
-              <div class="compliance-empty">Generate a draft to see compliance checks.</div>
-            </div>
-          </div>
-          <div class="compile-card">
-            <h2 class="compile-card-title">Book Strategy</h2>
-            <dl class="strategy-list" id="strategyList">
-              <div class="strategy-empty">Generate a draft to see strategy details.</div>
-            </dl>
-          </div>
-          <div class="compile-card">
-            <h2 class="compile-card-title">Generation Report</h2>
-            <dl class="strategy-list" id="generationReport">
-              <div class="strategy-empty">Page budget and validation stats appear after generation.</div>
-            </dl>
-          </div>
-          <div class="compile-card">
-            <h2 class="compile-card-title">Proofreader Notes</h2>
-            <ul class="notes-list" id="proofreaderNotes">
-              <li class="notes-empty">AI proofreader notes will appear here.</li>
-            </ul>
-          </div>
-          <div class="compile-card" id="storageCard" style="display:none">
-            <h2 class="compile-card-title">Cloud Storage</h2>
-            <div id="storageUrls" class="storage-urls"></div>
-          </div>
-        </div>
-        <div class="compile-preview">
-          <div class="preview-chrome">
-            <div class="preview-chrome-dots"><span></span><span></span><span></span></div>
-            <span class="preview-chrome-label">Document Preview</span>
-          </div>
-          <div class="preview-empty" id="previewEmpty">
-            <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <p>Your generated document preview will appear here.</p>
-          </div>
-          <iframe id="previewFrame" title="Document preview" style="display:none"></iframe>
-        </div>
-      </div>
-    </section>
-
-      </div><!-- /module-body -->
-    </div><!-- /module-publishing -->
-
-    <!-- ══════════════════════════════════════════════
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
          MODULE: BLOG PUBLISHER  (Compose / Assets)
          (Compose still hosts its inner Generate / Dashboard switcher.)
-    ══════════════════════════════════════════════ -->
-    <div class="module-shell" id="module-blog" data-module="blog">
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    <div class="module-shell active" id="module-blog" data-module="blog">
 
-      <!-- Per-tab headers — only the active one is shown. -->
+      <!-- Per-tab headers â€” only the active one is shown. -->
       <div class="module-headers">
         <header class="panel-header active" data-for="blog">
           <div>
-            <p class="panel-eyebrow">Intelligence Library</p>
-            <h1 class="panel-title">Blog-room</h1>
+            <p class="panel-eyebrow">Blog Room</p>
+            <h1 class="panel-title">Compose</h1>
           </div>
 
         </header>
@@ -817,18 +148,18 @@
 
       <div class="module-body">
 
-    <!-- ── BLOG: COMPOSE — derivative teasers from premium IP ── -->
+    <!-- â”€â”€ BLOG: COMPOSE â€” derivative teasers from premium IP â”€â”€ -->
     <section class="tab-panel" id="tab-blog" aria-label="Blog-room">
       <div class="deprecated-notice">
         <strong>Derivative workflow only.</strong> Premium playbooks are authored in
-        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library → Blueprint Library</a>.
-        Use this panel to publish <em>teaser snippets</em> that attract traffic to paid IP on DigiFusion — not standalone blog posts.
+        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library â†’ Blueprint Library</a>.
+        Use this panel to publish <em>teaser snippets</em> that attract traffic to paid IP on DigiFusion â€” not standalone blog posts.
       </div>
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
         <div class="blog-subtabs-left">
-          <button class="blog-subtab active" data-blogtab="generate">✏️ Generate</button>
-          <button class="blog-subtab" data-blogtab="dashboard">📋 Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
+          <button class="blog-subtab active" data-blogtab="generate">âœï¸ Generate</button>
+          <button class="blog-subtab" data-blogtab="dashboard">ðŸ“‹ Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
         </div>
         <div class="blog-subtabs-right" id="blogPreviewTabsBar">
           <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
@@ -836,7 +167,7 @@
         </div>
       </div>
 
-      <!-- ── GENERATE VIEW ── -->
+      <!-- â”€â”€ GENERATE VIEW â”€â”€ -->
       <div class="blog-view active" id="blogViewGenerate">
         <div class="blog-layout">
           <!-- Left: form -->
@@ -845,7 +176,7 @@
               <h2 class="form-section-title">Derivative Brief</h2>
               <div class="field">
                 <label for="blogResearchBrief">Orion research brief <span class="required">*</span></label>
-                <textarea id="blogResearchBrief" rows="4" placeholder="Paste Orion research output — stats, sources, frameworks. Required unless you supply a playbook slug."></textarea>
+                <textarea id="blogResearchBrief" rows="4" placeholder="Paste Orion research output â€” stats, sources, frameworks. Required unless you supply a playbook slug."></textarea>
               </div>
               <div class="field-row">
                 <div class="field">
@@ -868,20 +199,20 @@
               </div>
               <div class="field">
                 <label for="blogTopic">Derivative angle / headline <span class="required">*</span></label>
-                <textarea id="blogTopic" rows="3" placeholder="Teaser headline derived from the research or playbook — not a standalone topic"></textarea>
+                <textarea id="blogTopic" rows="3" placeholder="Teaser headline derived from the research or playbook â€” not a standalone topic"></textarea>
               </div>
               <div class="field-row">
                 <div class="field">
                   <label for="blogPostType">Post type</label>
                   <select id="blogPostType">
-                    <option value="article">📰 Article</option>
-                    <option value="guide">📘 Guide</option>
-                    <option value="listicle">🔢 Listicle</option>
-                    <option value="how-to">🛠️ How-To</option>
-                    <option value="case-study">📊 Case Study</option>
-                    <option value="review">⭐ Review</option>
-                    <option value="roundup">👥 Expert Roundup</option>
-                    <option value="opinion">💭 Opinion</option>
+                    <option value="article">ðŸ“° Article</option>
+                    <option value="guide">ðŸ“˜ Guide</option>
+                    <option value="listicle">ðŸ”¢ Listicle</option>
+                    <option value="how-to">ðŸ› ï¸ How-To</option>
+                    <option value="case-study">ðŸ“Š Case Study</option>
+                    <option value="review">â­ Review</option>
+                    <option value="roundup">ðŸ‘¥ Expert Roundup</option>
+                    <option value="opinion">ðŸ’­ Opinion</option>
                   </select>
                 </div>
                 <div class="field">
@@ -915,9 +246,9 @@
                 <div class="field">
                   <label for="blogWordCount">Word count</label>
                   <select id="blogWordCount">
-                    <option value="800-1000 words">Short (800–1000)</option>
-                    <option value="1200-1600 words" selected>Standard (1200–1600)</option>
-                    <option value="2000-2500 words">Long-form (2000–2500)</option>
+                    <option value="800-1000 words">Short (800â€“1000)</option>
+                    <option value="1200-1600 words" selected>Standard (1200â€“1600)</option>
+                    <option value="2000-2500 words">Long-form (2000â€“2500)</option>
                     <option value="3000+ words">Pillar (3000+)</option>
                   </select>
                 </div>
@@ -944,23 +275,23 @@
                 <div class="field">
                   <label for="blogComposePicker">Writer persona</label>
                   <select id="blogComposePicker">
-                    <option value="">— Default editorial voice —</option>
+                    <option value="">â€” Default editorial voice â€”</option>
                   </select>
                   <p class="field-hint">Synced from <code>/api/personas</code>.</p>
                 </div>
                 <div class="field">
                   <label for="blogAiProvider">AI provider</label>
-                  <select id="blogAiProvider">ion value="gemini" selected>✨ Gemini (default)</option>
-                    <option value="claude">🤖 Claude (Anthropic)</option>
-                    <option value="deepseek">🔮 DeepSeek</option>
-                    <option value="cerebras">⚡ Cerebras</option>
+                  <select id="blogAiProvider">ion value="gemini" selected>âœ¨ Gemini (default)</option>
+                    <option value="claude">ðŸ¤– Claude (Anthropic)</option>
+                    <option value="deepseek">ðŸ”® DeepSeek</option>
+                    <option value="cerebras">âš¡ Cerebras</option>
                   </select>
                 </div>
               </div>
 
               <!-- Writer reference files -->
               <div class="field">
-                <label>Reference files <span class="field-hint-inline">(PDFs, images — passed to writer agent)</span></label>
+                <label>Reference files <span class="field-hint-inline">(PDFs, images â€” passed to writer agent)</span></label>
                 <div class="blog-media-zone">
                   <input type="file" id="blogMediaFiles" multiple accept="image/*,.pdf" style="display:none">
                   <button type="button" class="btn-secondary btn-sm" id="blogMediaAddBtn">+ Add file</button>
@@ -1029,7 +360,7 @@
             </div>
 
 
-            <!-- ── Generate footer ── -->
+            <!-- â”€â”€ Generate footer â”€â”€ -->
             <div class="blog-generate-footer">
               <div class="blog-gen-status">
                 <div class="blog-status-idle" id="blogStatusIdle">
@@ -1096,10 +427,10 @@
         </div><!-- /.blog-layout -->
       </div><!-- /#blogViewGenerate -->
 
-      <!-- ── DASHBOARD VIEW ── -->
+      <!-- â”€â”€ DASHBOARD VIEW â”€â”€ -->
       <div class="blog-view" id="blogViewDashboard">
         <div class="blog-dash-filters">
-          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search posts…"></div>
+          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search postsâ€¦"></div>
           <div class="field">
             <select id="blogDashStatus">
               <option value="">All statuses</option>
@@ -1123,21 +454,21 @@
             <select id="blogDashSort">
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
-              <option value="title">Title A–Z</option>
+              <option value="title">Title Aâ€“Z</option>
             </select>
           </div>
           <button class="btn-secondary btn-sm" id="blogDashRefresh">Refresh</button>
         </div>
-        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading posts…</div>
+        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading postsâ€¦</div>
         <div class="blog-dash-list" id="blogDashList"></div>
       </div><!-- /#blogViewDashboard -->
 
-      <!-- ── EDITOR VIEW ── -->
+      <!-- â”€â”€ EDITOR VIEW â”€â”€ -->
       <div class="blog-view" id="blogViewEditor">
 
         <!-- Header bar -->
         <div class="blog-editor-header">
-          <button class="btn-secondary btn-sm" id="blogEditorBack">← Back to dashboard</button>
+          <button class="btn-secondary btn-sm" id="blogEditorBack">â† Back to dashboard</button>
           <div class="blog-editor-header-right">
             <span class="blog-editor-status-badge" id="blogEditorStatusBadge"></span>
             <button class="btn-secondary btn-sm" id="blogEditorCancel">Discard</button>
@@ -1149,7 +480,7 @@
         <div class="blog-editor-meta-row">
           <div class="blog-editor-meta-field blog-editor-meta-title">
             <label for="blogEditorTitle">Title</label>
-            <input type="text" id="blogEditorTitle" placeholder="Post title…">
+            <input type="text" id="blogEditorTitle" placeholder="Post titleâ€¦">
           </div>
           <div class="blog-editor-meta-field">
             <label for="blogEditorSlug">Slug</label>
@@ -1163,7 +494,7 @@
         <div class="blog-editor-meta-row">
           <div class="blog-editor-meta-field" style="flex:1">
             <label for="blogEditorMeta">Meta description</label>
-            <input type="text" id="blogEditorMeta" placeholder="SEO meta description…">
+            <input type="text" id="blogEditorMeta" placeholder="SEO meta descriptionâ€¦">
           </div>
           <div class="blog-editor-meta-field">
             <label for="blogEditorKeyword">Focus keyword</label>
@@ -1223,17 +554,17 @@
           </label>
           <div class="editor-toolbar-sep"></div>
           <!-- Lists & alignment -->
-          <button class="editor-tool-btn" data-cmd="insertUnorderedList" title="Bullet list">☰</button>
-          <button class="editor-tool-btn" data-cmd="insertOrderedList"   title="Numbered list">№</button>
+          <button class="editor-tool-btn" data-cmd="insertUnorderedList" title="Bullet list">â˜°</button>
+          <button class="editor-tool-btn" data-cmd="insertOrderedList"   title="Numbered list">â„–</button>
           <div class="editor-toolbar-sep"></div>
-          <button class="editor-tool-btn" data-cmd="justifyLeft"   title="Align left">⫷</button>
-          <button class="editor-tool-btn" data-cmd="justifyCenter" title="Align centre">≡</button>
-          <button class="editor-tool-btn" data-cmd="justifyRight"  title="Align right">⫸</button>
+          <button class="editor-tool-btn" data-cmd="justifyLeft"   title="Align left">â«·</button>
+          <button class="editor-tool-btn" data-cmd="justifyCenter" title="Align centre">â‰¡</button>
+          <button class="editor-tool-btn" data-cmd="justifyRight"  title="Align right">â«¸</button>
           <div class="editor-toolbar-sep"></div>
           <!-- Link & undo/redo -->
-          <button class="editor-tool-btn" id="editorInsertLink" title="Insert link">🔗</button>
-          <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">↩</button>
-          <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">↪</button>
+          <button class="editor-tool-btn" id="editorInsertLink" title="Insert link">ðŸ”—</button>
+          <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">â†©</button>
+          <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">â†ª</button>
           <div class="editor-toolbar-sep"></div>
           <!-- Source toggle -->
           <button class="editor-tool-btn editor-tool-source" id="editorSourceToggle" title="Toggle HTML source">&lt;/&gt;</button>
@@ -1252,7 +583,7 @@
 
     </section><!-- /#tab-blog -->
 
-    <!-- ── BLOG ASSETS ── -->
+    <!-- â”€â”€ BLOG ASSETS â”€â”€ -->
     <section class="tab-panel" id="tab-blog-assets" aria-label="Blog Assets">
 
       <!-- Persona Manager -->
@@ -1262,7 +593,7 @@
         <div class="field">
           <label for="blogPersonaPicker">Active persona</label>
           <select id="blogPersonaPicker">
-            <option value="">— Default editorial voice —</option>
+            <option value="">â€” Default editorial voice â€”</option>
           </select>
         </div>
       </div>
@@ -1271,27 +602,27 @@
       <div class="form-section" style="padding: 0 0 20px; border-top: 1px solid var(--border); margin-top: 8px; display:flex; flex-direction:column; flex:1; min-height:0;">
         <div class="media-lib-header">
           <h3>Media Library</h3>
-          <span style="font-size:11px;color:var(--text-muted)">Stored in Cloudflare R2 · blog-media/</span>
+          <span style="font-size:11px;color:var(--text-muted)">Stored in Cloudflare R2 Â· blog-media/</span>
           <button class="btn-secondary btn-sm" id="mediaLibRefresh" style="margin-left:auto">Refresh</button>
         </div>
 
         <!-- Drop zone -->
         <div class="media-lib-drop-zone" id="mediaLibDropZone">
           <input type="file" id="mediaLibInput" multiple accept="image/*,.pdf,.doc,.docx" style="display:none">
-          <span class="drop-icon">☁️</span>
+          <span class="drop-icon">â˜ï¸</span>
           <span class="drop-label">Drop files here or click to upload</span>
-          <span class="drop-hint">Images, PDFs, Word docs · max 20 MB each</span>
+          <span class="drop-hint">Images, PDFs, Word docs Â· max 20 MB each</span>
         </div>
 
         <!-- Upload progress -->
         <div class="media-lib-upload-progress" id="mediaLibProgress">
           <div class="media-lib-progress-bar"><div class="media-lib-progress-fill" id="mediaLibProgressFill"></div></div>
-          <span class="media-lib-progress-label" id="mediaLibProgressLabel">Uploading…</span>
+          <span class="media-lib-progress-label" id="mediaLibProgressLabel">Uploadingâ€¦</span>
         </div>
 
         <!-- Toolbar -->
         <div class="media-lib-toolbar">
-          <input type="search" id="mediaLibSearch" placeholder="Search assets…">
+          <input type="search" id="mediaLibSearch" placeholder="Search assetsâ€¦">
           <select id="mediaLibType">
             <option value="">All types</option>
             <option value="image">Images</option>
@@ -1303,7 +634,7 @@
 
         <!-- Asset grid -->
         <div class="media-lib-grid" id="mediaLibGrid">
-          <div class="media-lib-loading">Loading assets…</div>
+          <div class="media-lib-loading">Loading assetsâ€¦</div>
         </div>
       </div>
 
@@ -1312,9 +643,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-blog -->
 
-    <!-- ══════════════════════════════════════════════
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
          MODULE: SHOP  (5 sub-tabs: Products / Services / Payments / Analytics / Settings)
-    ══════════════════════════════════════════════ -->
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div class="module-shell" id="module-shop" data-module="shop">
 
       <!-- Per-tab headers -->
@@ -1365,16 +696,16 @@
         <section class="tab-panel active" id="tab-shop-products" aria-label="Products">
           <div class="prod-panel-body">
             <div class="prod-toolbar">
-              <input type="search" id="shopProductSearch" placeholder="Search products…" aria-label="Search products">
+              <input type="search" id="shopProductSearch" placeholder="Search productsâ€¦" aria-label="Search products">
               <select id="shopProductCategory" aria-label="Filter by section">
                 <option value="">All sections</option>
-                <option value="field-guide">📗 Field Guides</option>
-                <option value="playbook">⚡ Playbooks</option>
-                <option value="research">🔍 Research</option>
-                <option value="tool">🔧 Tools</option>
-                <option value="saas">☁️ SaaS Products</option>
-                <option value="service">🤝 Services</option>
-                <option value="bundle">📦 Bundles</option>
+                <option value="field-guide">ðŸ“— Field Guides</option>
+                <option value="playbook">âš¡ Playbooks</option>
+                <option value="research">ðŸ” Research</option>
+                <option value="tool">ðŸ”§ Tools</option>
+                <option value="saas">â˜ï¸ SaaS Products</option>
+                <option value="service">ðŸ¤ Services</option>
+                <option value="bundle">ðŸ“¦ Bundles</option>
               </select>
               <select id="shopProductStatus" aria-label="Filter by status">
                 <option value="">All statuses</option>
@@ -1394,12 +725,12 @@
           </div>
         </section>
 
-        <!-- Product overlays — module level (fixed), not inside scroll panel -->
+        <!-- Product overlays â€” module level (fixed), not inside scroll panel -->
             <div class="prod-form-overlay" id="prodFormOverlay">
               <div class="prod-form-panel" id="prodFormPanel">
                 <div class="prod-form-header">
                   <h3 id="prodFormTitle">Add Product</h3>
-                  <button class="btn-secondary btn-sm" id="prodFormCancel">✕ Close</button>
+                  <button class="btn-secondary btn-sm" id="prodFormCancel">âœ• Close</button>
                 </div>
                 <form class="prod-form-body" id="prodFormEl">
                   <div class="prod-form-section">
@@ -1411,23 +742,23 @@
                       <div class="field">
                         <label for="prodFormCategory">Library Section <span class="required">*</span></label>
                         <select id="prodFormCategory">
-                          <option value="">— Select section —</option>
-                          <option value="field-guide">📗 Field Guide</option>
-                          <option value="playbook">⚡ Automation Playbook</option>
-                          <option value="research">🔍 Research / Case Study</option>
-                          <option value="tool">🔧 Tool / Extension</option>
-                          <option value="saas">☁️ SaaS Product</option>
-                          <option value="service">🤝 Agency Service</option>
-                          <option value="bundle">📦 Bundle</option>
+                          <option value="">â€” Select section â€”</option>
+                          <option value="field-guide">ðŸ“— Field Guide</option>
+                          <option value="playbook">âš¡ Automation Playbook</option>
+                          <option value="research">ðŸ” Research / Case Study</option>
+                          <option value="tool">ðŸ”§ Tool / Extension</option>
+                          <option value="saas">â˜ï¸ SaaS Product</option>
+                          <option value="service">ðŸ¤ Agency Service</option>
+                          <option value="bundle">ðŸ“¦ Bundle</option>
                         </select>
                       </div>
                       <div class="field">
                         <label for="prodFormType">Fulfillment Type <span class="required">*</span></label>
                         <select id="prodFormType">
-                          <option value="download">⬇️ Download (ebook, PDF, template)</option>
-                          <option value="subscription">🔄 Subscription (recurring)</option>
-                          <option value="service">📞 Service (booking / consultation)</option>
-                          <option value="saas">☁️ SaaS (app access)</option>
+                          <option value="download">â¬‡ï¸ Download (ebook, PDF, template)</option>
+                          <option value="subscription">ðŸ”„ Subscription (recurring)</option>
+                          <option value="service">ðŸ“ž Service (booking / consultation)</option>
+                          <option value="saas">â˜ï¸ SaaS (app access)</option>
                         </select>
                       </div>
                     </div>
@@ -1442,7 +773,7 @@
                       <div class="field"><label for="prodFormFeatured">Featured</label>
                         <select id="prodFormFeatured">
                           <option value="false">No</option>
-                          <option value="true">Yes — show on hub page</option>
+                          <option value="true">Yes â€” show on hub page</option>
                         </select>
                       </div>
                     </div>
@@ -1451,16 +782,16 @@
                       <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
                       <div class="field"><label for="prodFormCurrency">Currency</label>
                         <select id="prodFormCurrency">
-                          <option value="USD">USD — US Dollar</option>
-                          <option value="NGN">NGN — Nigerian Naira</option>
-                          <option value="GBP">GBP — British Pound</option>
-                          <option value="EUR">EUR — Euro</option>
+                          <option value="USD">USD â€” US Dollar</option>
+                          <option value="NGN">NGN â€” Nigerian Naira</option>
+                          <option value="GBP">GBP â€” British Pound</option>
+                          <option value="EUR">EUR â€” Euro</option>
                         </select>
                       </div>
                     </div>
 
-                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pages…"></textarea></div>
-                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://…"></div>
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pagesâ€¦"></textarea></div>
+                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://â€¦"></div>
                     <div class="field"><label for="prodFormFulfillment">Fulfillment metadata (JSON)</label><textarea id="prodFormFulfillment" rows="3" placeholder='{"r2_key":"intelligence/playbooks/hospitality.zip","filename":"Hospitality Automation Suite.zip"}'></textarea></div>
                   </div>
                   <div class="prod-form-error" id="prodFormError" hidden></div>
@@ -1483,14 +814,14 @@
                   </div>
                   <div class="prod-detail-actions">
                     <button class="btn-primary btn-sm" id="prodDetailEditBtn">Edit</button>
-                    <button class="btn-secondary btn-sm" id="prodDetailClose">✕</button>
+                    <button class="btn-secondary btn-sm" id="prodDetailClose">âœ•</button>
                   </div>
                 </div>
                 <div class="prod-detail-body" id="prodDetailBody"></div>
               </div>
             </div>
 
-        <!-- Consulting & Bookings — CMS + Calendly + intake + Notion -->
+        <!-- Consulting & Bookings â€” CMS + Calendly + intake + Notion -->
         <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
@@ -1519,7 +850,7 @@
           </div>
         </section>
 
-        <!-- Payments — orders + subscriptions combined -->
+        <!-- Payments â€” orders + subscriptions combined -->
         <section class="tab-panel" id="tab-shop-payments" aria-label="Payments and Subscriptions">
           <div class="shop-panel-body">
             <!-- Orders section -->
@@ -1563,10 +894,10 @@
             <!-- Sales pane -->
             <div class="shop-analytics-pane active" id="shopAnalyticsPaneSales">
               <div class="shop-stat-grid">
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">—</div><div class="shop-stat-label">Revenue</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">—</div><div class="shop-stat-label">Orders paid</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">—</div><div class="shop-stat-label">Avg order value</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">—</div><div class="shop-stat-label">Conversion</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">â€”</div><div class="shop-stat-label">Revenue</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">â€”</div><div class="shop-stat-label">Orders paid</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">â€”</div><div class="shop-stat-label">Avg order value</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">â€”</div><div class="shop-stat-label">Conversion</div></div>
               </div>
               <div class="shop-empty"><p>Click Refresh to load sales analytics.</p></div>
             </div>
@@ -1582,8 +913,8 @@
                 <button class="btn-secondary btn-sm" id="shopTrafficRefresh">Refresh</button>
               </div>
               <div class="shop-stat-grid">
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatViews">—</div><div class="shop-stat-label">Total pageviews</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatSessions">—</div><div class="shop-stat-label">Unique sessions</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatViews">â€”</div><div class="shop-stat-label">Total pageviews</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatSessions">â€”</div><div class="shop-stat-label">Unique sessions</div></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
                 <div>
@@ -1621,11 +952,11 @@
               </div>
               <div class="field">
                 <label for="shopTcTerms">Terms of service</label>
-                <textarea id="shopTcTerms" rows="3" placeholder="Governing terms for purchases made on this platform…"></textarea>
+                <textarea id="shopTcTerms" rows="3" placeholder="Governing terms for purchases made on this platformâ€¦"></textarea>
               </div>
               <div class="field">
                 <label for="shopTcPrivacy">Privacy policy</label>
-                <textarea id="shopTcPrivacy" rows="3" placeholder="How you collect, use, and protect customer data…"></textarea>
+                <textarea id="shopTcPrivacy" rows="3" placeholder="How you collect, use, and protect customer dataâ€¦"></textarea>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button type="button" class="btn-secondary" id="shopTcLoad">Load from DigiFusion</button>
@@ -1681,9 +1012,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-shop -->
 
-    <!-- ══════════════════════════════════════════════
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
          MODULE: ANALYTICS  (site-wide pageview stats)
-    ══════════════════════════════════════════════ -->
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div class="module-shell" id="module-analytics" data-module="analytics">
       <div class="module-headers">
         <header class="panel-header active" data-for="analytics">
@@ -1714,15 +1045,15 @@
             <div class="analytics-body">
               <div class="analytics-kpi-row">
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiViews">—</div>
+                  <div class="analytics-kpi-val" id="akpiViews">â€”</div>
                   <div class="analytics-kpi-label">Total Views</div>
                 </div>
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiSessions">—</div>
+                  <div class="analytics-kpi-val" id="akpiSessions">â€”</div>
                   <div class="analytics-kpi-label">Sessions</div>
                 </div>
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiAvgPerDay">—</div>
+                  <div class="analytics-kpi-val" id="akpiAvgPerDay">â€”</div>
                   <div class="analytics-kpi-label">Avg / Day</div>
                 </div>
               </div><!-- /.analytics-kpi-row -->
@@ -1730,21 +1061,21 @@
               <div class="analytics-section">
                 <div class="analytics-section-title">Daily Views</div>
                 <div class="analytics-chart-bars" id="analyticsDailyChart">
-                  <div class="analytics-empty">Loading…</div>
+                  <div class="analytics-empty">Loadingâ€¦</div>
                 </div>
               </div>
 
               <div class="analytics-section">
                 <div class="analytics-section-title">Top Pages</div>
                 <div id="analyticsTopPages">
-                  <div class="analytics-empty">Loading…</div>
+                  <div class="analytics-empty">Loadingâ€¦</div>
                 </div>
               </div>
 
               <div class="analytics-section">
                 <div class="analytics-section-title">Top Referrers</div>
                 <div id="analyticsTopReferrers">
-                  <div class="analytics-empty">Loading…</div>
+                  <div class="analytics-empty">Loadingâ€¦</div>
                 </div>
               </div>
             </div><!-- /.analytics-body -->
@@ -1753,9 +1084,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-analytics -->
 
-    <!-- ══════════════════════════════════════════════
+    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
          MODULE: AGENTS  (Network / Console / Tasks / Leads)
-    ══════════════════════════════════════════════ -->
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
     <div class="module-shell" id="module-agents" data-module="agents">
 
       <!-- Per-tab headers -->
@@ -1888,10 +1219,10 @@
 
       <div class="module-body">
 
-        <!-- ── NEXUS COMMAND CENTER ── -->
+        <!-- â”€â”€ NEXUS COMMAND CENTER â”€â”€ -->
         <section class="tab-panel active" id="tab-agents-command" aria-label="Nexus Command Center">
           <div class="nexus-ops-body">
-            <p class="nexus-ops-intro">Unified operations view — cadence, approvals, content queue, growth funnel, client delivery, and firm IP. Boss approval gates all publishing.</p>
+            <p class="nexus-ops-intro">Unified operations view â€” cadence, approvals, content queue, growth funnel, client delivery, and firm IP. Boss approval gates all publishing.</p>
 
             <div class="nexus-approval-panel" id="nexusApprovalPanel" hidden>
               <h3 class="nexus-ops-agents-title">Publishing approval required</h3>
@@ -1906,12 +1237,12 @@
             </div>
 
             <div class="nexus-ops-grid" id="ceoOpsGrid">
-              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>
+              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command centerâ€¦</span></div>
             </div>
             <div class="nexus-ops-agents" id="ceoOpsAgents"></div>
 
             <div class="nexus-funnel-panel" id="nexusFunnelPanel">
-              <h3 class="nexus-ops-agents-title">C2C Funnel — Lead magnet → Email → Nurture → Attribution</h3>
+              <h3 class="nexus-ops-agents-title">C2C Funnel â€” Lead magnet â†’ Email â†’ Nurture â†’ Attribution</h3>
               <p class="nexus-ops-intro">Register gated assets and track captures from DigiFusion forms through nurture to closed deals.</p>
               <div class="nexus-workflow-form" style="margin-bottom:16px">
                 <div class="nexus-workflow-meta">
@@ -1952,7 +1283,7 @@
             </div>
 
             <div class="nexus-funnel-panel" id="nexusGemPanel">
-              <h3 class="nexus-ops-agents-title">GEM Lattice — Firm IP</h3>
+              <h3 class="nexus-ops-agents-title">GEM Lattice â€” Firm IP</h3>
               <p class="nexus-ops-intro">Synthesizer mines knowledge gems and crystallizes proprietary frameworks (IPMS-gated).</p>
               <div class="nexus-workflow-form" style="margin-bottom:16px">
                 <div class="nexus-workflow-meta">
@@ -1973,7 +1304,7 @@
                   </div>
                 </div>
                 <label class="form-label" for="cmdCrystalInstruction">Instruction (optional)</label>
-                <textarea id="cmdCrystalInstruction" class="form-textarea" rows="2" placeholder="Focus on African SME operators, 90-day ROI…"></textarea>
+                <textarea id="cmdCrystalInstruction" class="form-textarea" rows="2" placeholder="Focus on African SME operators, 90-day ROIâ€¦"></textarea>
                 <p class="nexus-ops-intro" id="cmdCrystalResult" style="margin:8px 0 0"></p>
               </div>
               <div class="analytics-section" id="gemCrystallizations"></div>
@@ -1982,19 +1313,19 @@
 
           <div class="cmd-drawer-backdrop" id="cmdDrawerBackdrop" aria-hidden="true"></div>
           <aside class="cmd-drawer" id="cmdEngDrawer" aria-hidden="true">
-            <button type="button" class="cmd-drawer-close" id="cmdDrawerClose" aria-label="Close">×</button>
+            <button type="button" class="cmd-drawer-close" id="cmdDrawerClose" aria-label="Close">Ã—</button>
             <div id="cmdDrawerBody"></div>
           </aside>
         </section>
 
-        <!-- ── TEAM WORKFLOW ── -->
+        <!-- â”€â”€ TEAM WORKFLOW â”€â”€ -->
         <section class="tab-panel" id="tab-agents-workflow" aria-label="Team Workflow">
           <div class="nexus-workflow-body">
             <p class="nexus-ops-intro">Client blueprints (multi-agent action plans) and process workflows. Nexus coordinates; you implement; Pulse retunes weekly.</p>
 
             <div class="ip-synthesizer-card" style="margin-bottom:20px">
               <h3 class="ip-synth-title">Client Blueprint</h3>
-              <p class="ip-synth-sub">Orion research → Atlas / Nova / Aether → structured engagement pack for Boss implementation</p>
+              <p class="ip-synth-sub">Orion research â†’ Atlas / Nova / Aether â†’ structured engagement pack for Boss implementation</p>
               <div class="nexus-workflow-meta">
                 <div class="nexus-workflow-field">
                   <label class="form-label" for="blueprintClientInput">Client name</label>
@@ -2011,7 +1342,7 @@
                 </div>
               </div>
               <label class="form-label" for="blueprintGoalsInput">Goals &amp; context</label>
-              <textarea id="blueprintGoalsInput" class="form-textarea" rows="3" placeholder="What outcome does the client need? Pain points, budget, timeline…"></textarea>
+              <textarea id="blueprintGoalsInput" class="form-textarea" rows="3" placeholder="What outcome does the client need? Pain points, budget, timelineâ€¦"></textarea>
               <div class="ip-synth-actions" style="margin-top:12px">
                 <button class="btn-console-run" id="btnClientBlueprint" type="button">Build Client Blueprint</button>
                 <span class="ip-synth-status" id="blueprintStatus"></span>
@@ -2022,7 +1353,7 @@
             <p class="nexus-ops-intro">Map a client process to DigiFusion frameworks. Nexus designs the workflow; Nova receives the build task.</p>
             <div class="nexus-workflow-form">
               <label class="form-label" for="workflowProcessInput">Process description</label>
-              <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding — intake form → Notion CRM → kickoff deck → delivery sprint"></textarea>
+              <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding â€” intake form â†’ Notion CRM â†’ kickoff deck â†’ delivery sprint"></textarea>
               <div class="nexus-workflow-meta">
                 <div class="nexus-workflow-field">
                   <label class="form-label" for="workflowClientInput">Client</label>
@@ -2045,9 +1376,9 @@
                   <label class="form-label" for="workflowFrameworkInput">Framework</label>
                   <select id="workflowFrameworkInput" class="form-input">
                     <option value="">Auto-detect from process</option>
-                    <option value="ave">AVE — Automation Velocity Engine</option>
-                    <option value="deal">Deal Engine — BD &amp; consulting</option>
-                    <option value="c2c">C2C — Content-to-Capital</option>
+                    <option value="ave">AVE â€” Automation Velocity Engine</option>
+                    <option value="deal">Deal Engine â€” BD &amp; consulting</option>
+                    <option value="c2c">C2C â€” Content-to-Capital</option>
                     <option value="engagement">Engagement Model</option>
                   </select>
                 </div>
@@ -2060,7 +1391,7 @@
           </div>
         </section>
 
-        <!-- ── ACTIVITY JOURNAL (agent action timeline) ── -->
+        <!-- â”€â”€ ACTIVITY JOURNAL (agent action timeline) â”€â”€ -->
         <section class="tab-panel" id="tab-agents-activity" aria-label="Activity Journal">
           <div class="activity-journal-body">
             <div class="activity-journal-toolbar">
@@ -2078,25 +1409,25 @@
               <button class="btn-secondary btn-sm" id="activityRefreshBtn">Refresh journal</button>
             </div>
             <div class="activity-timeline" id="activityTimeline">
-              <div class="activity-timeline-empty">Loading agent journal…</div>
+              <div class="activity-timeline-empty">Loading agent journalâ€¦</div>
             </div>
           </div>
         </section>
 
-        <!-- ── AGENT ROSTER ── -->
+        <!-- â”€â”€ AGENT ROSTER â”€â”€ -->
         <section class="tab-panel" id="tab-agents-network" aria-label="Agent Network">
           <div class="agents-network-body">
             <div class="agents-grid" id="agentsGrid">
               <!-- Agent cards rendered by agents.js -->
               <div class="agents-grid-loading">
                 <div class="agents-spinner"></div>
-                <span>Polling agent status…</span>
+                <span>Polling agent statusâ€¦</span>
               </div>
             </div>
           </div>
         </section><!-- /#tab-agents-network -->
 
-        <!-- ── CONSOLE TAB ── -->
+        <!-- â”€â”€ CONSOLE TAB â”€â”€ -->
         <section class="tab-panel" id="tab-agents-console" aria-label="Agent Console">
           <div class="console-shell">
 
@@ -2116,7 +1447,7 @@
           </div><!-- /.console-shell -->
         </section><!-- /#tab-agents-console -->
 
-        <!-- ── TASKS TAB ── -->
+        <!-- â”€â”€ TASKS TAB â”€â”€ -->
         <section class="tab-panel" id="tab-agents-tasks" aria-label="Task History">
           <div class="agents-tasks-body">
             <div class="agents-table-wrap">
@@ -2132,40 +1463,40 @@
                   </tr>
                 </thead>
                 <tbody id="tasksTableBody">
-                  <tr><td colspan="6" class="agents-table-empty">Loading tasks…</td></tr>
+                  <tr><td colspan="6" class="agents-table-empty">Loading tasksâ€¦</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </section><!-- /#tab-agents-tasks -->
 
-        <!-- ── LEADS TAB ── -->
+        <!-- â”€â”€ LEADS TAB â”€â”€ -->
         <section class="tab-panel" id="tab-agents-leads" aria-label="Lead Pipeline">
           <div class="agents-leads-body">
             <div class="leads-grid" id="leadsGrid">
               <div class="agents-grid-loading">
                 <div class="agents-spinner"></div>
-                <span>Loading leads…</span>
+                <span>Loading leadsâ€¦</span>
               </div>
             </div>
           </div>
         </section><!-- /#tab-agents-leads -->
 
-        <!-- ── AGENCY IP TAB ── -->
+        <!-- â”€â”€ AGENCY IP TAB â”€â”€ -->
         <section class="tab-panel" id="tab-agents-ip" aria-label="Agency IP">
           <div class="agents-ip-body">
 
             <div class="intel-pipeline-banner">
-              <h3>Firm IP — Operating Frameworks + Intelligence Library</h3>
-              <p class="intel-frameworks-list">AVE · Deal Engine · C2C · Engagement Model · SME Scale · Enterprise Velocity · GovTech · FIRA · PCE · HRIS · CIMEF</p>
+              <h3>Firm IP â€” Operating Frameworks + Intelligence Library</h3>
+              <p class="intel-frameworks-list">AVE Â· Deal Engine Â· C2C Â· Engagement Model Â· SME Scale Â· Enterprise Velocity Â· GovTech Â· FIRA Â· PCE Â· HRIS Â· CIMEF</p>
               <div class="intel-pipeline-flow">
                 <span>Orion researches</span>
-                <span class="flow-arrow">→</span>
+                <span class="flow-arrow">â†’</span>
                 <span>Specialist builds playbook</span>
-                <span class="flow-arrow">→</span>
+                <span class="flow-arrow">â†’</span>
                 <span>Intelligence Library (gated)</span>
-                <span class="flow-arrow">→</span>
-                <a href="#" data-goto-dept="intelligence" data-goto-tab="blog">Blog-room</a>
+                <span class="flow-arrow">â†’</span>
+                <a href="#" data-goto-dept="blogroom" data-goto-tab="blog">Blog Room</a>
               </div>
             </div>
 
@@ -2175,9 +1506,9 @@
                 <h3 class="ip-synth-title">Firm IP Catalog</h3>
                 <button class="ip-btn-secondary" onclick="loadFirmIpCatalog()">Refresh</button>
               </div>
-              <p class="ip-synth-sub" style="margin:0 0 12px">Operating frameworks (agent DNA) and paywalled Intelligence Library blueprints — from <code>/api/firm-ip/library</code></p>
+              <p class="ip-synth-sub" style="margin:0 0 12px">Operating frameworks (agent DNA) and paywalled Intelligence Library blueprints â€” from <code>/api/firm-ip/library</code></p>
               <div id="firmIpCatalogBody">
-                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading catalog…</span></div>
+                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading catalogâ€¦</span></div>
               </div>
             </div>
 
@@ -2186,7 +1517,7 @@
               <div class="ip-synth-header">
                 <div>
                   <h3 class="ip-synth-title">Playbook Synthesizer</h3>
-                  <p class="ip-synth-sub">Run the 3-phase pipeline: Extract → Hybridize → Store as agency IP</p>
+                  <p class="ip-synth-sub">Run the 3-phase pipeline: Extract â†’ Hybridize â†’ Store as agency IP</p>
                 </div>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               </div>
@@ -2242,8 +1573,8 @@
                 </div>
 
                 <div class="ip-field">
-                  <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional — guide the synthesis)</span></label>
-                  <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost tools…"></textarea>
+                  <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional â€” guide the synthesis)</span></label>
+                  <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost toolsâ€¦"></textarea>
                 </div>
 
                 <div class="ip-field" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
@@ -2277,14 +1608,14 @@
                 <button class="ip-btn-secondary" onclick="loadIPLibrary()">Refresh</button>
               </div>
               <div id="ipLibraryBody">
-                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading IP library…</span></div>
+                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading IP libraryâ€¦</span></div>
               </div>
             </div>
 
           </div><!-- /.agents-ip-body -->
         </section><!-- /#tab-agents-ip -->
 
-        <!-- ── CONTENT TAB ── -->
+        <!-- â”€â”€ CONTENT TAB â”€â”€ -->
         <section class="tab-panel" id="tab-agents-content" aria-label="Content Workflow">
           <div class="agents-content-body">
 
@@ -2292,7 +1623,7 @@
             <div class="agents-content-header">
               <div>
                 <h2 class="agents-content-title">Content Workflow</h2>
-                <p class="agents-content-subtitle">Researcher + Aether pipeline — generate briefs, publish articles, and schedule sector campaigns.</p>
+                <p class="agents-content-subtitle">Researcher + Aether pipeline â€” generate briefs, publish articles, and schedule sector campaigns.</p>
               </div>
               <button class="ip-btn-primary" id="genCalendarBtn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -2317,7 +1648,7 @@
                 <div class="content-field">
                   <label class="content-label">Sector</label>
                   <select id="briefSector" class="content-select">
-                    <option value="">— select sector —</option>
+                    <option value="">â€” select sector â€”</option>
                     <option>Financial Institutions</option>
                     <option>Government &amp; Ministry</option>
                     <option>Large Enterprise</option>
@@ -2360,7 +1691,7 @@
                 <div class="content-field">
                   <label class="content-label">Sector</label>
                   <select id="publishSector" class="content-select">
-                    <option value="">— select sector —</option>
+                    <option value="">â€” select sector â€”</option>
                     <option>Financial Institutions</option>
                     <option>Government &amp; Ministry</option>
                     <option>Large Enterprise</option>
@@ -2372,7 +1703,7 @@
                 </div>
                 <div class="content-field">
                   <label class="content-label">Angle / Key Points</label>
-                  <textarea id="publishAngle" class="content-textarea" rows="3" placeholder="3–5 key points or a one-paragraph brief…"></textarea>
+                  <textarea id="publishAngle" class="content-textarea" rows="3" placeholder="3â€“5 key points or a one-paragraph briefâ€¦"></textarea>
                 </div>
                 <div class="content-field content-field-row">
                   <label class="content-label content-check-label">
@@ -2416,7 +1747,7 @@
   </main><!-- /.main-panel -->
   </div><!-- /.app-chrome -->
 
-  <!-- ── Task output drawer (shared across Console + Tasks tabs) ── -->
+  <!-- â”€â”€ Task output drawer (shared across Console + Tasks tabs) â”€â”€ -->
   <div class="task-output-drawer" id="taskOutputDrawer" aria-hidden="true">
     <div class="task-output-header">
       <span class="task-output-title" id="taskOutputTitle">Task Output</span>
@@ -2426,7 +1757,7 @@
   </div>
   <div class="task-output-overlay" id="taskOutputOverlay"></div>
 
-  <!-- ── Settings Modal ── -->
+  <!-- â”€â”€ Settings Modal â”€â”€ -->
   <div class="modal-backdrop" id="settingsModal" style="display:none">
     <div class="modal">
       <div class="modal-header">
@@ -2474,6 +1805,9 @@
     </div>
   </div>
 
+  <script src="js/core/backend.js"></script>
+  <script src="js/core/products.js"></script>
+  <script src="js/core/launcher.js"></script>
   <script src="js/core/shell.js"></script>
   <script src="app.js"></script>
   <script src="blog.js"></script>
@@ -2483,7 +1817,7 @@
   <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
   <script src="agents.js"></script>
 
-  <!-- ── Create Task Modal ── -->
+  <!-- â”€â”€ Create Task Modal â”€â”€ -->
   <div class="modal-overlay" id="newTaskOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;">
     <div class="modal-box" style="background:var(--surface,#1a1a2e);border:1px solid var(--border,#2a2a4a);border-radius:12px;padding:28px 32px;width:min(520px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.5);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -2518,11 +1852,11 @@
           <div>
             <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Priority</label>
             <select id="ntPriority" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
-              <option value="1">🔴 Critical (1)</option>
-              <option value="2">🟠 High (2)</option>
-              <option value="3" selected>🟡 Normal (3)</option>
-              <option value="4">🟢 Low (4)</option>
-              <option value="5">⚪ Minimal (5)</option>
+              <option value="1">ðŸ”´ Critical (1)</option>
+              <option value="2">ðŸŸ  High (2)</option>
+              <option value="3" selected>ðŸŸ¡ Normal (3)</option>
+              <option value="4">ðŸŸ¢ Low (4)</option>
+              <option value="5">âšª Minimal (5)</option>
             </select>
           </div>
         </div>

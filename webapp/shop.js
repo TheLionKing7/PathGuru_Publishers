@@ -18,9 +18,7 @@
 
   /* ── Helpers ──────────────────────────────────────────────────── */
   function getBackendUrl () {
-    try {
-      return (JSON.parse(localStorage.getItem('pg_settings') || '{}').backendUrl || window.location.origin).replace(/\/$/, '');
-    } catch { return window.location.origin; }
+    return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
 
   function shopToast (msg, type = 'info') {
@@ -771,7 +769,7 @@
         if (wrap) wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Loading users…</p></div>';
         if (refreshBtn) { refreshBtn.disabled = true; refreshBtn.textContent = 'Loading…'; }
         try {
-          const res = await fetch('/api/shop/vektor/users');
+          const res = await fetch(`${getBackendUrl()}/api/shop/vektor/users`);
           if (!res.ok) {
             const d = await res.json().catch(() => ({}));
             throw new Error(d.error || `HTTP ${res.status}`);
@@ -1082,7 +1080,6 @@
   }
 
   /* ── VEKTOR USERS ─────────────────────────────────────────────── */
-  const VEKTOR_API = 'https://vektor-xr-1.onrender.com';
   let allVektorUsers = [];
 
   async function loadVektorUsers () {
@@ -1092,7 +1089,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
     wrap.innerHTML = '<div class="shop-loading"><div class="shop-spinner"></div><p>Fetching Vektor users…</p></div>';
     try {
-      const res = await fetch('/api/shop/vektor/users');
+      const res = await fetch(`${getBackendUrl()}/api/shop/vektor/users`);
       if (!res.ok) throw new Error(`Vektor API returned ${res.status}`);
       const data = await res.json();
       allVektorUsers = data.users || data || [];
@@ -1170,7 +1167,7 @@
         if (!confirm(`Change ${email} → ${plan.toUpperCase()} plan?`)) return;
         b.disabled = true; b.textContent = '…';
         try {
-          const r = await fetch(`${VEKTOR_API}/admin/users/plan`, {
+          const r = await fetch(`${getBackendUrl()}/api/shop/vektor/plan`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, plan }),

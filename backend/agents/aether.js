@@ -20,7 +20,7 @@
  */
 
 import { AgentBase }      from './agentBase.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
 import {

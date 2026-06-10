@@ -7,8 +7,7 @@
   let mediaFiles = []; // { file, name, type } — reference files for writer agent
 
   function getBackendUrl() {
-    try { return (JSON.parse(localStorage.getItem('pg_settings') || '{}').backendUrl || window.location.origin).replace(/\/$/, ''); }
-    catch { return window.location.origin; }
+    return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
 
   function blogToast(msg, type = 'info') {

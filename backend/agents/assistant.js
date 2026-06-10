@@ -9,7 +9,7 @@
  * intake questionnaire for each service track, and books strategy sessions
  * with qualified prospects via Calendly.
  *
- * Provider chain: DeepSeek → Groq fallback (configured in aiPipeline.js)
+ * Provider chain: DeepSeek → Groq fallback (configured in aiProviders.js)
  *
  * Intake tracks handled conversationally:
  *   — BD Intake         (Atlas will handle post-intake)
@@ -20,7 +20,7 @@
  */
 
 import { AgentBase }      from './agentBase.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { synthesizer }    from './synthesizer.js';
 import { getSupabase }    from '../supabaseClient.js';
 import { notion }         from '../notionClient.js';

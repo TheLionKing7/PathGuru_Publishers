@@ -713,3 +713,19 @@ export async function fetchResearchAsset(key) {
   } catch { /* ignore */ }
   return null;
 }
+
+/** Fetch raw bytes from R2 (DOCX/PDF/binary deliverables). */
+export async function fetchResearchAssetBuffer(key) {
+  if (!accountId || !bucket) return null;
+  if (publicUrl) {
+    const r = await fetch(`${publicUrl.replace(/\/$/, '')}/${encodeKey(key)}`);
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+  }
+  try {
+    const r = await fetch(getObjectUrl(key), {
+      headers: apiToken ? { Authorization: `Bearer ${apiToken}` } : {},
+    });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
+  } catch { /* ignore */ }
+  return null;
+}

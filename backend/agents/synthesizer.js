@@ -17,7 +17,7 @@
 
 import { AgentBase }    from './agentBase.js';
 import { getSupabase }  from '../supabaseClient.js';
-import { callAiProvider, resolveProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { isR2Enabled, getJsonCache }       from '../cloudflareR2.js';
 import { FIRM_IP_FRAMEWORKS, getOperatingFrameworks, getIntelligenceLibraryProducts } from '../skills/firmKnowledge.js';
 

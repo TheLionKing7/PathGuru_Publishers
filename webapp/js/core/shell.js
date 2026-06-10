@@ -8,16 +8,15 @@
   'use strict';
 
   const DEPARTMENTS = {
-    publisher: {
-      id:           'publisher',
-      label:        'Publisher',
-      tagline:      'KDP-ready books & ebooks',
-      module:       'publishing',
-      defaultTab:   'brief',
+    blogroom: {
+      id:           'blogroom',
+      label:        'Blog Room',
+      tagline:      'CMS & posts',
+      module:       'blog',
+      defaultTab:   'blog',
       sections: {
-        brief:   'Brief & Research',
-        assets:  'Publishing Repository',
-        compile: 'Compile & Export',
+        blog:         'Compose',
+        'blog-assets': 'Assets',
       },
     },
     intelligence: {
@@ -29,8 +28,6 @@
       sections: {
         'agents-ip':      'Blueprint Library',
         'agents-content': 'Content Schedule',
-        blog:             'Blog-room',
-        'blog-assets':    'Blog Assets',
       },
     },
     products: {
@@ -78,10 +75,11 @@
   DEPARTMENTS.storefront = DEPARTMENTS.products;
 
   const INTELLIGENCE_TABS = new Set([
-    'agents-ip', 'agents-content', 'blog', 'blog-assets',
+    'agents-ip', 'agents-content',
   ]);
 
-  const BLOG_MODULE_TABS = new Set(['blog', 'blog-assets']);
+  const BLOGROOM_TABS = new Set(['blog', 'blog-assets']);
+  const BLOG_MODULE_TABS = BLOGROOM_TABS;
 
   const NETWORK_TABS = new Set([
     'agents-command', 'agents-workflow', 'agents-activity',
@@ -98,25 +96,25 @@
   NETWORK_TABS.forEach(tab => { TAB_TO_DEPT[tab] = 'network'; });
 
   function deptForTab(tab) {
-    return DEPARTMENTS[TAB_TO_DEPT[tab] || 'publisher'];
+    return DEPARTMENTS[TAB_TO_DEPT[tab] || 'blogroom'];
   }
 
   function moduleForTab(tab, dept) {
-    if (BLOG_MODULE_TABS.has(tab)) return 'blog';
+    if (BLOGROOM_TABS.has(tab)) return 'blog';
     const d = dept || deptForTab(tab);
-    return d?.module || 'publishing';
+    return d?.module || 'blog';
   }
 
   function deptForModule(module, activeTab) {
+    if (module === 'blog') return DEPARTMENTS.blogroom;
     if (module === 'agents' && activeTab && INTELLIGENCE_TABS.has(activeTab)) {
       return DEPARTMENTS.intelligence;
     }
-    if (module === 'blog') return DEPARTMENTS.intelligence;
     if (module === 'agents' && activeTab && NETWORK_TABS.has(activeTab)) {
       return DEPARTMENTS.network;
     }
     if (module === 'agents') return DEPARTMENTS.network;
-    return Object.values(DEPARTMENTS).find(d => d.module === module) || DEPARTMENTS.publisher;
+    return Object.values(DEPARTMENTS).find(d => d.module === module) || DEPARTMENTS.intelligence;
   }
 
   function sectionLabel(dept, tab) {
@@ -172,7 +170,8 @@
     if (deptEl)    deptEl.textContent    = dept.label;
     if (sectionEl) sectionEl.textContent = section;
 
-    document.body.classList.remove('pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products', 'pg-dept-analytics');
+    document.body.classList.remove('pg-dept-blogroom', 'pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products', 'pg-dept-analytics');
+    if (dept.id === 'blogroom')     document.body.classList.add('pg-dept-blogroom');
     if (dept.id === 'network')      document.body.classList.add('pg-dept-network');
     if (dept.id === 'intelligence') document.body.classList.add('pg-dept-intelligence');
     if (dept.id === 'products')     document.body.classList.add('pg-dept-products');
@@ -188,11 +187,24 @@
   function navigateToDepartment(deptId, tabOverride) {
     const dept = DEPARTMENTS[deptId];
     if (!dept) return;
+    if (window.PathGuruProducts && !window.PathGuruProducts.isDeptVisible(deptId)) return;
     const tab    = tabOverride || dept.defaultTab;
     const module = moduleForTab(tab, dept);
     if (typeof window.__pgSetTab === 'function') {
       window.__pgSetTab(tab, module);
     }
+  }
+
+  function applyProductFilter(productId) {
+    const product = window.PathGuruProducts?.PRODUCTS?.[productId];
+    document.querySelectorAll('.nav-btn[data-dept]').forEach(btn => {
+      if (!product) {
+        btn.style.display = '';
+        return;
+      }
+      const visible = product.departments.includes(btn.dataset.dept);
+      btn.style.display = visible ? '' : 'none';
+    });
   }
 
   window.PathGuruShell = {
@@ -205,6 +217,7 @@
     moduleForTab,
     updateChrome,
     navigateToDepartment,
+    applyProductFilter,
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -213,6 +226,7 @@
     document.querySelectorAll('.nav-btn[data-dept]').forEach(btn => {
       btn.addEventListener('click', () => {
         const deptId = btn.dataset.dept;
+        if (window.PathGuruProducts && !window.PathGuruProducts.isDeptVisible(deptId)) return;
         const dept   = DEPARTMENTS[deptId];
         if (!dept) return;
         const remembered = localStorage.getItem(`pg_lastTab_${deptId}`);

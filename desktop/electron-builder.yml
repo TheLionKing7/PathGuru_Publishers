@@ -1,0 +1,33 @@
+appId: com.digifusion.pathguru
+productName: PathGuru Platform
+copyright: Copyright © DigiFusion
+
+directories:
+  app: .
+  output: dist/desktop
+
+files:
+  - desktop/**/*
+  - webapp/**/*
+  - package.json
+
+extraMetadata:
+  main: desktop/main.js
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: PathGuru Platform
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+
+linux:
+  target:
+    - AppImage

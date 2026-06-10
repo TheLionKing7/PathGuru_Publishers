@@ -97,7 +97,7 @@
      HELPERS
   ═══════════════════════════════════════════════════════════════ */
   function getBackendUrl () {
-    try { return JSON.parse(localStorage.getItem('pg_settings') || '{}').backendUrl?.replace(/\/$/, '') || ''; } catch { return ''; }
+    return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
 
   function $ (id) { return document.getElementById(id); }
@@ -149,9 +149,7 @@
      API CALLS
   ═══════════════════════════════════════════════════════════════ */
   async function apiFetch (path, opts = {}) {
-    const base = getBackendUrl();
-    if (!base) throw new Error('Backend URL not configured. Check Settings.');
-    const url = `${base}${path}`;
+    const url = window.PathGuruBackend?.apiUrl?.(path) || `${getBackendUrl()}${path}`;
     const method = opts.method || (opts.body ? 'POST' : 'GET');
     const body   = opts.body
       ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body))
@@ -3325,7 +3323,7 @@ async function downloadIPDoc() {
   if (!content) return;
 
   try {
-    const res = await fetch('/api/agents/atlas/produce-doc', {
+    const res = await fetch(window.PathGuruBackend.apiUrl('/api/agents/atlas/produce-doc'), {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ title, content, docType: 'framework', format: 'docx', author: 'DigiFusion Agency' }),

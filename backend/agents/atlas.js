@@ -21,7 +21,7 @@
  */
 
 import { AgentBase }       from './agentBase.js';
-import { callAiProvider, resolveProvider, resolveResearchProvider } from '../aiPipeline.js';
+import { callAiProvider, resolveProvider, resolveResearchProvider } from '../aiProviders.js';
 import { synthesizer }     from './synthesizer.js';
 import { runDeepResearch } from '../skills/research.js';
 import { buildConsultingDoc } from '../skills/docBuilder.js';

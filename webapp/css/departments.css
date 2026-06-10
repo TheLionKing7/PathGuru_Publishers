@@ -498,7 +498,8 @@ body.pg-dept-intelligence #module-agents .module-topnav {
   display: none !important;
 }
 
-/* Blog-room keeps Compose | Assets under the shared title row */
+/* Blog Room — Compose | Assets under the shared title row */
+body.pg-dept-blogroom #module-blog.module-shell.active,
 body.pg-dept-intelligence #module-blog.module-shell.active {
   grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
@@ -506,6 +507,7 @@ body.pg-dept-intelligence #module-blog.module-shell.active {
     "subnav subnav"
     "body body";
 }
+body.pg-dept-blogroom #module-blog .module-topnav,
 body.pg-dept-intelligence #module-blog .module-topnav {
   grid-area: subnav;
   justify-content: flex-start;
