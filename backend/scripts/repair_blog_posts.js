@@ -15,16 +15,10 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getSupabase } from '../supabaseClient.js';
 import { searchPexels } from '../pexelsAssets.js';
+import { extractPostBody } from '../lib/extractPostBody.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, '../../.env') });
-
-function extractPostBody(html = '') {
-  const m = String(html).match(/<div[^>]*class=["'][^"']*post-body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-  if (m?.[1]) return m[1].trim();
-  if (!/<!doctype|<html/i.test(html)) return html;
-  return html;
-}
 
 async function main() {
   const db = getSupabase();
@@ -41,10 +35,18 @@ async function main() {
 
   for (const post of posts || []) {
     const updates = {};
-    const body = extractPostBody(post.content || '');
-    if (body && body !== post.content) {
+    const raw = post.content || '';
+    const body = extractPostBody(raw);
+    const needsRepair = body && (
+      body !== raw
+      || /^<!doctype/i.test(raw)
+      || (raw.includes('post-body') && body.length > raw.length * 0.5)
+    );
+    if (needsRepair && body.length > 50) {
       updates.content = body;
-      console.log(`✓ Extracted body for: ${post.slug}`);
+      console.log(`✓ Extracted body for: ${post.slug} (${raw.length} → ${body.length} chars)`);
+    } else if (!body || body.length < 100) {
+      console.warn(`⚠ Short/empty content (${body.length} chars): ${post.slug}`);
     }
 
     if (fixTypes && ['guide', 'how-to'].includes(post.post_type)) {

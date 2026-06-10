@@ -15,13 +15,17 @@
  *   - Tags + categories
  */
 
-import { buildBlogPrompt, parseBlogResponse, normalizeSection, stripHtmlTags } from './skills/editorial.js';
+import {
+  buildBlogPrompt, parseBlogResponse, normalizeSection, stripHtmlTags,
+  sectionsFromPlainArticle, totalSectionChars,
+} from './skills/editorial.js';
 import { searchPexels } from './pexelsAssets.js';
 import { resolvePersona, injectPersonaIntoPrompt, personaBylineMeta } from './skills/personaPrompt.js';
 import { selectPersonaForNiche } from './skills/personas.js';
 import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiPipeline.js';
 import { synthesizer } from './agents/synthesizer.js';
 import { injectAdvocateIntoBlogPrompt, buildContentAdvocateSystemBlock } from './skills/contentAdvocate.js';
+import { extractPostBody } from './lib/extractPostBody.js';
 
 /** Default byline for DigiFusion blog posts — founder voice, not system accounts. */
 export const DEFAULT_BLOG_AUTHOR = 'Boroji Adebayo-Hopewell, Founder';
@@ -36,6 +40,13 @@ export function parseBlogAuthor(authorName = DEFAULT_BLOG_AUTHOR) {
   return { name, byline: full, title };
 }
 
+function renderInline(text) {
+  return String(text)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/_(.+?)_/g, '<em>$1</em>');
+}
+
 /* ── Build blog post HTML from sections ───────────────── */
 function buildBlogSectionsHtml(post, design = {}) {
   const accent    = design?.palette?.accent    || '#2bb3a3';
@@ -43,13 +54,6 @@ function buildBlogSectionsHtml(post, design = {}) {
   const bodyFont  = design?.bodyFont           || "'DM Sans', system-ui, sans-serif";
   const titleFont = design?.titleFont          || "'Playfair Display', Georgia, serif";
   const fontImport = design?.fontImport        || '';
-
-  function renderInline(text) {
-    return String(text)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/_(.+?)_/g, '<em>$1</em>');
-  }
 
   function parseBody(raw = '') {
     const blocks = stripHtmlTags(raw).split(/\n{2,}/);
@@ -119,11 +123,7 @@ export function buildBlogBodyHtml(post, design = {}) {
 /** CMS-safe HTML — body fragment only (handles legacy full-document drafts). */
 export function resolveCmsBlogHtml(html, post) {
   if (post?.sections?.length) return buildBlogBodyHtml(post);
-  const m = String(html || '').match(
-    /<div[^>]*class=["'][^"']*post-body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
-  );
-  if (m?.[1]) return m[1].trim();
-  return html || '';
+  return extractPostBody(html);
 }
 
 function buildBlogHtml(post, design = {}) {
@@ -492,7 +492,7 @@ SCHEMA:
 }
 
 BLOG CONTENT:
-${input.aetherContent.slice(0, 6000)}
+${input.aetherContent.slice(0, 12000)}
 
 Topic: ${input.topic}
 SEO keyword: ${input.seoKeyword || input.topic}`;
@@ -520,10 +520,24 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
     body: stripHtmlTags(String(s.body || '')),
   }));
 
+  // Fallback when JSON wrap drops sections (common with long Aether drafts)
+  if (totalSectionChars(post.sections) < 300) {
+    if (input.aetherContent) {
+      const fallback = sectionsFromPlainArticle(input.aetherContent);
+      if (totalSectionChars(fallback) > totalSectionChars(post.sections)) {
+        post.sections = fallback;
+      }
+    }
+    if (totalSectionChars(post.sections) < 300 && !input.aetherContent) {
+      throw new Error('Blog generation returned empty or stub sections — refusing to publish.');
+    }
+  }
+
   // Stamp input-level fields onto the post object so they survive the
   // publish pipeline (post.postType / post.authorName are not AI-generated)
   post.postType  = input.postType || post.postType || 'article';
   post.authorName = input.author || post.authorName || DEFAULT_BLOG_AUTHOR;
+  if (input.slug) post.slug = input.slug;
 
   // 4. Fetch featured image from Pexels
   let featuredImageUrl = null;
@@ -538,6 +552,10 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
   // 5. Build HTML — full document for export; body fragment for DigiFusion CMS
   const html = buildBlogHtml(post);
   const bodyHtml = buildBlogBodyHtml(post);
+
+  if (bodyHtml.trim().length < 200) {
+    throw new Error(`Blog body too short (${bodyHtml.trim().length} chars) — refusing to publish empty post.`);
+  }
 
   // 6. Publish to platform(s)
   const publishResults = [];

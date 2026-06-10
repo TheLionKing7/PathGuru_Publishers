@@ -360,6 +360,66 @@ COPYWRITING RULES:
 /* ══════════════════════════════════════════════════════
    PARSERS
 ══════════════════════════════════════════════════════ */
+
+/**
+ * Deterministic fallback when LLM JSON wrap returns empty sections.
+ * Parses markdown headings (##) or blank-line paragraph blocks into blog sections.
+ */
+export function sectionsFromPlainArticle(text = '') {
+  const raw = String(text || '').trim();
+  if (!raw) return [];
+
+  const sections = [];
+  let current = null;
+
+  const flush = () => {
+    if (!current) return;
+    const body = (current.body || '').trim();
+    const heading = (current.heading || '').trim();
+    if (body || heading) sections.push({ ...current, body, heading });
+    current = null;
+  };
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const mdHeading = trimmed.match(/^#{1,3}\s+(.+)/);
+    if (mdHeading) {
+      flush();
+      current = { type: trimmed.startsWith('###') ? 'h3' : 'h2', heading: mdHeading[1].trim(), body: '' };
+      continue;
+    }
+
+    if (!current) {
+      current = sections.length === 0
+        ? { type: 'hook', heading: '', body: trimmed }
+        : { type: 'h2', heading: '', body: trimmed };
+      continue;
+    }
+
+    current.body += (current.body ? '\n' : '') + trimmed;
+  }
+
+  flush();
+
+  if (sections.length === 1 && sections[0].type === 'hook') {
+    const paras = raw.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    if (paras.length > 2) {
+      return [
+        { type: 'hook', heading: '', body: paras[0] },
+        ...paras.slice(1).map(p => ({ type: 'h2', heading: '', body: p })),
+      ];
+    }
+  }
+
+  return sections;
+}
+
+export function totalSectionChars(sections = []) {
+  return (sections || []).reduce((n, s) => n + String(s.body || '').length + String(s.heading || '').length, 0);
+}
+
 export function parseEditorialResponse(text) {
   return parseJson(text, 'Editorial');
 }

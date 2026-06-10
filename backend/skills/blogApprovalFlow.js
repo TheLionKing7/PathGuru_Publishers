@@ -37,6 +37,7 @@ export async function executeApprovedBlogPublish(payload = {}) {
 
   const result = await generateAndPublishBlogPost({
     topic,
+    slug:           payload.slug,
     audience:       payload.audience,
     tone:           payload.recommendedTone || payload.tone || 'authoritative yet accessible',
     seoKeyword:     payload.seoKeyword || topic,
