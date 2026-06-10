@@ -115,8 +115,16 @@ export const notion = {
   async ping() {
     if (!isConfigured()) return { ok: false, reason: 'NOTION_API_KEY not set' };
     try {
-      await notionFetch('/users/me');
-      return { ok: true };
+      const me = await notionFetch('/users/me');
+      const tasksOk = !!process.env.NOTION_TASKS_DB_ID;
+      const leadsOk = !!process.env.NOTION_LEADS_DB_ID;
+      return {
+        ok: true,
+        workspace: process.env.NOTION_WORKSPACE_ID || me?.bot?.workspace_name || 'connected',
+        tasksDb:  tasksOk,
+        leadsDb:  leadsOk,
+        clientsDb: !!process.env.NOTION_CLIENTS_DB_ID,
+      };
     } catch (e) {
       return { ok: false, reason: e.message };
     }

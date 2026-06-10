@@ -429,15 +429,17 @@ Return ONLY the JSON array, no other text.`;
     }
 
     const episodic = await this.recallEpisodic(5).catch(() => '');
+    const feedbackBlock = await this.recallEpisodic(5, ['chat_feedback']).catch(() => '');
     const historyBlock = history.length
-      ? history.slice(-8).map(t => `${t.role === 'user' ? 'Team' : this.displayName}: ${t.content}`).join('\n')
+      ? history.slice(-12).map(t => `${t.role === 'user' ? 'Boss' : this.displayName}: ${t.content}`).join('\n')
       : '';
 
     const fullPrompt = [
       liveState,
       episodic,
+      feedbackBlock ? `## Boss feedback on past responses (learn from this)\n${feedbackBlock}` : '',
       historyBlock ? `## Recent conversation\n${historyBlock}` : '',
-      `Team: ${message}`,
+      `Boss: ${message}`,
     ].filter(Boolean).join('\n\n');
 
     // Honesty guardrail applied to ALL agents

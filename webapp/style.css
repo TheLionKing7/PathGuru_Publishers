@@ -4634,6 +4634,115 @@ body.pg-shell-v3 .module-shell {
 
 .agent-chat-clear:hover { color: var(--text); }
 
+/* Chat toolbar — search + archive */
+.agent-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.agent-chat-search {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.agent-chat-archive-toggle {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-chat-reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  background: var(--surface-elevated, #1e2130);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.agent-chat-reply-excerpt {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-chat-reply-cancel {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.chat-message-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 88%;
+}
+
+.chat-message-wrap--user { align-self: flex-end; align-items: flex-end; }
+.chat-message-wrap--assistant,
+.chat-message-wrap--agent { align-self: flex-start; align-items: flex-start; }
+
+.chat-message-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity .15s;
+}
+
+.chat-message-wrap:hover .chat-message-actions { opacity: 1; }
+
+.chat-act {
+  background: var(--surface-elevated, #1e2130);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.chat-act:hover { color: var(--text); border-color: var(--accent, #4f8ef7); }
+.chat-act.active { border-color: var(--accent, #4f8ef7); color: var(--accent, #4f8ef7); }
+
+.chat-bubble-ref {
+  display: block;
+  font-size: 10px;
+  color: var(--accent, #4f8ef7);
+  margin-bottom: 4px;
+}
+
+.chat-bubble-time {
+  display: block;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 6px;
+  opacity: .7;
+}
+
+.chat-loading {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px;
+}
+
 
 /* ════════════════════════════════════════════════════════════════
    PRODUCTS TAB — prod-panel-body, prod-toolbar, prod-list

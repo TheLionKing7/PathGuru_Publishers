@@ -32,11 +32,15 @@
     {
       id: 'atlas',
       name: 'Atlas',
-      role: 'Business Development',
-      desc: 'Deal Engine specialist. BD strategy, prospect intelligence, Dream 50 targeting, and consulting-grade playbook synthesis.',
+      role: 'Business Developer & Strategist',
+      desc: 'Deal Engine operator. Dream 50 targeting, SPIN diagnostics, Challenger insights, pipeline intelligence, and firm IP frameworks (SME Scale, Enterprise Velocity, GovTech, FIRA).',
       icon: `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
       color: '#5b8dee',
-      actions: ['research', 'prospect_analysis', 'build_framework'],
+      actions: [
+        'full_deal_engine', 'deal_diagnostic', 'prospect_analysis', 'dream50',
+        'phase1_intelligence', 'phase2_diagnostic', 'phase3_insight', 'phase4_consensus',
+        'client_maturity_assessment', 'strategy_session', 'research', 'build_framework',
+      ],
     },
     {
       id: 'nova',
@@ -900,93 +904,171 @@
             <div id="researcher-sources" style="margin-top:12px;font-size:12px;opacity:.7"></div>
           </div>
 
-          <div class="console-chat-section">
-            <div class="console-chat-label">Chat with Orion</div>
-            <div class="console-chat-history" id="researcher-chat-history"></div>
-            <div class="console-chat-input-row">
-              <input class="console-chat-input" id="researcher-chat-input" placeholder="Ask about any topic or request a quick research..." />
-              <button class="console-chat-send" id="researcher-chat-send">Send</button>
+          <div class="console-panel-section" style="margin-top:16px">
+            <div class="console-section-header">Chat with Orion</div>
+            <div class="agent-chat-toolbar" id="chatToolbar-researcher">
+              <input type="search" class="agent-chat-search" id="chatSearch-researcher" placeholder="Search this thread…" />
+              <label class="agent-chat-archive-toggle" title="Include archived threads">
+                <input type="checkbox" id="chatArchive-researcher" /> Archive
+              </label>
             </div>
-          </div>
-        </div>
-      </div>`;
-  }
-
-  /* ── Atlas ── */
-  function buildAtlasPanel (agent) {
-    return `
-      <div class="console-panel" id="console-atlas">
-        <div class="console-panel-inner">
-          <div class="console-agent-badge" style="--agent-color:${agent.color}">
-            ${agent.icon}
-            <span>${agent.name}</span>
-            <span class="console-role-tag">${agent.role}</span>
-          </div>
-
-          <div class="console-form-group">
-            <label class="console-label" for="atlasTopicInput">Research topic or question</label>
-            <textarea id="atlasTopicInput" class="console-textarea" rows="3"
-              placeholder="e.g. Competitive landscape for AI-powered legal tech in Sub-Saharan Africa…"></textarea>
-          </div>
-
-          <div class="console-form-row">
-            <div class="console-form-group">
-              <label class="console-label" for="atlasActionSelect">Action</label>
-              <select id="atlasActionSelect" class="console-select">
-                <option value="research">Market Research</option>
-                <option value="prospect_analysis">Prospect Analysis</option>
-                <option value="build_framework">Build Framework</option>
-              </select>
-            </div>
-            <div class="console-form-group">
-              <label class="console-label" for="atlasDepthSelect">Research depth</label>
-              <select id="atlasDepthSelect" class="console-select">
-                <option value="1">Light (faster)</option>
-                <option value="2" selected>Standard</option>
-                <option value="3">Deep (slower)</option>
-              </select>
-            </div>
-            <div class="console-form-group">
-              <label class="console-label" for="atlasDocFormatSelect">Output format</label>
-              <select id="atlasDocFormatSelect" class="console-select">
-                <option value="docx">Word (.docx)</option>
-                <option value="pdf">PDF</option>
-                <option value="html">HTML</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="console-actions">
-            <button class="btn-console-run" id="atlasRunBtn">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run Research
-            </button>
-          </div>
-
-          <div class="console-output-area" id="atlasOutput" style="display:none">
-            <div class="console-output-toolbar">
-              <span class="console-output-label" id="atlasOutputLabel">Output</span>
-              <div class="console-output-actions">
-                <button class="btn-output-action" id="atlasDownloadBtn" style="display:none">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Download DOCX
-                </button>
-                <button class="btn-output-action" id="atlasCopyBtn">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  Copy
-                </button>
+            <div class="agent-chat-wrap" id="chatWrap-researcher">
+              <div class="agent-chat-messages" id="chatMessages-researcher" aria-live="polite"></div>
+              <div class="agent-chat-reply-bar" id="chatReplyBar-researcher" hidden></div>
+              <div class="agent-chat-footer">
+                <textarea class="agent-chat-input" id="chatInput-researcher" rows="1" placeholder="Ask Orion…"></textarea>
+                <button class="agent-chat-send" id="chatSend-researcher" title="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+                <button class="agent-chat-clear" id="chatClear-researcher" title="Clear (archives thread)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg></button>
               </div>
             </div>
-            <div class="console-markdown-output" id="atlasMarkdownOutput"></div>
-          </div>
-
-          <div class="console-task-status" id="atlasTaskStatus" style="display:none">
-            <div class="console-task-spinner"></div>
-            <span id="atlasTaskStatusMsg">Starting research…</span>
           </div>
         </div>
       </div>`;
   }
+
+  /* ── Atlas — BD & Strategy console ── */
+  function buildAtlasPanel (agent) {
+    const taskSection = `
+      <div class="console-panel-section">
+        <div class="console-section-header">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          Deal Engine &amp; strategy tools
+        </div>
+        <p class="console-agent-desc" style="margin:0 0 12px;font-size:12px;opacity:.75">
+          Dream 50 → Intelligence → SPIN Diagnostic → Challenger Insight → Consensus. Pipeline-aware; outputs log to Activity.
+        </p>
+        <div id="atlasPipelineStrip" class="console-pipeline-strip" style="font-size:11px;opacity:.8;margin-bottom:12px;padding:8px 10px;border:1px solid var(--border);border-radius:8px">
+          Loading pipeline…
+        </div>
+        <div class="console-form-row">
+          <div class="console-form-group" style="flex:1.2">
+            <label class="console-label" for="atlasAccountInput" id="atlasAccountLabel">Account / target</label>
+            <input id="atlasAccountInput" class="console-input" type="text"
+              placeholder="e.g. Acme Holdings, SME fintech Lagos…"/>
+          </div>
+          <div class="console-form-group" style="flex:1">
+            <label class="console-label" for="atlasDealStageSelect">Deal stage</label>
+            <select id="atlasDealStageSelect" class="console-select">
+              <option value="">—</option>
+              <option value="SUSPECT">Suspect</option>
+              <option value="PROSPECT">Prospect</option>
+              <option value="QUALIFIED">Qualified</option>
+              <option value="CLOSEABLE">Closeable</option>
+            </select>
+          </div>
+        </div>
+        <div class="console-form-group">
+          <label class="console-label" for="atlasContextInput" id="atlasContextLabel">Brief / context</label>
+          <textarea id="atlasContextInput" class="console-textarea" rows="3"
+            placeholder="Pain points, stakeholders, deal size, industry, or research question…"></textarea>
+        </div>
+        <div class="console-form-row">
+          <div class="console-form-group" style="flex:1.4">
+            <label class="console-label" for="atlasActionSelect">Tool</label>
+            <select id="atlasActionSelect" class="console-select">
+              <optgroup label="Deal Engine">
+                <option value="full_deal_engine">Full Deal Engine (4 phases)</option>
+                <option value="deal_diagnostic">Deal Diagnostic / Scorecard</option>
+                <option value="phase1_intelligence">Phase 1 — Account Influence Map</option>
+                <option value="phase2_diagnostic">Phase 2 — SPIN Diagnostic</option>
+                <option value="phase3_insight">Phase 3 — Challenger Insight</option>
+                <option value="phase4_consensus">Phase 4 — Consensus / Blue Sheet</option>
+              </optgroup>
+              <optgroup label="Targeting &amp; intelligence">
+                <option value="dream50">Dream 50 / ICP targeting</option>
+                <option value="prospect_analysis">Prospect analysis</option>
+                <option value="research">Market research (doc export)</option>
+              </optgroup>
+              <optgroup label="Strategy">
+                <option value="strategy_session">Strategy session (live notes)</option>
+                <option value="client_maturity_assessment">Client BD maturity assessment</option>
+                <option value="build_framework">Build proprietary framework</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="console-form-group" id="atlasFrameworkGroup" style="flex:1;display:none">
+            <label class="console-label" for="atlasFrameworkInput">Framework name</label>
+            <input id="atlasFrameworkInput" class="console-input" type="text" placeholder="e.g. SME Revenue Acceleration"/>
+          </div>
+        </div>
+        <div class="console-form-row" id="atlasResearchRow">
+          <div class="console-form-group">
+            <label class="console-label" for="atlasDepthSelect">Research depth</label>
+            <select id="atlasDepthSelect" class="console-select">
+              <option value="1">Light</option>
+              <option value="2" selected>Standard</option>
+              <option value="3">Deep</option>
+            </select>
+          </div>
+          <div class="console-form-group">
+            <label class="console-label" for="atlasDocFormatSelect">Export format</label>
+            <select id="atlasDocFormatSelect" class="console-select">
+              <option value="docx">Word (.docx)</option>
+              <option value="pdf">PDF</option>
+              <option value="html">HTML</option>
+            </select>
+          </div>
+        </div>
+        <div class="console-actions" style="gap:8px;flex-wrap:wrap">
+          <button class="btn-console-run" id="atlasRunBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="atlasRunBtnLabel">Run Deal Engine</span>
+          </button>
+          <button class="btn-console-run btn-secondary-run" id="atlasSessionNotesBtn" title="Compile session intel into a Deal Brief">
+            Compile session brief
+          </button>
+        </div>
+        <div class="console-output-area" id="atlasOutput" style="display:none">
+          <div class="console-output-toolbar">
+            <span class="console-output-label" id="atlasOutputLabel">Output</span>
+            <div class="console-output-actions">
+              <button class="btn-output-action" id="atlasDownloadBtn" style="display:none">Download</button>
+              <button class="btn-output-action" id="atlasCopyBtn">Copy</button>
+            </div>
+          </div>
+          <div class="console-markdown-output" id="atlasMarkdownOutput"></div>
+        </div>
+        <div class="console-task-status" id="atlasTaskStatus" style="display:none">
+          <div class="console-task-spinner"></div>
+          <span id="atlasTaskStatusMsg">Working…</span>
+        </div>
+      </div>`;
+    return buildChatPanel(agent, taskSection);
+  }
+
+  function formatAtlasResult (raw) {
+    if (!raw) return '(No output)';
+    if (typeof raw === 'string') return raw;
+    if (raw.response) return raw.response;
+    if (raw.report) {
+      const hdr = raw.accountName || raw.clientName ? `## ${raw.accountName || raw.clientName}\n\n` : '';
+      const score = raw.compositeScore != null ? `**Deal score:** ${raw.compositeScore}/100 — **${raw.dealStage || ''}**\n\n` : '';
+      const tier = raw.tier ? `**Maturity tier:** ${raw.tier}\n\n` : '';
+      return hdr + score + tier + raw.report;
+    }
+    if (raw.summary && typeof raw.summary === 'string') return raw.summary;
+    const text = raw.result ?? raw.output ?? raw.dream50;
+    if (typeof text === 'string') return text;
+    if (text?.result && typeof text.result === 'string') return text.result;
+    return '```json\n' + JSON.stringify(raw, null, 2) + '\n```';
+  }
+
+  const ATLAS_ACTION_LABELS = {
+    full_deal_engine:           'Run Deal Engine',
+    deal_diagnostic:            'Run diagnostic',
+    phase1_intelligence:        'Run Phase 1',
+    phase2_diagnostic:          'Run Phase 2',
+    phase3_insight:             'Run Phase 3',
+    phase4_consensus:           'Run Phase 4',
+    dream50:                    'Build Dream 50',
+    prospect_analysis:          'Analyse prospect',
+    research:                   'Run research',
+    strategy_session:           'Start session',
+    client_maturity_assessment: 'Assess maturity',
+    build_framework:            'Build framework',
+  };
+
+  const ATLAS_ACCOUNT_OPTIONAL = new Set(['dream50', 'research', 'build_framework']);
 
   /* ── Nexus ── */
   function buildNexusPanel (agent) {
@@ -1193,17 +1275,16 @@
      AGENT CHAT — shared chat API + state
   ══════════════════════════════════════════════════════════════ */
 
-  // Per-agent conversation history: { [agentId]: [{ role, content }] }
-  const _chatHistories = {};
+  // Reply-to state per agent: { messageId, excerpt }
+  const _chatReplyTo = {};
 
-  async function sendChatMessage (agentId, message) {
+  async function sendChatMessage (agentId, message, { replyTo = null } = {}) {
     const base = getBackendUrl();
     if (!base) throw new Error('Backend URL not set — check Settings');
-    const history = _chatHistories[agentId] || [];
     const res = await fetch(`${base}/api/agents/${agentId}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history }),
+      body: JSON.stringify({ message, replyTo }),
     });
     if (!res.ok) {
       const e = await res.json().catch(() => ({ error: res.statusText }));
@@ -1213,14 +1294,38 @@
       }
       throw new Error(msg);
     }
-    const data = await res.json();
-    // Persist history (keep last 20 turns)
-    _chatHistories[agentId] = [
-      ...history,
-      { role: 'user',      content: message },
-      { role: 'assistant', content: data.reply },
-    ].slice(-20);
-    return data.reply;
+    return res.json();
+  }
+
+  async function loadPersistedChat (agentId, { q = '', allEpochs = false } = {}) {
+    const qs = new URLSearchParams({ limit: '100' });
+    if (q) qs.set('q', q);
+    if (allEpochs) qs.set('all', '1');
+    return apiFetch(`/api/agents/${agentId}/chat/history?${qs}`);
+  }
+
+  async function clearPersistedChat (agentId) {
+    return apiFetch(`/api/agents/${agentId}/chat/clear`, { method: 'POST', body: '{}' });
+  }
+
+  async function deleteChatMessage (messageId) {
+    const base = getBackendUrl();
+    const res = await fetch(`${base}/api/agents/chat/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Delete failed');
+    return res.json();
+  }
+
+  async function rateChatMessage (messageId, rating, feedback = '') {
+    return apiFetch(`/api/agents/chat/messages/${encodeURIComponent(messageId)}/rate`, {
+      method: 'POST',
+      body: JSON.stringify({ rating, feedback }),
+    });
+  }
+
+  function formatChatBubbleHtml (text) {
+    return esc(text)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
   }
 
   /* Build a chat panel. Used by Nova, Aether, Assistant + injected tab for others. */
@@ -1236,13 +1341,16 @@
 
           ${extraTopHTML}
 
+          <div class="agent-chat-toolbar" id="chatToolbar-${esc(agent.id)}">
+            <input type="search" class="agent-chat-search" id="chatSearch-${esc(agent.id)}"
+              placeholder="Search this conversation…" aria-label="Search conversation" />
+            <label class="agent-chat-archive-toggle" title="Include archived threads from previous clears">
+              <input type="checkbox" id="chatArchive-${esc(agent.id)}" /> Archive
+            </label>
+          </div>
           <div class="agent-chat-wrap" id="chatWrap-${esc(agent.id)}">
-            <div class="agent-chat-messages" id="chatMessages-${esc(agent.id)}" aria-live="polite" aria-label="${esc(agent.name)} conversation">
-              <div class="chat-bubble chat-bubble--agent">
-                <span class="chat-bubble-name">${esc(agent.name)}</span>
-                <p>Hi — I'm ${esc(agent.name)}, your ${esc(agent.role).toLowerCase()}. What can I help you with?</p>
-              </div>
-            </div>
+            <div class="agent-chat-messages" id="chatMessages-${esc(agent.id)}" aria-live="polite" aria-label="${esc(agent.name)} conversation"></div>
+            <div class="agent-chat-reply-bar" id="chatReplyBar-${esc(agent.id)}" hidden></div>
             <div class="agent-chat-footer">
               <textarea class="agent-chat-input" id="chatInput-${esc(agent.id)}" rows="1"
                 placeholder="Message ${esc(agent.name)}…" aria-label="Message ${esc(agent.name)}"></textarea>
@@ -1258,30 +1366,114 @@
       </div>`;
   }
 
-  /* Wire the chat panel event handlers */
+  /* Wire the chat panel — persisted history, search, rate, reply, delete */
   function wireChatPanel (agentId) {
     const messagesEl = $(`chatMessages-${agentId}`);
     const inputEl    = $(`chatInput-${agentId}`);
     const sendBtn    = $(`chatSend-${agentId}`);
     const clearBtn   = $(`chatClear-${agentId}`);
+    const searchEl   = $(`chatSearch-${agentId}`);
+    const archiveEl  = $(`chatArchive-${agentId}`);
+    const replyBar   = $(`chatReplyBar-${agentId}`);
     if (!inputEl || !sendBtn || !messagesEl) return;
 
-    function appendBubble (role, text) {
+    const agentMeta = AGENTS.find(a => a.id === agentId);
+
+    function setReplyTo (messageId, excerpt) {
+      _chatReplyTo[agentId] = { messageId, excerpt };
+      if (!replyBar) return;
+      replyBar.hidden = false;
+      replyBar.innerHTML = `
+        <span class="agent-chat-reply-label">Replying to:</span>
+        <span class="agent-chat-reply-excerpt">${esc((excerpt || '').slice(0, 120))}</span>
+        <button type="button" class="agent-chat-reply-cancel" title="Cancel reply">×</button>`;
+      replyBar.querySelector('.agent-chat-reply-cancel')?.addEventListener('click', () => {
+        delete _chatReplyTo[agentId];
+        replyBar.hidden = true;
+      });
+      inputEl.focus();
+    }
+
+    function renderMessageBubble (msg) {
+      if (msg.role === 'system') return null;
+      const wrap = document.createElement('div');
+      wrap.className = `chat-message-wrap chat-message-wrap--${msg.role}`;
+      wrap.dataset.messageId = msg.id || '';
+
       const div = document.createElement('div');
-      div.className = `chat-bubble chat-bubble--${role === 'user' ? 'user' : 'agent'}`;
-      const agent = AGENTS.find(a => a.id === agentId);
-      if (role !== 'user') {
+      div.className = `chat-bubble chat-bubble--${msg.role === 'user' ? 'user' : 'agent'}`;
+      if (msg.role !== 'user') {
         const nameSpan = document.createElement('span');
         nameSpan.className = 'chat-bubble-name';
-        nameSpan.textContent = agent?.name || agentId;
+        nameSpan.textContent = agentMeta?.name || agentId;
         div.appendChild(nameSpan);
       }
+      if (msg.parent_id) {
+        const ref = document.createElement('span');
+        ref.className = 'chat-bubble-ref';
+        ref.textContent = '↩ reply thread';
+        div.appendChild(ref);
+      }
       const p = document.createElement('p');
-      p.innerHTML = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
+      p.innerHTML = formatChatBubbleHtml(msg.content || '');
       div.appendChild(p);
-      messagesEl.appendChild(div);
+
+      if (msg.created_at) {
+        const time = document.createElement('time');
+        time.className = 'chat-bubble-time';
+        time.dateTime = msg.created_at;
+        time.textContent = new Date(msg.created_at).toLocaleString();
+        div.appendChild(time);
+      }
+
+      wrap.appendChild(div);
+
+      if (msg.id && msg.role !== 'system') {
+        const actions = document.createElement('div');
+        actions.className = 'chat-message-actions';
+        const rated = msg.rating != null ? ` data-rated="${msg.rating}"` : '';
+        actions.innerHTML = `
+          <button type="button" class="chat-act chat-act-reply" title="Reply / reference this">↩</button>
+          <button type="button" class="chat-act chat-act-up${msg.rating === 1 ? ' active' : ''}" title="Good response">👍</button>
+          <button type="button" class="chat-act chat-act-down${msg.rating === -1 ? ' active' : ''}" title="Needs improvement"${rated}>👎</button>
+          <button type="button" class="chat-act chat-act-del" title="Remove message">🗑</button>`;
+
+        actions.querySelector('.chat-act-reply')?.addEventListener('click', () => {
+          setReplyTo(msg.id, msg.content);
+        });
+        actions.querySelector('.chat-act-up')?.addEventListener('click', async () => {
+          try {
+            await rateChatMessage(msg.id, 1);
+            actions.querySelector('.chat-act-up')?.classList.add('active');
+            actions.querySelector('.chat-act-down')?.classList.remove('active');
+          } catch (e) { alert(e.message); }
+        });
+        actions.querySelector('.chat-act-down')?.addEventListener('click', async () => {
+          const note = prompt('What should the agent do differently? (optional)') || '';
+          try {
+            await rateChatMessage(msg.id, -1, note);
+            actions.querySelector('.chat-act-down')?.classList.add('active');
+            actions.querySelector('.chat-act-up')?.classList.remove('active');
+          } catch (e) { alert(e.message); }
+        });
+        actions.querySelector('.chat-act-del')?.addEventListener('click', async () => {
+          if (!confirm('Remove this message from the thread?')) return;
+          try {
+            await deleteChatMessage(msg.id);
+            wrap.remove();
+          } catch (e) { alert(e.message); }
+        });
+        wrap.appendChild(actions);
+      }
+
+      return wrap;
+    }
+
+    function appendBubble (role, text, meta = {}) {
+      const wrap = renderMessageBubble({ role, content: text, ...meta });
+      if (wrap) messagesEl.appendChild(wrap);
       messagesEl.scrollTop = messagesEl.scrollHeight;
-      return div;
+      return wrap;
     }
 
     function appendTyping () {
@@ -1293,19 +1485,51 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    async function refreshHistory () {
+      const q = searchEl?.value?.trim() || '';
+      const allEpochs = archiveEl?.checked || false;
+      messagesEl.innerHTML = '<div class="chat-loading">Loading conversation…</div>';
+      try {
+        const data = await loadPersistedChat(agentId, { q, allEpochs });
+        messagesEl.innerHTML = '';
+        const msgs = data.messages || [];
+        if (!msgs.length) {
+          messagesEl.innerHTML = `
+            <div class="chat-bubble chat-bubble--agent">
+              <span class="chat-bubble-name">${esc(agentMeta?.name || agentId)}</span>
+              <p>${q ? 'No messages match your search.' : `Hi — I'm ${esc(agentMeta?.name || agentId)}. Your conversation history is saved automatically.`}</p>
+            </div>`;
+          return;
+        }
+        msgs.forEach(m => {
+          const el = renderMessageBubble(m);
+          if (el) messagesEl.appendChild(el);
+        });
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      } catch (e) {
+        messagesEl.innerHTML = `<div class="chat-bubble chat-bubble--agent"><p>⚠ Could not load history: ${esc(e.message)}</p></div>`;
+      }
+    }
+
     async function doSend () {
       const msg = inputEl.value.trim();
       if (!msg) return;
+      const replyTo = _chatReplyTo[agentId]?.messageId || null;
       inputEl.value = '';
       inputEl.style.height = '';
+      if (replyBar) replyBar.hidden = true;
+      delete _chatReplyTo[agentId];
       sendBtn.disabled = true;
-      appendBubble('user', msg);
+      appendBubble('user', msg, { parent_id: replyTo });
       appendTyping();
 
       try {
-        const reply = await sendChatMessage(agentId, msg);
+        const data = await sendChatMessage(agentId, msg, { replyTo });
         $(`chatTyping-${agentId}`)?.remove();
-        appendBubble('agent', reply);
+        appendBubble('agent', data.reply || '', {
+          id: data.assistantMessageId,
+          parent_id: data.userMessageId,
+        });
       } catch (e) {
         $(`chatTyping-${agentId}`)?.remove();
         appendBubble('agent', `⚠ ${e.message}`);
@@ -1316,25 +1540,32 @@
     }
 
     sendBtn.addEventListener('click', doSend);
-
     inputEl.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
     });
-
-    // Auto-grow textarea
     inputEl.addEventListener('input', () => {
       inputEl.style.height = 'auto';
       inputEl.style.height = `${Math.min(inputEl.scrollHeight, 120)}px`;
     });
 
-    clearBtn?.addEventListener('click', () => {
-      _chatHistories[agentId] = [];
-      messagesEl.innerHTML = `
-        <div class="chat-bubble chat-bubble--agent">
-          <span class="chat-bubble-name">${esc(AGENTS.find(a=>a.id===agentId)?.name || agentId)}</span>
-          <p>Conversation cleared. How can I help?</p>
-        </div>`;
+    let searchTimer;
+    searchEl?.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(refreshHistory, 350);
     });
+    archiveEl?.addEventListener('change', refreshHistory);
+
+    clearBtn?.addEventListener('click', async () => {
+      if (!confirm('Start a fresh thread? Previous messages stay archived and searchable (enable Archive).')) return;
+      try {
+        await clearPersistedChat(agentId);
+        delete _chatReplyTo[agentId];
+        if (replyBar) replyBar.hidden = true;
+        await refreshHistory();
+      } catch (e) { alert(e.message); }
+    });
+
+    refreshHistory();
   }
 
   /* ── Nova — chat + task dispatch ── */
@@ -1471,8 +1702,13 @@
   /* Shared task runner: POST → poll until done → render output */
   async function runTask (agentId, payload, {
     statusEl, statusMsgEl, outputEl, outputLabelEl, markdownEl,
-    onSuccess,
+    onSuccess, formatResult,
   }) {
+    const fmt = formatResult || ((raw) => {
+      if (typeof raw === 'string') return raw;
+      if (raw?.plan && Array.isArray(raw.plan)) return null;
+      return null;
+    });
     statusEl.style.display    = 'flex';
     outputEl.style.display    = 'none';
     statusMsgEl.textContent   = 'Starting…';
@@ -1485,7 +1721,10 @@
         // Synchronous result
         const syncRaw = res.result ?? res;
         let syncDisplay;
-        if (typeof syncRaw === 'string') {
+        const syncFormatted = fmt(syncRaw);
+        if (syncFormatted) {
+          syncDisplay = syncFormatted;
+        } else if (typeof syncRaw === 'string') {
           syncDisplay = syncRaw;
         } else if (syncRaw?.plan && Array.isArray(syncRaw.plan)) {
           const lines = [`**Execution Plan** — ${syncRaw.plan.length} task(s) created\n`];
@@ -1521,8 +1760,11 @@
             statusEl.style.display = 'none';
             const raw = task.result || task.output;
             let display;
+            const formatted = fmt(raw);
             if (!raw) {
               display = '(No output)';
+            } else if (formatted) {
+              display = formatted;
             } else if (typeof raw === 'string') {
               display = raw;
             } else if (raw.plan && Array.isArray(raw.plan)) {
@@ -1691,43 +1933,163 @@
         }
       });
 
-      wireChatPanel('researcher', 'researcher-chat-input', 'researcher-chat-send', 'researcher-chat-history');
+      wireChatPanel('researcher');
     }
 
     /* ── Atlas ── */
     if (agentId === 'atlas') {
-      const runBtn     = $('atlasRunBtn');
-      const statusEl   = $('atlasTaskStatus');
-      const statusMsg  = $('atlasTaskStatusMsg');
-      const outputEl   = $('atlasOutput');
-      const outputLbl  = $('atlasOutputLabel');
-      const markdownEl = $('atlasMarkdownOutput');
-      const dlBtn      = $('atlasDownloadBtn');
-      const copyBtn    = $('atlasCopyBtn');
+      const runBtn       = $('atlasRunBtn');
+      const runLbl       = $('atlasRunBtnLabel');
+      const statusEl     = $('atlasTaskStatus');
+      const statusMsg    = $('atlasTaskStatusMsg');
+      const outputEl     = $('atlasOutput');
+      const outputLbl    = $('atlasOutputLabel');
+      const markdownEl   = $('atlasMarkdownOutput');
+      const dlBtn        = $('atlasDownloadBtn');
+      const copyBtn      = $('atlasCopyBtn');
+      const actionSel    = $('atlasActionSelect');
+      const researchRow  = $('atlasResearchRow');
+      const frameworkGrp = $('atlasFrameworkGroup');
+      let _atlasSessionId = `console-${Date.now()}`;
+
+      async function loadAtlasPipeline () {
+        const strip = $('atlasPipelineStrip');
+        if (!strip) return;
+        try {
+          const res = await apiFetch('/api/agents/atlas/ops');
+          const snap = res.snap || res;
+          const stages = Object.entries(snap.pipeline || {});
+          if (!stages.length) {
+            strip.textContent = `Pipeline: ${snap.totalLeads || 0} leads · Notion: ${snap.notionConnected ? 'connected' : 'not configured'}`;
+            return;
+          }
+          const top = stages.sort((a, b) => b[1].length - a[1].length).slice(0, 3)
+            .map(([s, items]) => `${s} (${items.length})`).join(' · ');
+          strip.textContent = `${snap.totalLeads || 0} leads — ${top} · Notion: ${snap.notionConnected ? '✓' : '—'}`;
+        } catch {
+          strip.textContent = 'Pipeline unavailable — check backend connection.';
+        }
+      }
+
+      function syncAtlasFormUi () {
+        const action = actionSel?.value || 'full_deal_engine';
+        if (runLbl) runLbl.textContent = ATLAS_ACTION_LABELS[action] || 'Run';
+        if (researchRow) researchRow.style.display = action === 'research' ? '' : 'none';
+        if (frameworkGrp) frameworkGrp.style.display = action === 'build_framework' ? '' : 'none';
+        const acctLbl = $('atlasAccountLabel');
+        if (acctLbl) {
+          acctLbl.textContent = action === 'dream50' ? 'Industry / sector'
+            : action === 'research' ? 'Research topic'
+            : action === 'build_framework' ? 'Domain context (optional)'
+            : 'Account / target';
+        }
+        const ctxLbl = $('atlasContextLabel');
+        if (ctxLbl) {
+          ctxLbl.textContent = action === 'strategy_session' ? 'Strategy message'
+            : action === 'deal_diagnostic' ? 'Deal context / answers'
+            : 'Brief / context';
+        }
+      }
+
+      actionSel?.addEventListener('change', syncAtlasFormUi);
+      syncAtlasFormUi();
+      loadAtlasPipeline();
+      wireChatPanel(agentId);
 
       runBtn?.addEventListener('click', async () => {
-        const topic  = $('atlasTopicInput')?.value?.trim();
-        const action = $('atlasActionSelect')?.value;
-        const depth  = parseInt($('atlasDepthSelect')?.value || '2', 10);
-        const fmt    = $('atlasDocFormatSelect')?.value || 'docx';
-        if (!topic) { alert('Please enter a research topic.'); return; }
+        const action  = actionSel?.value || 'full_deal_engine';
+        const account = $('atlasAccountInput')?.value?.trim() || '';
+        const context = $('atlasContextInput')?.value?.trim() || '';
+        const stage   = $('atlasDealStageSelect')?.value || '';
+
+        if (!ATLAS_ACCOUNT_OPTIONAL.has(action) && !account && action !== 'strategy_session') {
+          alert('Enter an account / target name.');
+          return;
+        }
+        if (action === 'strategy_session' && !context && !account) {
+          alert('Enter a strategy message or account name.');
+          return;
+        }
+        if (action === 'research' && !account && !context) {
+          alert('Enter a research topic.');
+          return;
+        }
+
+        const payload = {
+          action,
+          accountName: account,
+          company:     account,
+          context,
+          dealStage:   stage,
+          sessionId:   _atlasSessionId,
+        };
+
+        if (action === 'research') {
+          payload.topic = account || context;
+          payload.depth = parseInt($('atlasDepthSelect')?.value || '2', 10);
+          payload.docFormat = $('atlasDocFormatSelect')?.value || 'docx';
+        } else if (action === 'dream50') {
+          payload.industry = account || context || 'SME professional services';
+          payload.topic = payload.industry;
+        } else if (action === 'strategy_session') {
+          payload.message = context || `Strategy session for ${account}`;
+        } else if (action === 'build_framework') {
+          payload.frameworkName = $('atlasFrameworkInput')?.value?.trim() || account || 'BD Framework';
+          payload.domain = 'business_development';
+          payload.instruction = context || payload.frameworkName;
+          payload.topic = payload.frameworkName;
+        } else if (action === 'client_maturity_assessment') {
+          payload.answers = context || account;
+        } else if (action === 'deal_diagnostic') {
+          payload.answers = context || account;
+        } else {
+          payload.topic = account;
+        }
+
         runBtn.disabled = true;
-        await runTask('atlas', { action, topic, depth, docFormat: fmt }, {
+        dlBtn.style.display = 'none';
+        await runTask('atlas', payload, {
           statusEl, statusMsgEl: statusMsg, outputEl, outputLabelEl: outputLbl,
           markdownEl,
+          formatResult: formatAtlasResult,
           onSuccess (task) {
             runBtn.disabled = false;
-            if (task.document?.filename) {
-              outputLbl.textContent = `Output — ${esc(task.document.filename)}`;
+            const raw = task.result || task.output || task;
+            const doc = raw?.document || task.document;
+            if (doc?.filename) {
+              outputLbl.textContent = `Output — ${esc(doc.filename)}`;
               dlBtn.style.display = 'inline-flex';
               dlBtn.onclick = () => {
                 const base = getBackendUrl();
-                if (base) window.open(`${base}/api/agents/atlas/download/${encodeURIComponent(task.document.filename)}`, '_blank');
+                if (base) window.open(`${base}/api/agents/atlas/download/${encodeURIComponent(doc.filename)}`, '_blank');
               };
             }
+            if (action === 'strategy_session') {
+              _atlasSessionId = payload.sessionId;
+            }
+            loadAtlasPipeline();
           },
         });
         runBtn.disabled = false;
+      });
+
+      $('atlasSessionNotesBtn')?.addEventListener('click', async () => {
+        const notesBtn = $('atlasSessionNotesBtn');
+        notesBtn.disabled = true;
+        statusEl.style.display = 'flex';
+        statusMsg.textContent = 'Compiling session brief…';
+        try {
+          const res = await apiFetch(`/api/agents/atlas/session-notes/${encodeURIComponent(_atlasSessionId)}`);
+          renderMarkdown(markdownEl, formatAtlasResult(res));
+          outputEl.style.display = 'flex';
+          if (outputLbl) outputLbl.textContent = `Session brief — ${_atlasSessionId}`;
+        } catch (e) {
+          renderMarkdown(markdownEl, `**Error:** ${esc(e.message)}`);
+          outputEl.style.display = 'flex';
+        } finally {
+          statusEl.style.display = 'none';
+          notesBtn.disabled = false;
+        }
       });
 
       copyBtn?.addEventListener('click', () => copyText(markdownEl?.innerText || ''));
@@ -2130,7 +2492,7 @@
     }
 
     /* ── Chat for agents that already have their own task UI ── */
-    if (['nexus', 'atlas', 'synthesizer', 'pulse'].includes(agentId)) {
+    if (['nexus', 'synthesizer', 'pulse'].includes(agentId)) {
       // Inject a collapsible chat section below the existing panel content
       const panel = area.querySelector(`.console-panel-inner`);
       if (panel && !panel.querySelector('.agent-chat-wrap')) {

@@ -1544,6 +1544,14 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── GET /api/agents/atlas/ops — pipeline + BD tools snapshot ─────────────
+  if (req.method === 'GET' && path === '/api/agents/atlas/ops') {
+    try {
+      json(res, await atlas.getBdOpsStatus());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // ── GET /api/agents/atlas/session-notes/:sessionId ───────────────────────
   // Retrieve compiled Deal Brief from a strategy session.
   const atlasSessionNotesMatch = path.match(/^\/api\/agents\/atlas\/session-notes\/([^/]+)$/);
@@ -2232,28 +2240,121 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/agents/chat/search?q=&agent= — search persisted conversations
+  if (req.method === 'GET' && path === '/api/agents/chat/search') {
+    try {
+      const q = url.searchParams.get('q') || '';
+      const agentFilter = url.searchParams.get('agent') || null;
+      const { searchChatMessages } = await import('./skills/agentChatStore.js');
+      json(res, { results: await searchChatMessages(q, { agentId: agentFilter }) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET /api/agents/:id/chat/history — load persisted thread
+  const chatHistoryMatch = path.match(/^\/api\/agents\/([a-z]+)\/chat\/history$/);
+  if (req.method === 'GET' && chatHistoryMatch) {
+    try {
+      const agentId = chatHistoryMatch[1];
+      const { loadChatHistory } = await import('./skills/agentChatStore.js');
+      const q = url.searchParams.get('q') || '';
+      const allEpochs = url.searchParams.get('all') === '1';
+      const limit = parseInt(url.searchParams.get('limit') || '80', 10);
+      json(res, await loadChatHistory(agentId, { q, allEpochs, limit }));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/:id/chat/clear — start new thread epoch (history archived, not deleted)
+  const chatClearMatch = path.match(/^\/api\/agents\/([a-z]+)\/chat\/clear$/);
+  if (req.method === 'POST' && chatClearMatch) {
+    try {
+      const { clearChatThread } = await import('./skills/agentChatStore.js');
+      json(res, await clearChatThread(chatClearMatch[1]));
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // DELETE /api/agents/chat/messages/:id — soft-delete one message
+  const chatMsgDeleteMatch = path.match(/^\/api\/agents\/chat\/messages\/([^/]+)$/);
+  if (req.method === 'DELETE' && chatMsgDeleteMatch) {
+    try {
+      const { softDeleteMessage } = await import('./skills/agentChatStore.js');
+      const ok = await softDeleteMessage(decodeURIComponent(chatMsgDeleteMatch[1]));
+      json(res, { ok });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // POST /api/agents/chat/messages/:id/rate — thumbs / stars + optional feedback
+  const chatMsgRateMatch = path.match(/^\/api\/agents\/chat\/messages\/([^/]+)\/rate$/);
+  if (req.method === 'POST' && chatMsgRateMatch) {
+    try {
+      const body = await readBody(req);
+      const { rateMessage, recordFeedbackMemory } = await import('./skills/agentChatStore.js');
+      const row = await rateMessage(chatMsgRateMatch[1], body.rating, body.feedback || '');
+      if (row) await recordFeedbackMemory(row.agent_id, row, body.rating, body.feedback || '');
+      json(res, { ok: true, message: row });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // POST /api/agents/:id/chat  — team direct conversation with any agent
-  //   body: { message, history: [{ role, content }] }
-  //   Supports all agents: nexus, atlas, nova, aether, pulse, synthesizer, assistant
+  //   body: { message, history?, replyTo?, parentId? }
+  //   Persists to Supabase; history survives refresh
   if (req.method === 'POST' && path.match(/^\/api\/agents\/[a-z]+\/chat$/)) {
     const agentId = path.split('/')[3];
     const agent = AGENTS[agentId];
     if (!agent) { err(res, `Agent ${agentId} not found`, 404); return; }
     try {
       const body = await readBody(req);
-      const { message, history = [] } = body;
+      const {
+        message,
+        history: clientHistory = [],
+        replyTo = null,
+        parentId = null,
+      } = body;
       if (!message?.trim()) { err(res, 'message is required', 400); return; }
+
+      const {
+        loadChatContext,
+        appendChatMessage,
+        resolveReplyContext,
+      } = await import('./skills/agentChatStore.js');
+
+      const parentRef = replyTo || parentId || null;
+      const agentMessage = await resolveReplyContext(parentRef, message.trim());
+
+      const userRow = await appendChatMessage(agentId, 'user', message.trim(), {
+        parentId: parentRef,
+        metadata: parentRef ? { replyTo: parentRef } : {},
+      });
+
+      const dbHistory = clientHistory.length
+        ? clientHistory
+        : await loadChatContext(agentId, 16);
+
       const chatTimeoutMs = Number(process.env.AGENT_CHAT_TIMEOUT_MS || 28000);
       const reply = await Promise.race([
-        agent.chat(message, history),
+        agent.chat(agentMessage, dbHistory),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Request timed out — server or AI provider is slow. On Render free tier, wake the service with /ping and retry.')), chatTimeoutMs),
         ),
       ]);
-      json(res, { reply, agentId, timestamp: new Date().toISOString() });
+
+      const assistantRow = await appendChatMessage(agentId, 'assistant', reply, {
+        parentId: userRow?.id || null,
+      });
+
+      json(res, {
+        reply,
+        agentId,
+        userMessageId:      userRow?.id || null,
+        assistantMessageId: assistantRow?.id || null,
+        timestamp:          new Date().toISOString(),
+      });
     } catch (e) {
       console.error(`[Chat/${path.split('/')[3]}]`, e.message);
-      // Return 200 with error text so the UI shows a message instead of bare HTTP 502 from the proxy
       json(res, {
         reply:    `⚠ ${e.message}`,
         agentId:  path.split('/')[3],

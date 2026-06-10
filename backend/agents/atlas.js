@@ -26,6 +26,13 @@ import { synthesizer }     from './synthesizer.js';
 import { runDeepResearch } from '../skills/research.js';
 import { buildConsultingDoc } from '../skills/docBuilder.js';
 import { getSupabase }     from '../supabaseClient.js';
+import { notion }          from '../notionClient.js';
+import {
+  buildBdOpsSnapshot,
+  formatBdLiveContext,
+  extractAccountName,
+} from '../skills/atlasBdOps.js';
+import { getFrameworksForAgent } from '../skills/firmFrameworks.js';
 
 // ── The Deal Engine — hardcoded as Atlas's operating doctrine ────────────────
 const DEAL_ENGINE = `
@@ -208,7 +215,7 @@ THE PRODUCT POSITIONING:
 `;
 
 // ── Atlas's character — the seasoned BD Director ─────────────────────────────
-const ATLAS_SYSTEM = `You are Atlas — DigiFusion's Senior Research Partner and Business Development Director.
+const ATLAS_SYSTEM = `You are Atlas — DigiFusion's Business Developer and Strategist (Deal Engine operator).
 
 YOUR BACKGROUND:
 You have 18 years of experience in complex B2B sales and market research across consulting, technology, and professional services sectors. You have personally closed engagements worth $50K–$500K with enterprise clients in West Africa, MENA, and Europe. You have trained BD teams at three regional consulting firms. You have lost deals you should have won — and you know exactly why — which is why you are obsessive about intelligence, preparation, and deal architecture.
@@ -253,10 +260,156 @@ export class Atlas extends AgentBase {
     super({
       id:           'atlas',
       displayName:  'Atlas',
-      role:         'Research & Business Development Director',
+      role:         'Business Developer & Strategist',
       systemPrompt: ATLAS_SYSTEM,
       domains:      ['business_development', 'general'],
     });
+  }
+
+  async getBdOpsStatus() {
+    const snap = await buildBdOpsSnapshot();
+    return { snap, context: formatBdLiveContext(snap) };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CHAT — BD actions + grounded strategy (not generic LLM-only replies)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async chat(message, history = []) {
+    const lower = message.toLowerCase();
+    const account = extractAccountName(message);
+
+    // ── Pipeline / leads ───────────────────────────────────────────────────
+    if (/pipeline|leads|how many lead|deal pipeline/.test(lower)) {
+      const { snap } = await this.getBdOpsStatus();
+      const stages = Object.entries(snap.pipeline || {});
+      if (!stages.length) return 'Boss, pipeline is empty right now — no leads in Supabase yet.';
+      const top = stages.sort((a, b) => b[1].length - a[1].length)[0];
+      return `Pipeline: ${snap.totalLeads} leads across ${stages.length} stages. Top stage: **${top[0]}** (${top[1].length}). Use Console → Run Deal Engine on a named account, or ask me to analyse a prospect.`;
+    }
+
+    // ── Full Deal Engine ───────────────────────────────────────────────────
+    if (/full deal engine|run deal engine|deal engine for/.test(lower)) {
+      const name = account || message.replace(/full deal engine|run deal engine|deal engine for/gi, '').trim().slice(0, 60);
+      if (!name) return 'Boss, name the account — e.g. "run deal engine for Acme Corp".';
+      const { result } = await this.runFullDealEngine(name, { context: message });
+      return `**Deal Engine — ${name}**\n\n${(result || '').slice(0, 3500)}${(result || '').length > 3500 ? '\n\n…(truncated — full output in Activity task log)' : ''}`;
+    }
+
+    // ── Deal diagnostic / scorecard ────────────────────────────────────────
+    if (/deal diagnostic|score this deal|bd scorecard|deal readiness/.test(lower)) {
+      const name = account || message.replace(/deal diagnostic|score this deal|bd scorecard/gi, '').trim().slice(0, 60);
+      if (!name) return 'Boss, which account? e.g. "deal diagnostic for Globex".';
+      const { report, compositeScore, dealStage } = await this.runDealDiagnostic(name, message);
+      const scoreLine = compositeScore != null ? `\n\n**Score:** ${compositeScore}/100 — **${dealStage}**` : '';
+      return `**Deal Diagnostic — ${name}**${scoreLine}\n\n${(report || '').slice(0, 3000)}`;
+    }
+
+    // ── Dream 50 ───────────────────────────────────────────────────────────
+    if (/dream 50|dream50|target accounts|icp for/.test(lower)) {
+      const industry = message.replace(/dream 50|dream50|target accounts|icp for/gi, '').trim() || 'SME professional services Africa';
+      const result = await this.buildDream50(industry, { context: message });
+      return `**Dream 50 — ${industry}**\n\n${(result || '').slice(0, 3000)}`;
+    }
+
+    // ── Prospect analysis ──────────────────────────────────────────────────
+    if (/analyse prospect|analyze prospect|prospect analysis|qualify /.test(lower)) {
+      const name = account || message.replace(/analyse prospect|analyze prospect|prospect analysis|qualify/gi, '').trim().slice(0, 60);
+      if (!name) return 'Boss, which company should I analyse?';
+      const result = await this.analyseProspect(name, message);
+      return `**Prospect Analysis — ${name}**\n\n${(result || '').slice(0, 3000)}`;
+    }
+
+    // ── Client BD maturity ─────────────────────────────────────────────────
+    if (/bd maturity|maturity assessment|sales process maturity/.test(lower)) {
+      const name = account || message.replace(/bd maturity|maturity assessment/gi, '').trim().slice(0, 60) || 'Client';
+      const { report, tier } = await this.runClientMaturityAssessment(name, message);
+      const tierLine = tier ? `\n\n**Tier:** ${tier}` : '';
+      return `**BD Maturity Assessment — ${name}**${tierLine}\n\n${(report || '').slice(0, 3000)}`;
+    }
+
+    // ── Phase shortcuts ────────────────────────────────────────────────────
+    if (/phase 1|intelligence phase|account influence map/.test(lower)) {
+      const name = account || 'Target Account';
+      const result = await this.runPhase1Intelligence(name, message);
+      return `**Phase 1 — Intelligence (${name})**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 2|spin diagnostic|discovery call/.test(lower)) {
+      const name = account || 'Target Account';
+      const result = await this.runPhase2Diagnostic(name, message);
+      return `**Phase 2 — SPIN Diagnostic (${name})**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 3|insight hook|challenger/.test(lower)) {
+      const name = account || 'Target Account';
+      const result = await this.runPhase3Insight(name, '', message);
+      return `**Phase 3 — Challenger Insight (${name})**\n\n${(result || '').slice(0, 3000)}`;
+    }
+    if (/phase 4|consensus|buying committee|blue sheet/.test(lower)) {
+      const name = account || 'Target Account';
+      const result = await this.runPhase4Consensus(name, '', message);
+      return `**Phase 4 — Consensus (${name})**\n\n${(result || '').slice(0, 3000)}`;
+    }
+
+    // ── Log BD note to Notion ──────────────────────────────────────────────
+    if (/log .+ to notion/i.test(lower) || (lower.includes('log') && lower.includes('notion'))) {
+      const subject = message.replace(/log|to notion|into notion/gi, '').trim() || message;
+      const pageId = await notion.logTask({
+        agentId: 'atlas', agentName: 'Atlas',
+        taskTitle: subject.slice(0, 200),
+        taskType: 'bd_note', outcome: 'logged',
+        notes: `Logged via Atlas chat at ${new Date().toISOString()}`,
+      });
+      return pageId
+        ? `Done, Boss. BD note logged to Notion: "${subject.slice(0, 80)}".`
+        : 'Notion is not wired on this server — set NOTION_API_KEY and NOTION_TASKS_DB_ID on Render.';
+    }
+
+    // ── Session notes compile ──────────────────────────────────────────────
+    if (/session notes|compile deal brief|deal brief from session/.test(lower)) {
+      const sid = message.match(/session[:\s-]+(\S+)/i)?.[1] || 'chat-general';
+      const { summary } = await this.getSessionNotes(sid);
+      return summary || 'No session intel found for that ID.';
+    }
+
+    // ── Default: live strategy session with BD context ─────────────────────
+    const { context: liveContext } = await this.getBdOpsStatus();
+    const frameworks = getFrameworksForAgent('atlas').map(f => f.oneLiner).join('\n');
+    const sessionId = `chat-${(account || 'general').toLowerCase().replace(/\W+/g, '-').slice(0, 40)}`;
+
+    const sessionResult = await this.strategySession(message, sessionId, {
+      account: account || '',
+      dealStage: '',
+      contactName: '',
+    });
+
+    const response = sessionResult.response || '';
+    const flags = [
+      ...(sessionResult.redFlags || []),
+      ...(sessionResult.signals || []),
+    ].length
+      ? `\n\n---\n*Intel captured to session \`${sessionId}\`. Say "compile deal brief session:${sessionId}" for a full brief.*`
+      : '';
+
+    // If strategy session returned thin response, enrich with LLM + live context
+    if (response.length < 80) {
+      const historyBlock = history.slice(-6).map(t =>
+        `${t.role === 'user' ? 'Boss' : 'Atlas'}: ${t.content}`
+      ).join('\n');
+      const enriched = await callAiProvider(
+        resolveProvider(),
+        [
+          `LIVE BD STATE:\n${liveContext}`,
+          frameworks ? `FIRM FRAMEWORKS:\n${frameworks}` : '',
+          historyBlock ? `CONVERSATION:\n${historyBlock}` : '',
+          `Boss: ${message}`,
+        ].filter(Boolean).join('\n\n'),
+        this.systemPrompt + '\nYou are in BD strategy chat. Be direct. Reference Deal Engine phases. Address the user as Boss.',
+        { json: false, fallback: true },
+      );
+      return enriched + flags;
+    }
+
+    return response + flags;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
