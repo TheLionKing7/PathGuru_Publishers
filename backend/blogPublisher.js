@@ -26,8 +26,18 @@ import { injectAdvocateIntoBlogPrompt, buildContentAdvocateSystemBlock } from '.
 /** Default byline for DigiFusion blog posts — founder voice, not system accounts. */
 export const DEFAULT_BLOG_AUTHOR = 'Boroji Adebayo-Hopewell, Founder';
 
+/** Split stored author_name into display name (header) and full byline (footer). */
+export function parseBlogAuthor(authorName = DEFAULT_BLOG_AUTHOR) {
+  const full = String(authorName || DEFAULT_BLOG_AUTHOR).trim();
+  const comma = full.indexOf(',');
+  if (comma === -1) return { name: full, byline: full, title: '' };
+  const name = full.slice(0, comma).trim();
+  const title = full.slice(comma + 1).trim();
+  return { name, byline: full, title };
+}
+
 /* ── Build blog post HTML from sections ───────────────── */
-function buildBlogHtml(post, design = {}) {
+function buildBlogSectionsHtml(post, design = {}) {
   const accent    = design?.palette?.accent    || '#2bb3a3';
   const pageFg    = design?.palette?.pageFg    || '#1a2236';
   const bodyFont  = design?.bodyFont           || "'DM Sans', system-ui, sans-serif";
@@ -98,7 +108,31 @@ function buildBlogHtml(post, design = {}) {
     return `${s.heading ? `<h2>${renderInline(s.heading)}</h2>` : ''}${body}`;
   }
 
-  const sectionsHtml = (post.sections || []).map(renderSection).join('\n');
+  return (post.sections || []).map(renderSection).join('\n');
+}
+
+/** Body-only HTML for DigiFusion CMS (no duplicate title/excerpt wrapper). */
+export function buildBlogBodyHtml(post, design = {}) {
+  return buildBlogSectionsHtml(post, design);
+}
+
+/** CMS-safe HTML — body fragment only (handles legacy full-document drafts). */
+export function resolveCmsBlogHtml(html, post) {
+  if (post?.sections?.length) return buildBlogBodyHtml(post);
+  const m = String(html || '').match(
+    /<div[^>]*class=["'][^"']*post-body[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+  );
+  if (m?.[1]) return m[1].trim();
+  return html || '';
+}
+
+function buildBlogHtml(post, design = {}) {
+  const accent    = design?.palette?.accent    || '#2bb3a3';
+  const pageFg    = design?.palette?.pageFg    || '#1a2236';
+  const bodyFont  = design?.bodyFont           || "'DM Sans', system-ui, sans-serif";
+  const titleFont = design?.titleFont          || "'Playfair Display', Georgia, serif";
+  const fontImport = design?.fontImport        || '';
+  const sectionsHtml = buildBlogSectionsHtml(post, design);
 
   return `<!doctype html>
 <html lang="en">
@@ -488,7 +522,7 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
 
   // Stamp input-level fields onto the post object so they survive the
   // publish pipeline (post.postType / post.authorName are not AI-generated)
-  post.postType  = input.postType || post.postType || 'guide';
+  post.postType  = input.postType || post.postType || 'article';
   post.authorName = input.author || post.authorName || DEFAULT_BLOG_AUTHOR;
 
   // 4. Fetch featured image from Pexels
@@ -501,8 +535,9 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
     post.featuredImageCredit = images?.[0]?.photographer || 'Pexels';
   } catch {}
 
-  // 5. Build HTML
+  // 5. Build HTML — full document for export; body fragment for DigiFusion CMS
   const html = buildBlogHtml(post);
+  const bodyHtml = buildBlogBodyHtml(post);
 
   // 6. Publish to platform(s)
   const publishResults = [];
@@ -514,7 +549,7 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
       if (platform.type === 'wordpress')   result = await publishToWordPress(post, platform, featuredImageUrl);
       else if (platform.type === 'ghost')       result = await publishToGhost(post, platform, featuredImageUrl);
       else if (platform.type === 'webflow')     result = await publishToWebflow(post, platform, featuredImageUrl);
-      else if (platform.type === 'digifusion')  result = await publishToDigiFusion(post, platform, html);
+      else if (platform.type === 'digifusion')  result = await publishToDigiFusion(post, platform, bodyHtml);
       if (result) publishResults.push(result);
     } catch (err) {
       publishResults.push({ platform: platform.type, error: err.message });
@@ -537,8 +572,8 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
       title: post.title || input.topic,
       slug,
       excerpt: post.excerpt || '',
-      content: html,
-      postType: input.postType || 'guide',
+      content: bodyHtml,
+      postType: input.postType || 'article',
       metaDescription: post.metaDescription || '',
       focusKeyword: post.focusKeyword || input.seoKeyword || '',
       featuredImageUrl: featuredImageUrl,
@@ -590,7 +625,9 @@ export async function publishBlogPost({ post, html, platforms, postId, featuredI
       if (platform.type === 'wordpress')  result = await publishToWordPress(post, platform, featuredImageUrl || post.featuredImageUrl);
       else if (platform.type === 'ghost')      result = await publishToGhost(post, platform, featuredImageUrl || post.featuredImageUrl);
       else if (platform.type === 'webflow')    result = await publishToWebflow(post, platform, featuredImageUrl || post.featuredImageUrl);
-      else if (platform.type === 'digifusion') result = await publishToDigiFusion(post, platform, html);
+      else if (platform.type === 'digifusion') {
+        result = await publishToDigiFusion(post, platform, resolveCmsBlogHtml(html, post));
+      }
       if (result) publishResults.push(result);
     } catch (e) {
       publishResults.push({ platform: platform.type, error: e.message });

@@ -44,7 +44,7 @@ export async function executeApprovedBlogPublish(payload = {}) {
     ctaGoal:        payload.ctaGoal,
     aetherContent:  rawContent,
     researchBrief,
-    postType:       payload.postType || 'guide',
+    postType:       payload.postType || 'article',
     author:         payload.author || payload.recommendedAuthor || DEFAULT_BLOG_AUTHOR,
     platforms: [{
       type:    'digifusion',

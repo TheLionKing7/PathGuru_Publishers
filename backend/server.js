@@ -1505,7 +1505,7 @@ const server = createServer(async (req, res) => {
         ctaGoal,
         personaId,
         aetherContent:  rawContent,
-        postType:       body.postType || 'guide',
+        postType:       body.postType || 'article',
         author:         body.author || 'Boroji Adebayo-Hopewell, Founder',
         researchBrief:  researchBrief || '',
         playbookSlug:   playbookSlug || '',

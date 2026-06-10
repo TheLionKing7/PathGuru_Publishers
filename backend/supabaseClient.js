@@ -99,7 +99,7 @@ export async function createPost(post) {
       slug: post.slug,
       excerpt: post.excerpt || null,
       content: post.content || null,
-      post_type: post.postType || 'guide',
+      post_type: post.postType || 'article',
       meta_description: post.metaDescription || null,
       focus_keyword: post.focusKeyword || null,
       featured_image_url: post.featuredImageUrl || null,
