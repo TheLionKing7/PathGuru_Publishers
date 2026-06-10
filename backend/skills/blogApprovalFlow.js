@@ -4,6 +4,8 @@
 
 import { aether } from '../agents/aether.js';
 import { generateAndPublishBlogPost, DEFAULT_BLOG_AUTHOR } from '../blogPublisher.js';
+import { resolveContentAuthor } from './contentAuthorRegistry.js';
+import { loadContentAuthorSettings } from './contentAuthorSettings.js';
 
 /**
  * After Boss approves via WhatsApp, write and publish the blog to DigiFusion CMS.
@@ -35,18 +37,28 @@ export async function executeApprovedBlogPublish(payload = {}) {
 
   const siteUrl = (process.env.DIGIFUSION_API_URL || 'https://www.digitafusion.com').replace(/\/$/, '');
 
+  const authorSettings = await loadContentAuthorSettings().catch(() => ({}));
+  const resolvedAuthor = resolveContentAuthor({
+    topic,
+    niche:         payload.niche || payload.sector,
+    domain:        payload.contentDomain || payload.domain,
+    category:      payload.category,
+    authorId:      payload.authorId,
+    domainAuthors: authorSettings.domainAuthors,
+  });
+
   const result = await generateAndPublishBlogPost({
     topic,
     slug:           payload.slug,
     audience:       payload.audience,
     tone:           payload.recommendedTone || payload.tone || 'authoritative yet accessible',
     seoKeyword:     payload.seoKeyword || topic,
-    niche:          payload.niche || payload.sector || 'digital_media',
+    niche:          payload.niche || payload.sector || resolvedAuthor.contentDomain,
     ctaGoal:        payload.ctaGoal,
     aetherContent:  rawContent,
     researchBrief,
     postType:       payload.postType || 'article',
-    author:         payload.author || payload.recommendedAuthor || DEFAULT_BLOG_AUTHOR,
+    author:         payload.author || payload.recommendedAuthor || resolvedAuthor.byline || DEFAULT_BLOG_AUTHOR,
     platforms: [{
       type:    'digifusion',
       status:  'published',

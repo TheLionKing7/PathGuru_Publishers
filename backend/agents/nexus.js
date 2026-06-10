@@ -746,6 +746,16 @@ No full article. Brief only.`;
             `*Hook:*\n${(brief.hook || '').slice(0, 280)}`,
           ].join('\n');
 
+          const { resolveContentAuthor } = await import('../skills/contentAuthorRegistry.js');
+          const { loadContentAuthorSettings } = await import('../skills/contentAuthorSettings.js');
+          const authorSettings = await loadContentAuthorSettings().catch(() => ({}));
+          const resolvedAuthor = resolveContentAuthor({
+            topic:         brief.proposedTitle || instruction,
+            niche:         options.niche || options.sector,
+            domain:        options.domain || options.contentDomain,
+            domainAuthors: authorSettings.domainAuthors,
+          });
+
           const { approvalId, whatsappSent } = await createApprovalRequest({
             approvalType: 'blog_post',
             subject:      `Blog post approval — ${(brief.proposedTitle || instruction).slice(0, 60)}`,
@@ -755,11 +765,14 @@ No full article. Brief only.`;
               proposedTitle:    brief.proposedTitle,
               outline:          brief.outline,
               recommendedTone:  brief.recommendedTone,
-              recommendedAuthor: brief.recommendedAuthor || 'Boroji Adebayo-Hopewell, Founder',
+              recommendedAuthor: brief.recommendedAuthor || resolvedAuthor.byline,
+              authorId:         resolvedAuthor.id,
+              contentDomain:    resolvedAuthor.contentDomain,
               seoKeyword:       brief.seoKeyword,
               researchBrief:    researchBrief.slice(0, 3000),
               frameworkId:      'c2c',
-              niche:            'digital_media',
+              niche:            resolvedAuthor.contentDomain,
+              postType:         options.postType || 'article',
             },
           });
 

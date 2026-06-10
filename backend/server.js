@@ -1504,18 +1504,30 @@ const server = createServer(async (req, res) => {
         frameworkId: frameworkId || '',
       });
 
+      const { resolveContentAuthor } = await import('./skills/contentAuthorRegistry.js');
+      const { loadContentAuthorSettings } = await import('./skills/contentAuthorSettings.js');
+      const authorSettings = await loadContentAuthorSettings().catch(() => ({}));
+      const resolvedAuthor = resolveContentAuthor({
+        topic,
+        niche:         niche || body.domain,
+        domain:        body.domain || body.contentDomain,
+        category:      body.category,
+        authorId:      body.authorId,
+        domainAuthors: authorSettings.domainAuthors,
+      });
+
       // Step 2 — Pass through the full blog publisher pipeline (HTML + image + CMS)
       const result = await generateAndPublishBlogPost({
         topic,
         audience,
         tone:           tone || 'authoritative yet accessible',
         seoKeyword:     seoKeyword || topic,
-        niche:          niche || 'digital_media',
+        niche:          niche || resolvedAuthor.contentDomain,
         ctaGoal,
         personaId,
         aetherContent:  rawContent,
         postType:       body.postType || 'article',
-        author:         body.author || 'Boroji Adebayo-Hopewell, Founder',
+        author:         body.author || resolvedAuthor.byline,
         researchBrief:  researchBrief || '',
         playbookSlug:   playbookSlug || '',
         playbookTitle,
@@ -2823,6 +2835,27 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && path === '/api/agents/nexus/ceo-ops') {
     try {
       json(res, await AGENTS.nexus.getCeoOpsStatus());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // GET/PUT /api/settings/content-authors — domain → author routing
+  if (path === '/api/settings/content-authors') {
+    try {
+      const { loadContentAuthorSettings, saveContentAuthorSettings, listAuthorProfiles } =
+        await import('./skills/contentAuthorSettings.js');
+      if (req.method === 'GET') {
+        const settings = await loadContentAuthorSettings();
+        json(res, { settings, profiles: listAuthorProfiles() });
+        return;
+      }
+      if (req.method === 'PUT' || req.method === 'POST') {
+        const body = await readBody(req);
+        const settings = await saveContentAuthorSettings(body);
+        json(res, { settings, profiles: listAuthorProfiles() });
+        return;
+      }
+      err(res, 'Method not allowed', 405);
     } catch (e) { err(res, e.message, 500); }
     return;
   }
