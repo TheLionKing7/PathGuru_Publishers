@@ -150,9 +150,10 @@ async function logRetuneTask(target, retune, isBlueprint = false) {
     ].filter(Boolean).join('\n'),
   }).catch(() => {});
 
+  const { supabaseWrite } = await import('../supabaseClient.js');
   const db = getSupabase();
   if (db && retune.delegateTo) {
-    await db.from('tasks').insert({
+    await supabaseWrite(db.from('tasks').insert({
       title:       `[${retune.delegateTo}] Retune: ${name}`,
       description: retune.adjustments.join('\n'),
       agent_id:    retune.delegateTo,
@@ -164,6 +165,6 @@ async function logRetuneTask(target, retune, isBlueprint = false) {
         blueprintId: isBlueprint ? target.id : undefined,
         engagementId: isBlueprint ? undefined : target.id,
       }),
-    }).catch(() => {});
+    }), 'engagement retune task');
   }
 }

@@ -40,7 +40,7 @@ import { searchPexels, uploadAssetsToR2 } from './pexelsAssets.js';
 import { buildEpub }                      from './epubBuilder.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
-import { createPost as dbCreatePost, updatePost as dbUpdatePost, getSupabase } from './supabaseClient.js';
+import { createPost as dbCreatePost, updatePost as dbUpdatePost, getSupabase, supabaseWrite } from './supabaseClient.js';
 
 // ── Agent network ──────────────────────────────────────────────────────────────
 import { synthesizer } from './agents/synthesizer.js';
@@ -2054,11 +2054,11 @@ const server = createServer(async (req, res) => {
         if (data) {
           const db2 = getSupabase();
           if (db2) {
-            db2.from('content_attribution_events').insert({
+            supabaseWrite(db2.from('content_attribution_events').insert({
               event_type: 'booking',
               email:      inv.email,
               metadata:   { bookingId: data.id, source: 'calendly', startTime: evt.start_time },
-            }).catch(() => {});
+            }), 'calendly attribution');
           }
           nexus.escalateToOwner({
             subject:  `Calendly booking — ${inv.name}`,

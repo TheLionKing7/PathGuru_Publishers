@@ -128,9 +128,10 @@ export async function buildClientBlueprint(input = {}, nexusAgent = null) {
   }).catch(() => {});
 
   if (leadId) {
-    const db = (await import('../supabaseClient.js')).getSupabase();
+    const { getSupabase, supabaseWrite } = await import('../supabaseClient.js');
+    const db = getSupabase();
     if (db) {
-      await db.from('tasks').insert({
+      await supabaseWrite(db.from('tasks').insert({
         title:       `[Boss] Implement: ${displayName} blueprint`,
         description: (merged.boss_implementation_tasks || []).map((t, i) => `${i + 1}. ${t}`).join('\n').slice(0, 4000),
         agent_id:    'nexus',
@@ -139,7 +140,7 @@ export async function buildClientBlueprint(input = {}, nexusAgent = null) {
         priority:    2,
         type:        'client_blueprint',
         input:       JSON.stringify({ blueprintId, leadId, track }),
-      }).catch(() => {});
+      }), 'blueprint boss task');
     }
   }
 

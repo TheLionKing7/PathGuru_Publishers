@@ -181,9 +181,10 @@ Rules: 3–4 phases, 5 scorecard dimensions (weights sum 100), 8+ diagnostic que
     });
   }
 
-  const db = (await import('../supabaseClient.js')).getSupabase();
+  const { getSupabase, supabaseWrite } = await import('../supabaseClient.js');
+  const db = getSupabase();
   if (db) {
-    await db.from('gem_crystallizations').insert({
+    await supabaseWrite(db.from('gem_crystallizations').insert({
       title: framework.title || title,
       slug,
       domain,
@@ -193,7 +194,7 @@ Rules: 3–4 phases, 5 scorecard dimensions (weights sum 100), 8+ diagnostic que
       promoted: !!promotion,
       provenance: gems.slice(0, 8).map(g => ({ title: g.unit.title, score: g.gemScore, source: g.unit.source_key })),
       metadata: { quality: quality.grade },
-    }).catch(e => console.warn('[Crystallize] audit log:', e.message));
+    }), 'crystallize audit');
   }
 
   return {

@@ -3,7 +3,7 @@
  * Wired to C2C growth engine and DigiFusion site forms.
  */
 
-import { getSupabase } from '../supabaseClient.js';
+import { getSupabase, supabaseWrite } from '../supabaseClient.js';
 import { sendEmail } from './emailer.js';
 
 const DEFAULT_SEQUENCE_SLUG = 'c2c-welcome-5';
@@ -26,14 +26,14 @@ function defaultNurtureEmails(magnetTitle) {
 async function logAttribution(eventType, fields = {}) {
   const db = getSupabase();
   if (!db) return;
-  await db.from('content_attribution_events').insert({
+  await supabaseWrite(db.from('content_attribution_events').insert({
     event_type:       eventType,
     content_slug:     fields.contentSlug || null,
     lead_magnet_slug: fields.magnetSlug || null,
     email:            fields.email || null,
     lead_id:          fields.leadId || null,
     metadata:         fields.metadata || {},
-  }).catch(e => console.warn('[Funnel] attribution log:', e.message));
+  }), 'funnel attribution');
 }
 
 /**

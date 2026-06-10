@@ -215,3 +215,15 @@ export async function deletePost(id) {
   if (error) return { error: error.message };
   return { success: true };
 }
+
+/** Await a Supabase query builder; log errors (use instead of .insert().catch). */
+export async function supabaseWrite(action, label = 'write') {
+  try {
+    const result = await action;
+    if (result?.error) console.warn(`[Supabase] ${label}:`, result.error.message);
+    return result;
+  } catch (e) {
+    console.warn(`[Supabase] ${label}:`, e.message);
+    return { error: e };
+  }
+}

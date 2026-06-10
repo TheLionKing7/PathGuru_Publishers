@@ -2,7 +2,7 @@
  * Engagement Delivery OS — phases, milestones, deliverables, sprints, escalation
  */
 
-import { getSupabase } from '../supabaseClient.js';
+import { getSupabase, supabaseWrite } from '../supabaseClient.js';
 
 const PHASE_ORDER = [
   'discovery_audit',
@@ -47,13 +47,13 @@ export async function ensureClientAccount({ name, email, company, leadId, segmen
 export async function logTimelineEvent({ accountId, engagementId, eventType, email, payload = {} }) {
   const db = getSupabase();
   if (!db) return;
-  await db.from('client_timeline').insert({
+  await supabaseWrite(db.from('client_timeline').insert({
     account_id: accountId,
     engagement_id: engagementId,
     event_type: eventType,
     email,
     payload,
-  }).catch(e => console.warn('[Engagement] timeline:', e.message));
+  }), 'client timeline');
 }
 
 /**
@@ -127,11 +127,11 @@ export async function createEngagementFromBlueprint(blueprint = {}) {
     }
   }
 
-  await db.from('engagement_economics').insert({
+  await supabaseWrite(db.from('engagement_economics').insert({
     engagement_id: engagement.id,
     revenue_booked: engagement.contract_value || 0,
     boss_rate: Number(process.env.BOSS_HOURLY_RATE || 250),
-  }).catch(() => {});
+  }), 'engagement economics');
 
   await logTimelineEvent({
     accountId: account?.id,

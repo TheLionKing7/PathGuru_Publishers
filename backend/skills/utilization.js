@@ -2,7 +2,7 @@
  * Utilization tracking — Boss + delivery capacity
  */
 
-import { getSupabase } from '../supabaseClient.js';
+import { getSupabase, supabaseWrite } from '../supabaseClient.js';
 import { getEngagementOpsSummary } from './engagementDelivery.js';
 
 const CAPACITY_BOSS_HOURS = Number(process.env.BOSS_WEEKLY_CAPACITY_HOURS || 40);
@@ -67,7 +67,7 @@ export async function snapshotUtilization() {
   const u = await computeCurrentUtilization();
   const db = getSupabase();
   if (db) {
-    await db.from('utilization_logs').insert({
+    await supabaseWrite(db.from('utilization_logs').insert({
       period_start: u.periodStart,
       period_end: u.periodEnd,
       boss_hours_used: u.bossHoursUsed,
@@ -75,7 +75,7 @@ export async function snapshotUtilization() {
       delivery_hours_scheduled: u.deliveryHoursScheduled,
       active_tasks: u.activeTasks,
       utilization_pct: u.utilizationPct,
-    }).catch(() => {});
+    }), 'utilization log');
   }
   return u;
 }

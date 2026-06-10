@@ -341,7 +341,6 @@ export class Nexus extends AgentBase {
   // TASK ROUTING & ORCHESTRATION
   // ══════════════════════════════════════════════════════════════════════════
 
-  // ── Intent classifier — detects if an instruction is primarily research ──
   _isResearchIntent(instruction) {
     const lower = instruction.toLowerCase();
     const researchSignals = [
@@ -354,6 +353,13 @@ export class Nexus extends AgentBase {
       'deep dive', 'audit', 'scan', 'survey', 'review the', 'understand',
     ];
     return researchSignals.some(s => lower.includes(s));
+  }
+
+  /** IP Factory — verb "synthesize", not the Synthesizer agent name. */
+  _isIpFactoryIntent(instruction) {
+    if (/synthesizer can|synthesizer to|for synthesizer|save to knowledge/i.test(instruction)) return false;
+    return /\b(synthesi[sz]e(?!r\b)|ip factory)\b.*\b(framework|playbook|blueprint|original ip)\b/i.test(instruction)
+      || /\b(create|build|develop)\b.{0,30}\b(original|firm)\b.{0,20}\b(framework|playbook|blueprint|ip)\b/i.test(instruction);
   }
 
   /**
@@ -486,7 +492,7 @@ export class Nexus extends AgentBase {
     const db = getSupabase();
 
     // ── IP Factory: synthesize original framework from resource pool ─────────
-    if (options.ipFactory || /synthesi[sz]e.*(framework|playbook|blueprint|ip)/i.test(instruction)) {
+    if (options.ipFactory || this._isIpFactoryIntent(instruction)) {
       const result = await runIpFactory({
         title:              options.title || instruction.slice(0, 120),
         domain:             options.domain || 'business_development',
