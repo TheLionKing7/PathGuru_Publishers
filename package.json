@@ -16,6 +16,7 @@
     "test:blog":    "node --env-file=.env scripts/test-blog.mjs",
     "test:review":  "node --env-file=.env scripts/test-blog.mjs --review",
     "test:cms":     "node scripts/e2e-cms.mjs",
+    "test:desktop-smoke": "node scripts/e2e-desktop-smoke.mjs",
     "publish:post": "node --env-file=.env scripts/publish-html-post.mjs",
     "delete:post":  "node --env-file=.env scripts/delete-post.mjs",
     "seed:digifusion": "node --env-file=.env.local scripts/seed-digifusion-content.mjs",

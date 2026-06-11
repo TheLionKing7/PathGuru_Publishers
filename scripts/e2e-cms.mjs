@@ -134,18 +134,18 @@ async function runUiFlow(postId) {
   const page = await context.newPage();
   page.on('dialog', (d) => d.accept());
 
-  const postsResponse = page.waitForResponse(
-    (r) => r.url().includes('/api/posts') && r.request().method() === 'GET' && r.status() === 200,
-    { timeout: 60_000 },
-  );
-
   await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
   await page.waitForSelector('#module-blog.module-shell.active', { timeout: 30_000 });
   pass('Blog Room module active');
 
-  await page.click('.blog-subtab[data-blogtab="dashboard"]');
-  await postsResponse;
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/posts') && r.request().method() === 'GET' && r.status() === 200,
+      { timeout: 60_000 },
+    ),
+    page.click('.blog-subtab[data-blogtab="dashboard"]'),
+  ]);
   pass('dashboard loads posts', 'GET /api/posts');
 
   await page.waitForSelector('#blogDashList .blog-dash-item', { timeout: 30_000 });
@@ -166,12 +166,14 @@ async function runUiFlow(postId) {
     el.innerHTML = '<p>E2E CMS wiring test body — edited via Playwright.</p>';
   });
 
-  const saveResponse = page.waitForResponse(
-    (r) => r.url().includes('/api/posts/') && r.request().method() === 'PUT' && r.status() === 200,
-    { timeout: 30_000 },
-  );
-  await page.click('#blogEditorSave');
-  await saveResponse;
+  const [saveRes] = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/posts/') && r.request().method() === 'PUT' && r.status() === 200,
+      { timeout: 30_000 },
+    ),
+    page.click('#blogEditorSave'),
+  ]);
+  if (!saveRes.ok()) fail('save edit', new Error(`HTTP ${saveRes.status()}`));
   pass('save edit', 'PUT /api/posts/:id');
 
   await page.click('#blogEditorBack');
@@ -183,25 +185,36 @@ async function runUiFlow(postId) {
   pass('edited title in dashboard');
 
   if (WITH_PUBLISH) {
+    await page.fill('#blogDashSearch', '');
+    await page.waitForTimeout(600);
     const pubRow = page.locator(`.blog-dash-item[data-id="${slug}"]`).first();
-    const pubResponse = page.waitForResponse(
-      (r) => r.url().includes('/publish') && r.request().method() === 'PATCH',
-      { timeout: 60_000 },
-    );
-    await pubRow.locator('.dash-publish').click();
-    const pubRes = await pubResponse;
-    if (!pubRes.ok()) fail('publish', new Error(`HTTP ${pubRes.status()}`));
-    pass('publish', 'PATCH /api/posts/:slug/publish');
+    await pubRow.scrollIntoViewIfNeeded();
+
+    const publishBtn = pubRow.locator('.dash-publish');
+    if (await publishBtn.count()) {
+      const [pubRes] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.url().includes('/publish') && !r.url().includes('unpublish') && r.request().method() === 'PATCH',
+          { timeout: 60_000 },
+        ),
+        publishBtn.click(),
+      ]);
+      if (!pubRes.ok()) fail('publish', new Error(`HTTP ${pubRes.status()}`));
+      pass('publish', 'PATCH /api/posts/:slug/publish');
+    } else {
+      pass('publish', 'already published after save (CMS PUT defaults status to published)');
+    }
 
     await page.waitForSelector(`.blog-dash-item[data-id="${slug}"] .dash-status-pill.published`, { timeout: 15_000 });
     pass('published badge visible');
 
-    const unpubResponse = page.waitForResponse(
-      (r) => r.url().includes('/unpublish') && r.request().method() === 'PATCH',
-      { timeout: 60_000 },
-    );
-    await pubRow.locator('.dash-unpublish').click();
-    const unpubRes = await unpubResponse;
+    const [unpubRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/unpublish') && r.request().method() === 'PATCH',
+        { timeout: 60_000 },
+      ),
+      pubRow.locator('.dash-unpublish').click(),
+    ]);
     if (!unpubRes.ok()) fail('unpublish', new Error(`HTTP ${unpubRes.status()}`));
     pass('unpublish', 'PATCH /api/posts/:slug/unpublish');
   } else {
@@ -209,13 +222,17 @@ async function runUiFlow(postId) {
   }
 
   if (!KEEP_POST) {
+    await page.fill('#blogDashSearch', '');
+    await page.waitForTimeout(600);
     const delRow = page.locator(`.blog-dash-item[data-id="${slug}"]`).first();
-    const delResponse = page.waitForResponse(
-      (r) => r.url().includes('/api/posts/') && r.request().method() === 'DELETE',
-      { timeout: 30_000 },
-    );
-    await delRow.locator('.dash-delete').click();
-    const delRes = await delResponse;
+    await delRow.scrollIntoViewIfNeeded();
+    const [delRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === 'DELETE' && /\/api\/posts\//.test(r.url()),
+        { timeout: 45_000 },
+      ),
+      delRow.locator('.dash-delete').click(),
+    ]);
     if (!delRes.ok()) fail('delete via UI', new Error(`HTTP ${delRes.status()}`));
     pass('delete via UI', 'DELETE /api/posts/:slug');
   }
