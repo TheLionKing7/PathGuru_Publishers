@@ -1,33 +1,59 @@
-# PathGuru Hybrid Desktop
+# GuruCMS Desktop
 
-Thin Electron client for the **cloud-primary** platform. The Render API keeps agents, cron, and publishing jobs running when this window is closed.
+Hybrid Electron client: **bundled local UI** + **cloud API** on Render. Agents, cron, and publishing jobs keep running when the window is closed.
 
-## Quick start
+## Quick start (development)
 
 ```bash
 npm install
 npm run desktop:dev
 ```
 
-Opens `https://pathguru-publishers.onrender.com` by default. Use the launcher to sign in to **PathGuru Publisher** or **DigiFusion Command** — both share the same backend URL and resources.
+Opens the bundled `webapp/index.html` and talks to `https://pathguru-publishers.onrender.com` by default.
+
+## Build Windows installer
+
+```bash
+npm install
+npm run desktop:build
+```
+
+Output: `dist/desktop/GuruCMS Setup *.exe` (NSIS installer).
+
+Unpacked app (no installer): `npm run desktop:build:dir` → `dist/desktop/win-unpacked/GuruCMS.exe`
+
+Icons are generated from `webapp/assets/gurucms-logo.png` via `npm run desktop:icons`.
+
+**Note:** Code signing is disabled (`signAndEditExecutable: false`) so builds work without Developer Mode / admin symlinks. For distribution, sign the installer with your certificate.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PATHGURU_CLOUD_URL` | `https://pathguru-publishers.onrender.com` | Cloud webapp + API |
-| `PATHGURU_PRODUCT` | _(empty)_ | Skip launcher with `publisher` or `digifusion` |
-| `PATHGURU_DESKTOP_LOCAL` | `0` | Set `1` to load `webapp/index.html` from disk |
+| `PATHGURU_CLOUD_URL` | `https://pathguru-publishers.onrender.com` | Cloud API base URL |
+| `PATHGURU_PRODUCT` | `digifusion` | Product profile (`digifusion` = full GuruCMS) |
+| `PATHGURU_DESKTOP_CLOUD` | `0` | Set `1` to load UI from cloud instead of bundled webapp |
 | `PATHGURU_DESKTOP_DEVTOOLS` | `0` | Set `1` to open DevTools |
 
-## Build installer
+## Architecture
 
-```bash
-npm run desktop:build
+```
+┌─────────────────────────────────────┐
+│  Electron window (GuruCMS)          │
+│  webapp/index.html  (local, file://)│
+│         │                           │
+│         ▼  HTTPS API                │
+│  pathguru-publishers.onrender.com   │
+│  agents · CMS · cron · storage      │
+└─────────────────────────────────────┘
 ```
 
-Output: `dist/desktop/`
+Settings (`pg_settings.backendUrl`) are seeded from preload on first launch. Change API URL in **Settings** if you run a local backend (`npm run dev` on `:8787`).
 
-## Commercial Publisher fork
+## Smoke test (no Electron)
 
-The `publisher` product profile is marked `commercialSku` in `backend/skills/productRegistry.js`. A future deploy can run `PATHGURU_PRODUCT_MODE=publisher` on a separate host while your full firm platform stays on the primary server.
+```bash
+npm run test:desktop-smoke
+```
+
+Verifies bundled `file://` UI + cloud API wiring (same as desktop default).

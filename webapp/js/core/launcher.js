@@ -10,7 +10,14 @@
     applyPlatformConfig, isProductEnabled, getDefaultProductId, getEnabledProductIds,
   } = window.PathGuruProducts;
 
+  function isDesktopApp() {
+    return !!window.__PATHGURU_DESKTOP__?.isDesktop;
+  }
+
   function resolveBackendBase() {
+    if (isDesktopApp() && window.__PATHGURU_DESKTOP__?.defaultBackendUrl) {
+      return String(window.__PATHGURU_DESKTOP__.defaultBackendUrl).replace(/\/$/, '');
+    }
     return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
 
@@ -129,8 +136,17 @@
   }
 
   async function init() {
-    document.documentElement.classList.add('pg-launcher-active');
     bindLauncherUi();
+
+    if (isDesktopApp()) {
+      document.documentElement.classList.add('pg-desktop');
+      document.body.classList.add('pg-desktop');
+      mergeBackendUrl(window.__PATHGURU_DESKTOP__.defaultBackendUrl);
+      const backendEl = document.getElementById('backendUrlDisplay');
+      if (backendEl) backendEl.textContent = window.__PATHGURU_DESKTOP__.defaultBackendUrl;
+    } else {
+      document.documentElement.classList.add('pg-launcher-active');
+    }
 
     const config = await fetchPlatformConfig();
     if (config) applyPlatformConfig(config);
@@ -157,6 +173,13 @@
     const stored = getStoredProductId();
     const enabled = getEnabledProductIds();
     const soleProduct = enabled.length === 1 ? enabled[0] : null;
+
+    if (isDesktopApp() && window.__PATHGURU_DESKTOP__?.skipLauncher && !switchMode) {
+      const desktopProduct = window.__PATHGURU_DESKTOP__.defaultProduct || 'digifusion';
+      const productId = isProductEnabled(desktopProduct) ? desktopProduct : getDefaultProductId();
+      navigateToProduct(productId);
+      return;
+    }
 
     if (soleProduct && !switchMode) {
       navigateToProduct(soleProduct);

@@ -200,10 +200,7 @@ body.pg-product-publisher .sidebar-brand .brand-sub::after {
   opacity: 0.7;
 }
 
-body.pg-product-digifusion .sidebar-brand .brand-sub::after {
-  content: ' · Command';
-  opacity: 0.7;
-}
+/* DigiFusion product mode — tagline is full width in .brand-sub; no duplicate suffix */
 
 /* Hide nav items not in active product */
 body.pg-product-publisher .nav-btn[data-dept]:not([data-dept="publisher"]) {

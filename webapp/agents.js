@@ -2336,22 +2336,37 @@
       let _pendingInstruction = null;
 
       function showResearchComplete(out, instruction) {
-        _pendingBrief       = out.brief;
+        const noSources = !(out.sources?.length);
+        const lowGrade  = out.qualityScore?.grade === 'D' || out.qualityScore?.grade === 'C';
+        const gated     = out.briefGated || (noSources && lowGrade);
+        _pendingBrief       = gated ? null : out.rawBrief || out.brief;
         _pendingInstruction = instruction;
         const badge = out.qualityBadge ? `\n\n${out.qualityBadge}` : '';
         let campaignNote = '';
-        if (out.campaign?.message) {
+        if (!gated && out.campaign?.message) {
           campaignNote = `\n\n---\n**Campaign wired**\n${out.campaign.message}\n\nSteps run automatically; track progress in **Activity** journal. Scheduled blogs go through Boss approval before publish.`;
-        } else if (out.workflowSignals?.autoWire) {
+        } else if (!gated && out.workflowSignals?.autoWire) {
           campaignNote = '\n\n---\n*Nexus is wiring follow-up steps (Synthesizer + content calendar)…*';
         }
+        const body = gated
+          ? (out.brief || badge)
+          : `**Orion has completed the research.**${badge}\n\n${out.rawBrief || out.brief || ''}`;
         renderMarkdown(markdownEl,
-          `**Orion has completed the research.**${badge}\n\n${out.brief || ''}${campaignNote}\n\n---\n*What should I do with these findings?*`
+          `${body}${campaignNote}\n\n---\n*What should I do with these findings?*`
         );
         const btnRow = document.createElement('div');
         btnRow.className = 'nexus-nextstep-row';
         btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px;';
+        if (gated) {
+          const retryBtn = document.createElement('button');
+          retryBtn.className = 'btn-console-run';
+          retryBtn.style.cssText = 'font-size:13px;padding:6px 14px;';
+          retryBtn.textContent = 'Re-run research (deep)';
+          retryBtn.addEventListener('click', () => callOrchestrate(instruction));
+          btnRow.appendChild(retryBtn);
+        }
         (out.nextSteps || []).forEach(step => {
+          if (gated && step.id !== 'save') return;
           const btn = document.createElement('button');
           btn.className   = 'btn-console-run';
           btn.style.cssText = 'font-size:13px;padding:6px 14px;';

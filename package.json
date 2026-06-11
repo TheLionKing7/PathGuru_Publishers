@@ -2,7 +2,9 @@
   "name": "pathguru-publishers",
   "version": "2.0.0",
   "private": true,
-  "description": "AI-powered publishing suite. Produces KDP-ready PDF and EPUB from a single prompt.",
+  "author": "GuruCMS",
+  "main": "desktop/main.cjs",
+  "description": "GuruCMS — Agentic Intelligence Command Center (CMS, agent network, firm operations).",
   "type": "module",
   "scripts": {
     "start": "node backend/server.js",
@@ -12,17 +14,19 @@
     "lint:staged": "lint-staged",
     "check": "node --check backend/server.js",
     "install-playwright": "npx playwright install --with-deps chromium",
-    "test":         "node ./tests/skills.test.js",
-    "test:blog":    "node --env-file=.env scripts/test-blog.mjs",
-    "test:review":  "node --env-file=.env scripts/test-blog.mjs --review",
-    "test:cms":     "node scripts/e2e-cms.mjs",
-    "test:agents":  "node scripts/e2e-agents.mjs",
+    "test": "node ./tests/skills.test.js",
+    "test:blog": "node --env-file=.env scripts/test-blog.mjs",
+    "test:review": "node --env-file=.env scripts/test-blog.mjs --review",
+    "test:cms": "node scripts/e2e-cms.mjs",
+    "test:agents": "node scripts/e2e-agents.mjs",
     "test:desktop-smoke": "node scripts/e2e-desktop-smoke.mjs",
     "publish:post": "node --env-file=.env scripts/publish-html-post.mjs",
-    "delete:post":  "node --env-file=.env scripts/delete-post.mjs",
+    "delete:post": "node --env-file=.env scripts/delete-post.mjs",
     "seed:digifusion": "node --env-file=.env.local scripts/seed-digifusion-content.mjs",
-    "desktop:dev": "electron desktop/main.js",
-    "desktop:build": "electron-builder --config desktop/electron-builder.yml"
+    "desktop:icons": "node scripts/generate-desktop-icon.mjs",
+    "desktop:dev": "electron desktop/main.cjs",
+    "desktop:build": "npm run desktop:icons && electron-builder --config desktop/electron-builder.yml",
+    "desktop:build:dir": "electron-builder --config desktop/electron-builder.yml --dir"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
@@ -36,10 +40,12 @@
     "node": ">=18"
   },
   "devDependencies": {
-    "electron": "^35.0.0",
+    "electron": "35.7.5",
     "electron-builder": "^25.1.8",
     "husky": "^9.1.7",
-    "lint-staged": "^15.4.3"
+    "lint-staged": "^15.4.3",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
   },
   "lint-staged": {
     "*.{js,mjs}": "node --check"

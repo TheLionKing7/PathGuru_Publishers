@@ -17,9 +17,9 @@
     },
     digifusion: {
       id: 'digifusion',
-      name: 'DigiFusion Command',
-      shortName: 'DigiFusion',
-      tagline: 'CMS, agent network & firm operations',
+      name: 'GuruCMS',
+      shortName: 'GuruCMS',
+      tagline: 'Agentic Intelligence Command Center',
       departments: ['blogroom', 'intelligence', 'products', 'network', 'analytics'],
       defaultDept: 'blogroom',
       defaultTab: 'blog',

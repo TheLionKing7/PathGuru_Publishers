@@ -66,11 +66,22 @@ body.pg-shell-v3 .brand-name {
 }
 
 body.pg-shell-v3 .brand-sub {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   margin-top: 2px;
+  line-height: 1.35;
+  max-width: 168px;
+}
+
+/* Desktop app — skip launcher chrome */
+html.pg-desktop #productLauncher {
+  display: none !important;
+}
+
+html.pg-desktop .pg-product-badge {
+  display: none !important;
 }
 
 body.pg-shell-v3 .sidebar-nav {

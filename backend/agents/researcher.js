@@ -6,9 +6,10 @@
  * Responsibilities:
  *   1. Web Discovery   — Tavily: targeted queries, ranked URLs, AI summaries
  *   2. Deep Scraping   — Firecrawl: full content extraction from priority sources
- *   3. Perplexity      — real-time grounded answers when Tavily isn't available
- *   4. KB Merge        — hands raw findings to Synthesizer to merge with internal KB
- *   5. Brief Delivery  — returns a single enriched research brief to the requester
+ *   3. KB Merge        — hands raw findings to Synthesizer to merge with internal KB
+ *   4. Brief Delivery  — returns a single enriched research brief to the requester
+ *
+ * Stack: Tavily + Firecrawl only (no paid Perplexity dependency).
  *
  * The Researcher never stores to the knowledge base directly — that is
  * Synthesizer's job. Researcher crawls, Synthesizer absorbs and enriches.
@@ -24,27 +25,25 @@
 import { AgentBase }    from './agentBase.js';
 import { callAiProvider, resolveProvider } from '../aiProviders.js';
 
-const RESEARCHER_SYSTEM = `You are Researcher — the web intelligence specialist of the DigiFusion Intelligence Network.
+const RESEARCHER_SYSTEM = `You are Orion — the web intelligence specialist of the GuruCMS Agent Network.
 
 Your job is to find, extract, and synthesize real-world intelligence from the web. You work with:
 — Tavily: targeted search queries with AI summaries and ranked source URLs
-— Firecrawl: full-content scraping of priority sources (McKinsey, HBR, Gartner, etc.)
-— Perplexity: real-time grounded answers with citations
+— Firecrawl: full-content scraping of priority sources
 
 You do not generate opinions or creative content. You find facts, frameworks, data, and expert perspectives — then synthesize them into a clean, actionable intelligence brief.
 
 Every brief you deliver must:
-1. Be grounded in real sources (cite them)
+1. Be grounded in real sources (cite them with URLs)
 2. Include specific data points, statistics, or frameworks where found
 3. Identify the most credible and relevant findings
 4. Flag any conflicting perspectives or data gaps
 5. Be structured for the requesting agent's specific use case
 
-You serve Atlas (BD research), Nova (technical research), Aether (content trends), the Publisher pipeline (book research), and Nexus (any ad hoc intelligence request).`;
+You serve Atlas (BD research), Nova (technical research), Aether (content trends), and Nexus (ad hoc intelligence).`;
 
 const TAVILY_BASE    = 'https://api.tavily.com';
 const FIRECRAWL_BASE = 'https://api.firecrawl.dev';
-const PERPLEXITY_BASE = 'https://api.perplexity.ai';
 
 // High-value domains to prioritise for deep scraping
 const PRIORITY_DOMAINS = [
@@ -69,13 +68,21 @@ export class Researcher extends AgentBase {
       domains:      ['general', 'business_development', 'automation', 'digital_media'],
     });
 
-    // Research provider chain: Perplexity first (real-time web), then fallbacks
-    this._researchChain = [
-      resolveProvider('perplexity'),
+    // JSON synthesis / query gen — use chat models, not Perplexity (unreliable JSON)
+    this._synthesisChain = [
       resolveProvider('groq'),
       resolveProvider('claude'),
       resolveProvider('deepseek'),
+      resolveProvider('cerebras'),
     ].filter(Boolean);
+  }
+
+  _logKeyStatus() {
+    const tavily = !!process.env.TAVILY_API_KEY;
+    const firecrawl = !!process.env.FIRECRAWL_API_KEY;
+    if (!tavily) console.warn('[Researcher] TAVILY_API_KEY not set — Orion cannot search the web');
+    if (!firecrawl) console.warn('[Researcher] FIRECRAWL_API_KEY not set — deep scrape disabled (snippets only)');
+    return { tavily, firecrawl };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -94,57 +101,75 @@ export class Researcher extends AgentBase {
    * @returns {object} { brief, sources, coverStats, gaps, mergedWithKB }
    */
   async research({ topic, forAgent = 'nexus', context = '', focusAreas = [], depth = 'standard', mergeWithKB = true }) {
-    console.log(`[Researcher] Starting ${depth} research: "${topic}" for ${forAgent}`);
+    console.log(`[Researcher] Starting ${depth} research: "${topic.slice(0, 120)}" for ${forAgent}`);
+    this._logKeyStatus();
 
     const queries = await this._generateQueries(topic, context, focusAreas, depth);
     console.log(`[Researcher] Generated ${queries.length} queries`);
 
-    // Layer 1: Tavily discovery
+    // Layer 1: Tavily discovery (+ expansion pass if thin)
     let tavilyResults = [];
     if (process.env.TAVILY_API_KEY) {
       tavilyResults = await this._tavilySearch(queries);
-      console.log(`[Researcher] Tavily: ${tavilyResults.length} results`);
+      let tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+      if (tavilyHitCount === 0) {
+        const expanded = this._buildFallbackQueries(topic, focusAreas, depth);
+        console.warn(`[Researcher] Tavily thin — retrying with ${expanded.length} short fallback queries`);
+        const retry = await this._tavilySearch(expanded);
+        tavilyResults = this._mergeTavilyResults(tavilyResults, retry);
+        tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+      }
+      console.log(`[Researcher] Tavily: ${tavilyHitCount} results across ${tavilyResults.length} queries`);
+    } else {
+      console.warn('[Researcher] Tavily skipped — TAVILY_API_KEY not set');
     }
 
-    // Layer 2: Perplexity grounded answers (parallel to Tavily or as fallback)
-    let perplexityFindings = '';
-    if (process.env.PERPLEXITY_API_KEY) {
-      perplexityFindings = await this._perplexityResearch(topic, context, focusAreas);
-      console.log(`[Researcher] Perplexity: ${perplexityFindings.length} chars`);
-    }
-
-    // Layer 3: Firecrawl deep scrape of priority URLs (standard/deep only)
+    // Layer 2: Firecrawl deep scrape — seed from Tavily URLs + answers
     let scrapedContent = [];
-    if (process.env.FIRECRAWL_API_KEY && depth !== 'quick' && tavilyResults.length > 0) {
-      // Cap at 2 URLs on free tier to avoid long timeouts (Firecrawl free = slow)
-      const maxUrls = depth === 'deep' ? 3 : 2;
-      const priorityUrls = this._selectPriorityUrls(tavilyResults, maxUrls);
-      // 30-second timeout guard — if Firecrawl is slow, skip and use Tavily snippets
+    const seedUrls = [
+      ...tavilyResults.flatMap(r => (r.results || []).map(x => x.url)),
+      ...tavilyResults.flatMap(r => this._extractUrls(r.answer)),
+    ].filter(Boolean);
+
+    if (process.env.FIRECRAWL_API_KEY && depth !== 'quick' && seedUrls.length > 0) {
+      const maxUrls = depth === 'deep' ? 5 : 2;
+      const priorityUrls = this._selectPriorityUrlsFromUrls(seedUrls, maxUrls);
+      const scrapeTimeout = depth === 'deep' ? 60_000 : 30_000;
       scrapedContent = await Promise.race([
         this._firecrawlScrape(priorityUrls),
-        new Promise(resolve => setTimeout(() => resolve([]), 30_000)),
+        new Promise(resolve => setTimeout(() => resolve([]), scrapeTimeout)),
       ]);
       console.log(`[Researcher] Firecrawl: ${scrapedContent.length} pages scraped`);
+    } else if (depth !== 'quick' && !process.env.FIRECRAWL_API_KEY) {
+      console.warn('[Researcher] Firecrawl skipped — FIRECRAWL_API_KEY not set');
     }
 
-    // Synthesize raw findings into a structured brief
-    const rawBrief = await this._synthesizeFindings({
-      topic, forAgent, tavilyResults, perplexityFindings, scrapedContent, focusAreas,
-    });
+    const hasWebGrounding = this._hasWebGrounding({ tavilyResults, scrapedContent });
 
-    // Merge with internal knowledge base via Synthesizer
+    // Synthesize raw findings into a structured brief
+    const rawBrief = hasWebGrounding
+      ? await this._synthesizeFindings({
+          topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth,
+        })
+      : {
+          brief: '',
+          coverStats: [],
+          gaps: [
+            'No web sources retrieved — Tavily returned no results for this topic.',
+            'Check TAVILY_API_KEY quota on Render and redeploy with latest Orion code.',
+            'Re-run with a shorter research prompt, or paste a manual brief in Nexus Console.',
+          ],
+        };
+
+    // Merge with internal KB only when web research succeeded
     let finalBrief = rawBrief.brief;
     let mergedWithKB = false;
-    if (mergeWithKB) {
+    if (mergeWithKB && hasWebGrounding && finalBrief) {
       finalBrief = await this._mergeWithKnowledgeBase(topic, rawBrief.brief, forAgent);
       mergedWithKB = true;
     }
 
-    // Collect all sources
-    const sources = [
-      ...tavilyResults.flatMap(r => r.results || []).map(r => ({ title: r.title, url: r.url, snippet: r.content?.slice(0, 200) })),
-      ...scrapedContent.map(s => ({ title: s.title, url: s.url, scraped: true })),
-    ].filter(s => s.url).slice(0, 20);
+    const sources = this._collectSources({ tavilyResults, scrapedContent, brief: finalBrief });
 
     console.log(`[Researcher] Research complete. Sources: ${sources.length}, KB merge: ${mergedWithKB}`);
 
@@ -165,27 +190,78 @@ export class Researcher extends AgentBase {
   // QUERY GENERATION
   // ══════════════════════════════════════════════════════════════════════════
 
+  _shortTopic(topic) {
+    const t = String(topic || '').replace(/\s+/g, ' ').trim();
+    const researchMatch = t.match(/research on ([^.?!]{10,120})/i);
+    if (researchMatch) return researchMatch[1].trim();
+    return t.slice(0, 120);
+  }
+
+  _buildFallbackQueries(topic, focusAreas, depth) {
+    const short = this._shortTopic(topic);
+    const year = new Date().getFullYear();
+    const base = [
+      `${short} statistics trends ${year}`,
+      `${short} market size pain points`,
+      `${short} key players companies`,
+    ];
+    for (const area of focusAreas.slice(0, 2)) {
+      base.push(`${short} ${area} ${year}`);
+    }
+    if (/africa|afcfta|b2b|ecommerce|e-commerce/i.test(topic)) {
+      base.push(`B2B ecommerce Africa market ${year}`, `AfCFTA intra-African trade trends ${year}`);
+    }
+    const count = depth === 'quick' ? 4 : depth === 'standard' ? 6 : 8;
+    return [...new Set(base.map(q => q.slice(0, 120)))].slice(0, count);
+  }
+
+  _mergeTavilyResults(a, b) {
+    const seen = new Set(a.map(r => r.query));
+    return [...a, ...b.filter(r => !seen.has(r.query))];
+  }
+
   async _generateQueries(topic, context, focusAreas, depth) {
     const count = depth === 'quick' ? 2 : depth === 'standard' ? 4 : 6;
-    const provider = this._researchChain[0] || resolveProvider();
-    if (!provider) {
-      // Fallback: simple derived queries
-      return [topic, ...focusAreas.slice(0, count - 1)];
-    }
+    const fallbacks = this._buildFallbackQueries(topic, focusAreas, depth);
+    const provider = this._synthesisChain[0] || resolveProvider();
+    if (!provider) return fallbacks.slice(0, count);
 
-    const prompt = `Generate ${count} targeted search queries for researching: "${topic}"
-${context ? `Context: ${context}` : ''}
-${focusAreas.length ? `Focus areas: ${focusAreas.join(', ')}` : ''}
+    const shortTopic = this._shortTopic(topic);
+    const prompt = `Generate ${count} SHORT web search queries (max 12 words each) for: "${shortTopic}"
+${context ? `Context: ${context.slice(0, 200)}` : ''}
+${focusAreas.length ? `Angles: ${focusAreas.join(', ')}` : ''}
 
-Return a JSON array of strings — search queries only. Each should target a different angle (data/stats, frameworks, case studies, expert opinion, market context). No commentary.`;
+Return a JSON array of strings only. No full sentences — search-engine style queries.`;
 
     try {
-      const raw = await callAiProvider(provider, prompt, 'Return a JSON array of search query strings only. No commentary.', { json: true });
+      const raw = await callAiProvider(provider, prompt, 'Return a JSON array of short search query strings only.', { json: true });
       const parsed = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
-      return Array.isArray(parsed) ? parsed.slice(0, count) : [topic];
+      const aiQueries = Array.isArray(parsed)
+        ? parsed.map(q => String(q).slice(0, 120)).filter(Boolean)
+        : [];
+      const merged = [...new Set([...aiQueries, ...fallbacks])].slice(0, count + 2);
+      return merged.length ? merged : fallbacks.slice(0, count);
     } catch {
-      return [topic, ...focusAreas.slice(0, count - 1)];
+      return fallbacks.slice(0, count);
     }
+  }
+
+  _extractUrls(text) {
+    const urlRe = /https?:\/\/[^\s)\]"'<>]+/gi;
+    const out = [];
+    for (const match of String(text).match(urlRe) || []) {
+      try {
+        out.push(new URL(match.replace(/[.,;]+$/, '')).href);
+      } catch { /* skip */ }
+    }
+    return out;
+  }
+
+  _hasWebGrounding({ tavilyResults = [], scrapedContent = [] }) {
+    const tavilyHits = tavilyResults.some(r => (r.results?.length || 0) > 0);
+    const tavilyAnswered = tavilyResults.some(r => String(r.answer || '').trim().length > 80);
+    const scraped = scrapedContent.length > 0;
+    return tavilyHits || tavilyAnswered || scraped;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -195,64 +271,46 @@ Return a JSON array of strings — search queries only. Each should target a dif
   async _tavilySearch(queries) {
     const results = [];
     for (const query of queries) {
-      try {
-        const res = await fetch(`${TAVILY_BASE}/search`, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({
-            api_key:         process.env.TAVILY_API_KEY,
-            query,
-            search_depth:    'advanced',
-            max_results:     6,
-            include_answer:  true,
-            include_domains: [],
-          }),
-          signal: AbortSignal.timeout(20_000),
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        results.push({ query, answer: data.answer, results: data.results || [] });
-      } catch (e) {
-        console.warn(`[Researcher] Tavily query failed ("${query}"): ${e.message}`);
+      let hit = await this._tavilySearchOne(query, 'advanced');
+      if (!(hit.results?.length)) {
+        hit = await this._tavilySearchOne(query, 'basic');
       }
+      if (hit.results?.length || hit.answer) results.push(hit);
     }
     return results;
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // PERPLEXITY — real-time grounded answers
-  // ══════════════════════════════════════════════════════════════════════════
-
-  async _perplexityResearch(topic, context, focusAreas) {
-    if (!process.env.PERPLEXITY_API_KEY) return '';
+  async _tavilySearchOne(query, searchDepth = 'advanced') {
+    const safeQuery = String(query || '').slice(0, 400);
+    if (!safeQuery.trim()) return { query: safeQuery, answer: null, results: [] };
     try {
-      const question = focusAreas.length
-        ? `Research "${topic}" covering: ${focusAreas.join(', ')}. ${context || ''}`.trim()
-        : `Provide a comprehensive research brief on: "${topic}". ${context || ''}`.trim();
-
-      const res = await fetch(`${PERPLEXITY_BASE}/chat/completions`, {
+      const res = await fetch(`${TAVILY_BASE}/search`, {
         method:  'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
           'Content-Type':  'application/json',
+          Authorization:   `Bearer ${process.env.TAVILY_API_KEY}`,
         },
         body: JSON.stringify({
-          model:       process.env.PERPLEXITY_MODEL || 'sonar-pro',
-          messages:    [
-            { role: 'system', content: 'You are a research analyst. Provide specific data, statistics, frameworks and real-world examples. Cite sources.' },
-            { role: 'user',   content: question },
-          ],
-          max_tokens:  2000,
-          temperature: 0.2,
+          api_key:             process.env.TAVILY_API_KEY,
+          query:               safeQuery,
+          search_depth:        searchDepth,
+          max_results:         8,
+          include_answer:      true,
+          include_raw_content: false,
+          exclude_domains:     ['pinterest.com', 'quora.com', 'reddit.com'],
         }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(20_000),
       });
-      if (!res.ok) return '';
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        console.warn(`[Researcher] Tavily HTTP ${res.status} (${searchDepth}) for "${safeQuery.slice(0, 60)}": ${errText.slice(0, 180)}`);
+        return { query: safeQuery, answer: null, results: [] };
+      }
       const data = await res.json();
-      return data.choices?.[0]?.message?.content || '';
+      return { query: safeQuery, answer: data.answer, results: data.results || [] };
     } catch (e) {
-      console.warn(`[Researcher] Perplexity failed: ${e.message}`);
-      return '';
+      console.warn(`[Researcher] Tavily query failed ("${safeQuery.slice(0, 60)}"): ${e.message}`);
+      return { query: safeQuery, answer: null, results: [] };
     }
   }
 
@@ -262,6 +320,10 @@ Return a JSON array of strings — search queries only. Each should target a dif
 
   _selectPriorityUrls(tavilyResults, maxUrls) {
     const allUrls = tavilyResults.flatMap(r => (r.results || []).map(x => x.url)).filter(Boolean);
+    return this._selectPriorityUrlsFromUrls(allUrls, maxUrls);
+  }
+
+  _selectPriorityUrlsFromUrls(allUrls, maxUrls) {
     const priority = [];
     const rest = [];
     for (const url of allUrls) {
@@ -272,7 +334,33 @@ Return a JSON array of strings — search queries only. Each should target a dif
         else rest.push(url);
       } catch {}
     }
-    return [...priority, ...rest].slice(0, maxUrls);
+    return [...new Set([...priority, ...rest])].slice(0, maxUrls);
+  }
+
+  _collectSources({ tavilyResults = [], scrapedContent = [], brief = '' }) {
+    const seen = new Set();
+    const out = [];
+    const add = (entry) => {
+      if (!entry?.url || seen.has(entry.url)) return;
+      seen.add(entry.url);
+      out.push(entry);
+    };
+
+    for (const r of tavilyResults.flatMap(tr => tr.results || [])) {
+      add({ title: r.title || r.url, url: r.url, snippet: r.content?.slice(0, 200), source: 'tavily' });
+    }
+    for (const s of scrapedContent) {
+      add({ title: s.title || s.url, url: s.url, scraped: true, source: 'firecrawl' });
+    }
+    const urlRe = /https?:\/\/[^\s)\]"'<>]+/gi;
+    for (const match of String(brief).match(urlRe) || []) {
+      const url = match.replace(/[.,;]+$/, '');
+      try {
+        const host = new URL(url).hostname.replace('www.', '');
+        add({ title: host, url, source: 'brief' });
+      } catch {}
+    }
+    return out.slice(0, 25);
   }
 
   async _firecrawlScrape(urls) {
@@ -310,47 +398,47 @@ Return a JSON array of strings — search queries only. Each should target a dif
   // SYNTHESIS — combine all raw findings into a structured brief
   // ══════════════════════════════════════════════════════════════════════════
 
-  async _synthesizeFindings({ topic, forAgent, tavilyResults, perplexityFindings, scrapedContent, focusAreas }) {
-    const provider = this._researchChain.find(p => p) || resolveProvider();
+  async _synthesizeFindings({ topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth = 'standard' }) {
+    const provider = this._synthesisChain[0] || resolveProvider();
     if (!provider) {
-      return { brief: this._fallbackBrief(topic, tavilyResults, perplexityFindings), coverStats: [], gaps: [] };
+      return { brief: this._fallbackBrief(topic, tavilyResults, scrapedContent), coverStats: [], gaps: [] };
     }
 
     const tavilySummary = tavilyResults
-      .map(r => `QUERY: "${r.query}"\nANSWER: ${r.answer || 'n/a'}\nTOP RESULTS:\n${(r.results || []).slice(0, 3).map(x => `  - ${x.title}: ${x.content?.slice(0, 300)}`).join('\n')}`)
+      .map(r => `QUERY: "${r.query}"\nANSWER: ${r.answer || 'n/a'}\nTOP RESULTS:\n${(r.results || []).slice(0, 5).map(x => `  - ${x.title} (${x.url}): ${x.content?.slice(0, 400)}`).join('\n')}`)
       .join('\n\n---\n\n')
-      .slice(0, 6000);
+      .slice(0, 8000);
 
     const scrapeSummary = scrapedContent
       .map(s => `SOURCE: ${s.title} (${s.url})\n${s.content.slice(0, 2000)}`)
       .join('\n\n---\n\n')
       .slice(0, 6000);
 
-    const synthesisPrompt = `You are the Researcher agent synthesizing web intelligence for: ${forAgent}
+    const wordTarget = depth === 'deep' ? '800-1200' : '500-1000';
+    const synthesisPrompt = `You are Orion synthesizing web intelligence for: ${forAgent}
 
-TOPIC: "${topic}"
+TOPIC: "${this._shortTopic(topic)}"
 ${focusAreas.length ? `FOCUS AREAS: ${focusAreas.join(', ')}` : ''}
 
-TAVILY DISCOVERY FINDINGS:
+TAVILY DISCOVERY (search answers + ranked URLs):
 ${tavilySummary || 'Not available'}
 
-PERPLEXITY REAL-TIME FINDINGS:
-${perplexityFindings?.slice(0, 3000) || 'Not available'}
-
-DEEP SCRAPED CONTENT:
+FIRECRAWL DEEP SCRAPED CONTENT:
 ${scrapeSummary || 'Not available'}
 
-Synthesize all of the above into a structured intelligence brief. Return JSON:
+Synthesize ONLY from the findings above into a structured intelligence brief. Return JSON:
 {
-  "brief": "Full intelligence brief — 500-1000 words. Structured with clear sections. Include specific data points, statistics, frameworks, and real examples found in the research. Cite source names inline.",
+  "brief": "GuruCMS Intelligence Brief — ${wordTarget} words. Sections: Executive summary, Market context, Key data points, Frameworks, Implications, ## Sources (URLs from findings only).",
   "coverStats": [
     {"label": "KEY STAT — 6 words max ALL CAPS", "sub": "1-line context"},
     {"label": "SECOND STAT", "sub": ""},
     {"label": "THIRD STAT", "sub": ""}
   ],
-  "gaps": ["knowledge gap 1", "knowledge gap 2"],
-  "keyFindings": ["finding 1", "finding 2", "finding 3"]
-}`;
+  "gaps": ["knowledge gap 1"],
+  "keyFindings": ["finding 1", "finding 2"]
+}
+
+RULES: Never invent statistics or URLs. Only cite sources present in the findings above. If data is thin, list gaps honestly.`;
 
     try {
       const raw = await callAiProvider(provider, synthesisPrompt, RESEARCHER_SYSTEM, { json: true });
@@ -363,16 +451,21 @@ Synthesize all of the above into a structured intelligence brief. Return JSON:
       };
     } catch (e) {
       console.warn('[Researcher] Synthesis parse failed:', e.message);
-      return { brief: this._fallbackBrief(topic, tavilyResults, perplexityFindings), coverStats: [], gaps: [] };
+      return { brief: this._fallbackBrief(topic, tavilyResults, scrapedContent), coverStats: [], gaps: [] };
     }
   }
 
-  _fallbackBrief(topic, tavilyResults, perplexityFindings) {
-    const parts = [`Research brief: ${topic}\n`];
+  _fallbackBrief(topic, tavilyResults, scrapedContent = []) {
+    const parts = [`GuruCMS Intelligence Brief: ${this._shortTopic(topic)}\n`];
     for (const r of tavilyResults) {
-      if (r.answer) parts.push(`• ${r.query}: ${r.answer}`);
+      if (r.answer) parts.push(`### ${r.query}\n${r.answer}`);
+      for (const hit of (r.results || []).slice(0, 3)) {
+        parts.push(`- [${hit.title}](${hit.url}): ${(hit.content || '').slice(0, 200)}`);
+      }
     }
-    if (perplexityFindings) parts.push(`\nPerplexity findings:\n${perplexityFindings.slice(0, 1000)}`);
+    for (const s of scrapedContent.slice(0, 2)) {
+      parts.push(`\n### ${s.title}\n${s.content.slice(0, 800)}`);
+    }
     return parts.join('\n');
   }
 
@@ -395,7 +488,7 @@ Synthesize all of the above into a structured intelligence brief. Return JSON:
         return webBrief; // nothing in KB to add
       }
 
-      const provider = this._researchChain.find(p => p) || resolveProvider();
+      const provider = this._synthesisChain[0] || resolveProvider();
       if (!provider) return webBrief;
 
       const mergePrompt = `You are merging external web research with internal proprietary knowledge for: "${topic}"
@@ -403,16 +496,16 @@ Synthesize all of the above into a structured intelligence brief. Return JSON:
 WEB RESEARCH (external):
 ${webBrief.slice(0, 3000)}
 
-INTERNAL KNOWLEDGE BASE (DigiFusion proprietary frameworks and insights):
+INTERNAL KNOWLEDGE BASE (GuruCMS proprietary frameworks and insights):
 ${kbContext.slice(0, 2000)}
 
 Produce a single enriched brief that:
 1. Leads with the most actionable insights (external + internal combined)
-2. Highlights where DigiFusion's proprietary frameworks validate or extend external findings
+2. Highlights where GuruCMS proprietary frameworks validate or extend external findings
 3. Flags any conflicts between external data and internal knowledge
-4. Is clearly structured and citable
+4. Is clearly structured and citable — preserve all source URLs from the web research
 
-Write in clear, professional language. 600–900 words.`;
+Write in clear, professional language. 600–900 words. Title: "GuruCMS Intelligence Brief".`;
 
       return await callAiProvider(provider, mergePrompt, RESEARCHER_SYSTEM, { json: false });
     } catch (e) {

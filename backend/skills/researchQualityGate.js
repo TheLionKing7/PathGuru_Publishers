@@ -5,7 +5,7 @@
  *
  * Why this exists:
  *   Orion can return thin or hallucination-prone briefs when:
- *     - API keys are missing (Perplexity disabled → Tavily only)
+ *     - Tavily returns no results (quota, bad queries, or API error)
  *     - Firecrawl timeouts → all results are snippet-level
  *     - AI synthesis invents statistics not in raw sources
  *     - Brief is too short to be actionable

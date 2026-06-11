@@ -73,6 +73,8 @@ export async function persistResearchDeliverable({
   taskId,
   instruction,
   brief,
+  rawBrief = null,
+  briefGated = false,
   sources = [],
   gaps = [],
   qualityScore = null,
@@ -135,6 +137,8 @@ export async function persistResearchDeliverable({
       output: {
         type: 'research_complete',
         brief,
+        rawBrief: rawBrief || brief,
+        briefGated,
         sources,
         gaps,
         qualityScore,

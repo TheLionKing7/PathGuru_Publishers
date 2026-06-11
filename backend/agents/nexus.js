@@ -83,7 +83,7 @@ const NEXUS_SYSTEM = `You are Nexus — Digital CEO of the DigiFusion Intelligen
 You report directly to your principal (address them as "Boss" — never by name). You run a team of 7 specialist agents and are responsible for everything they produce.
 
 YOUR TEAM:
-— Orion (Researcher): live web intelligence via Perplexity/Tavily — dispatched first whenever current data is needed
+— Orion (Researcher): live web intelligence via Tavily + Firecrawl — dispatched first whenever current data is needed
 — Synthesizer: internal knowledge engine — PDFs, knowledge base, proprietary frameworks
 — Atlas: Business Developer & Strategist — Deal Engine, Dream 50, pipeline intelligence
 — Nova: AI automation, SaaS architecture, workflow engineering
@@ -394,7 +394,7 @@ export class Nexus extends AgentBase {
       const result = await researcher.research({
         topic:       instruction,
         forAgent:    'nexus',
-        depth:       'standard',
+        depth:       'deep',
         mergeWithKB: true,
       });
       brief        = result?.brief || result?.summary || String(result || '');
@@ -419,7 +419,7 @@ export class Nexus extends AgentBase {
     console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100)`);
 
     if (!qScore.passed) {
-      console.warn('[Nexus] Research quality too low — re-running Orion at deep depth');
+      console.warn('[Nexus] Research quality too low — re-running Orion at deep depth with expanded web grounding');
       try {
         const { researcher } = await import('./researcher.js');
         const deepResult = await researcher.research({
@@ -427,6 +427,7 @@ export class Nexus extends AgentBase {
           forAgent:    'nexus',
           depth:       'deep',
           mergeWithKB: true,
+          focusAreas:  ['market data and statistics', 'expert frameworks', 'regional context', 'competitive landscape'],
         });
         brief        = deepResult?.brief || brief;
         researchMeta = {
@@ -442,11 +443,16 @@ export class Nexus extends AgentBase {
       }
     }
 
+    const briefGated = !qScore.passed || !(researchMeta.sources?.length);
+    const bossBrief  = briefGated
+      ? `${formatQualityBadge(qScore)}\n\n---\n\n**Brief withheld** — Tavily/Firecrawl returned insufficient sources (${researchMeta.sources?.length || 0}). Check \`TAVILY_API_KEY\` quota on Render, deploy latest Orion code, then re-run with a shorter research prompt.`
+      : brief;
+
     const workflowSignals = parseWorkflowSignals(instruction);
-    const nextSteps       = this._suggestNextSteps(brief, workflowSignals);
+    const nextSteps       = briefGated ? [] : this._suggestNextSteps(brief, workflowSignals);
 
     let campaign = null;
-    if (workflowSignals.autoWire) {
+    if (!briefGated && workflowSignals.autoWire) {
       try {
         campaign = await createCampaignFromResearch(this, {
           instruction,
@@ -470,7 +476,9 @@ export class Nexus extends AgentBase {
     const deliverableResult = await completeResearchDeliverable({
       taskId,
       instruction,
-      brief,
+      brief:        bossBrief,
+      rawBrief:     brief,
+      briefGated,
       sources:      researchMeta.sources,
       gaps:         researchMeta.gaps,
       qualityScore: qScore,

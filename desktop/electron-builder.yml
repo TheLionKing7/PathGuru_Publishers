@@ -1,6 +1,7 @@
-appId: com.digifusion.pathguru
-productName: PathGuru Platform
-copyright: Copyright © DigiFusion
+appId: com.gurucms.command
+productName: GuruCMS
+copyright: Copyright © GuruCMS
+electronVersion: 35.7.5
 
 directories:
   app: .
@@ -10,24 +11,37 @@ files:
   - desktop/**/*
   - webapp/**/*
   - package.json
+  - "!**/.cursor/**"
+  - "!**/tmp-*/**"
+  - "!**/backend/**"
+  - "!**/scripts/**"
+  - "!**/tests/**"
+  - "!**/docs/**"
 
 extraMetadata:
-  main: desktop/main.js
+  main: desktop/main.cjs
 
 win:
   target:
     - nsis
+  icon: desktop/icon.ico
+  signAndEditExecutable: false
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
-  shortcutName: PathGuru Platform
+  shortcutName: GuruCMS
+  installerIcon: desktop/icon.ico
+  uninstallerIcon: desktop/icon.ico
 
 mac:
   target:
     - dmg
+  icon: desktop/icon.png
   category: public.app-category.productivity
 
 linux:
   target:
     - AppImage
+  icon: desktop/icon.png
+  category: Office
