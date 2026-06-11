@@ -437,15 +437,26 @@ const server = createServer(async (req, res) => {
 
       // 2. Upsert DigiFusion CMS (uses slug from body or id fallback)
       if (!body._skipCms) {
+        const lookupSlug = body.slug || id;
+        let status = body.status || body.post_status;
+        if (!status) {
+          try {
+            const existing = await cmsClient.getPost(lookupSlug);
+            const post = existing?.data || existing;
+            status = post?.status || 'draft';
+          } catch {
+            status = 'draft';
+          }
+        }
         const cmsPayload = {
-          slug:             body.slug || id,
+          slug:             lookupSlug,
           title:            body.title,
           content:          body.content,
           excerpt:          body.excerpt          || '',
           meta_description: body.metaDescription  || body.meta_description || '',
           focus_keyword:    body.focusKeyword      || body.focus_keyword    || '',
           post_type:        body.postType          || body.post_type        || 'article',
-          status:           body.status            || 'published',
+          status,
           author_name:      body.authorName        || body.author_name      || '',
           word_count:       body.wordCount         || body.word_count,
           reading_time_minutes: body.readingTime   || body.reading_time_minutes,

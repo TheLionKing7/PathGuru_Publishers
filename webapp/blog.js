@@ -783,6 +783,8 @@
       authorName:      document.getElementById('blogEditorAuthor').value.trim(),
       metaDescription: document.getElementById('blogEditorMeta').value.trim(),
       focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
+      status:          document.getElementById('blogEditorStatusBadge')?.classList.contains('published')
+        ? 'published' : 'draft',
     };
 
     const saveBtn = document.getElementById('blogEditorSave');

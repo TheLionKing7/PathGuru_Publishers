@@ -191,19 +191,18 @@ async function runUiFlow(postId) {
     await pubRow.scrollIntoViewIfNeeded();
 
     const publishBtn = pubRow.locator('.dash-publish');
-    if (await publishBtn.count()) {
-      const [pubRes] = await Promise.all([
-        page.waitForResponse(
-          (r) => r.url().includes('/publish') && !r.url().includes('unpublish') && r.request().method() === 'PATCH',
-          { timeout: 60_000 },
-        ),
-        publishBtn.click(),
-      ]);
-      if (!pubRes.ok()) fail('publish', new Error(`HTTP ${pubRes.status()}`));
-      pass('publish', 'PATCH /api/posts/:slug/publish');
-    } else {
-      pass('publish', 'already published after save (CMS PUT defaults status to published)');
+    if (!(await publishBtn.count())) {
+      fail('publish', new Error('draft post has no Publish button after save — status may still be auto-published'));
     }
+    const [pubRes] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().includes('/publish') && !r.url().includes('unpublish') && r.request().method() === 'PATCH',
+        { timeout: 60_000 },
+      ),
+      publishBtn.click(),
+    ]);
+    if (!pubRes.ok()) fail('publish', new Error(`HTTP ${pubRes.status()}`));
+    pass('publish', 'PATCH /api/posts/:slug/publish');
 
     await page.waitForSelector(`.blog-dash-item[data-id="${slug}"] .dash-status-pill.published`, { timeout: 15_000 });
     pass('published badge visible');
