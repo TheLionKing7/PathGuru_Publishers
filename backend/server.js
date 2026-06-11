@@ -196,6 +196,26 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (req.method === 'GET' && path.startsWith('/assets/')) {
+    const rel = decodeURIComponent(path.slice(8)).replace(/\\/g, '/').replace(/\.\./g, '');
+    const ASSET_MIME = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.ico': 'image/x-icon',
+    };
+    const ext = rel.includes('.') ? rel.slice(rel.lastIndexOf('.')).toLowerCase() : '';
+    if (rel && ext && ASSET_MIME[ext] && !rel.startsWith('/')) {
+      const filePath = join(WEBAPP, 'assets', rel);
+      if (serveWebappFile(res, filePath, ASSET_MIME[ext])) return;
+      err(res, `Not found: ${path}`, 404);
+      return;
+    }
+  }
+
   if (req.method === 'GET' && STATIC[path]) {
     const { file, mime } = STATIC[path];
     if (serveWebappFile(res, file, mime)) return;
