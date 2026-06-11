@@ -19,12 +19,12 @@
 </head>
 <body>
 
-  <!-- Product launcher â€” DigiFusion Command (Publisher shelved until redesign) -->
+  <!-- Product launcher DigiFusion Command (Publisher shelved until redesign) -->
   <div id="productLauncher" hidden>
     <div class="pg-launcher-inner">
       <div class="pg-launcher-brand">
         <h1>DigiFusion Command</h1>
-        <p>CMS, agent network &amp; firm operations â€” one shared cloud backend</p>
+        <p>CMS, agent network &amp; firm operations one shared cloud backend</p>
       </div>
       <div class="pg-launcher-cards">
         <button type="button" class="pg-launcher-card pg-launcher-card--digifusion" data-product-id="digifusion">
@@ -36,17 +36,19 @@
             <li>Blog-room &amp; intelligence library</li>
             <li>Products, shop &amp; site analytics</li>
           </ul>
-          <span class="pg-launcher-card-cta">Open Command â†’</span>
+          <span class="pg-launcher-card-cta">Open Command</span>
         </button>
       </div>
-      <p class="pg-launcher-status" id="launcherBackendStatus">Connecting to shared backendâ€¦</p>
+      <p class="pg-launcher-status" id="launcherBackendStatus">Connecting to shared backend...</p>
       <div class="pg-launcher-footer">
         <button type="button" id="productFullSuiteBtn">Owner: open full platform (all departments)</button>
       </div>
     </div>
   </div>
 
-  <!-- Sidebar â€” Department offices -->
+  
+
+  <!-- Sidebar Department offices -->
   <aside class="sidebar" role="navigation" aria-label="Department navigation">
     <div class="sidebar-brand">
       <div class="brand-lockup">
@@ -60,7 +62,7 @@
     <nav class="sidebar-nav">
       <p class="nav-section-label">Departments</p>
 
-      <button class="nav-btn active" data-dept="blogroom" data-module="blog" title="DigiFusion CMS â€” compose, draft &amp; publish posts" aria-label="Blog Room">
+      <button class="nav-btn active" data-dept="blogroom" data-module="blog" title="DigiFusion CMS compose, draft &amp; publish posts" aria-label="Blog Room">
         <span class="nav-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span>
         <span class="nav-label-block"><span class="nav-label">Blog Room</span><span class="nav-desc">CMS &amp; posts</span></span>
         <span class="nav-badge">Core</span>
@@ -89,8 +91,8 @@
     <div class="sidebar-footer">
       <div class="pg-product-badge" id="productBadge" hidden>
         <div>
-          <strong data-product-name>â€”</strong>
-          <span data-product-tag>â€”</span>
+          <strong data-product-name>-</strong>
+          <span data-product-tag>-</span>
         </div>
         <button type="button" class="pg-product-switch" id="productSwitchBtn" title="Switch product">Switch</button>
       </div>
@@ -105,25 +107,30 @@
   <!-- App chrome + main panel -->
   <div class="app-chrome">
   <main class="main-panel" role="main">
-    <!-- Intelligence sub-routes â€” reparented into active module header row by shell.js -->
+    <!-- Intelligence sub-routes - reparented into active module header row by shell.js -->
     <nav class="dept-route-nav" id="deptRouteNav" role="tablist" aria-label="Intelligence sections" hidden>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="blog" role="tab" aria-selected="false">Blog-room</button>
     </nav>
 
+    <!-- ══════════════════════════════════════════════
+         MODULE: PDF PUBLISHING  (Brief / Assets / Export)
+    ══════════════════════════════════════════════ -->
+    
 
-    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    <!-- ══════════════════════════════════════════════
          MODULE: BLOG PUBLISHER  (Compose / Assets)
          (Compose still hosts its inner Generate / Dashboard switcher.)
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    ══════════════════════════════════════════════ -->
     <div class="module-shell active" id="module-blog" data-module="blog">
 
-      <!-- Per-tab headers â€” only the active one is shown. -->
+      <!-- Per-tab headers - only the active one is shown. -->
       <div class="module-headers">
         <header class="panel-header active" data-for="blog">
           <div>
-            <p class="panel-eyebrow">Blog Room</p>
-            <h1 class="panel-title">Compose</h1>
+            <p class="panel-eyebrow">Intelligence Library</p>
+            <h1 class="panel-title">Blog-room</h1>
           </div>
 
         </header>
@@ -148,18 +155,18 @@
 
       <div class="module-body">
 
-    <!-- â”€â”€ BLOG: COMPOSE â€” derivative teasers from premium IP â”€â”€ -->
+    <!-- ── BLOG: COMPOSE - derivative teasers from premium IP ── -->
     <section class="tab-panel" id="tab-blog" aria-label="Blog-room">
       <div class="deprecated-notice">
         <strong>Derivative workflow only.</strong> Premium playbooks are authored in
-        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library â†’ Blueprint Library</a>.
-        Use this panel to publish <em>teaser snippets</em> that attract traffic to paid IP on DigiFusion â€” not standalone blog posts.
+        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library -> Blueprint Library</a>.
+        Use this panel to publish <em>teaser snippets</em> that attract traffic to paid IP on DigiFusion - not standalone blog posts.
       </div>
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
         <div class="blog-subtabs-left">
-          <button class="blog-subtab active" data-blogtab="generate">âœï¸ Generate</button>
-          <button class="blog-subtab" data-blogtab="dashboard">ðŸ“‹ Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
+          <button class="blog-subtab active" data-blogtab="generate">Generate</button>
+          <button class="blog-subtab" data-blogtab="dashboard">Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
         </div>
         <div class="blog-subtabs-right" id="blogPreviewTabsBar">
           <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
@@ -167,7 +174,7 @@
         </div>
       </div>
 
-      <!-- â”€â”€ GENERATE VIEW â”€â”€ -->
+      <!-- ── GENERATE VIEW ── -->
       <div class="blog-view active" id="blogViewGenerate">
         <div class="blog-layout">
           <!-- Left: form -->
@@ -176,7 +183,7 @@
               <h2 class="form-section-title">Derivative Brief</h2>
               <div class="field">
                 <label for="blogResearchBrief">Orion research brief <span class="required">*</span></label>
-                <textarea id="blogResearchBrief" rows="4" placeholder="Paste Orion research output â€” stats, sources, frameworks. Required unless you supply a playbook slug."></textarea>
+                <textarea id="blogResearchBrief" rows="4" placeholder="Paste Orion research output - stats, sources, frameworks. Required unless you supply a playbook slug."></textarea>
               </div>
               <div class="field-row">
                 <div class="field">
@@ -199,20 +206,20 @@
               </div>
               <div class="field">
                 <label for="blogTopic">Derivative angle / headline <span class="required">*</span></label>
-                <textarea id="blogTopic" rows="3" placeholder="Teaser headline derived from the research or playbook â€” not a standalone topic"></textarea>
+                <textarea id="blogTopic" rows="3" placeholder="Teaser headline derived from the research or playbook - not a standalone topic"></textarea>
               </div>
               <div class="field-row">
                 <div class="field">
                   <label for="blogPostType">Post type</label>
                   <select id="blogPostType">
-                    <option value="article">ðŸ“° Article</option>
-                    <option value="guide">ðŸ“˜ Guide</option>
-                    <option value="listicle">ðŸ”¢ Listicle</option>
-                    <option value="how-to">ðŸ› ï¸ How-To</option>
-                    <option value="case-study">ðŸ“Š Case Study</option>
-                    <option value="review">â­ Review</option>
-                    <option value="roundup">ðŸ‘¥ Expert Roundup</option>
-                    <option value="opinion">ðŸ’­ Opinion</option>
+                    <option value="article"> Article</option>
+                    <option value="guide"> Guide</option>
+                    <option value="listicle"> Listicle</option>
+                    <option value="how-to"> How-To</option>
+                    <option value="case-study"> Case Study</option>
+                    <option value="review">⭐ Review</option>
+                    <option value="roundup"> Expert Roundup</option>
+                    <option value="opinion"> Opinion</option>
                   </select>
                 </div>
                 <div class="field">
@@ -246,9 +253,9 @@
                 <div class="field">
                   <label for="blogWordCount">Word count</label>
                   <select id="blogWordCount">
-                    <option value="800-1000 words">Short (800â€“1000)</option>
-                    <option value="1200-1600 words" selected>Standard (1200â€“1600)</option>
-                    <option value="2000-2500 words">Long-form (2000â€“2500)</option>
+                    <option value="800-1000 words">Short (800-1000)</option>
+                    <option value="1200-1600 words" selected>Standard (1200-1600)</option>
+                    <option value="2000-2500 words">Long-form (2000-2500)</option>
                     <option value="3000+ words">Pillar (3000+)</option>
                   </select>
                 </div>
@@ -275,23 +282,24 @@
                 <div class="field">
                   <label for="blogComposePicker">Writer persona</label>
                   <select id="blogComposePicker">
-                    <option value="">â€” Default editorial voice â€”</option>
+                    <option value="">- Default editorial voice -</option>
                   </select>
                   <p class="field-hint">Synced from <code>/api/personas</code>.</p>
                 </div>
                 <div class="field">
                   <label for="blogAiProvider">AI provider</label>
-                  <select id="blogAiProvider">ion value="gemini" selected>âœ¨ Gemini (default)</option>
-                    <option value="claude">ðŸ¤– Claude (Anthropic)</option>
-                    <option value="deepseek">ðŸ”® DeepSeek</option>
-                    <option value="cerebras">âš¡ Cerebras</option>
+                  <select id="blogAiProvider">
+                    <option value="gemini" selected>Gemini (default)</option>
+                    <option value="claude">Claude (Anthropic)</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="cerebras">Cerebras</option>
                   </select>
                 </div>
               </div>
 
               <!-- Writer reference files -->
               <div class="field">
-                <label>Reference files <span class="field-hint-inline">(PDFs, images â€” passed to writer agent)</span></label>
+                <label>Reference files <span class="field-hint-inline">(PDFs, images - passed to writer agent)</span></label>
                 <div class="blog-media-zone">
                   <input type="file" id="blogMediaFiles" multiple accept="image/*,.pdf" style="display:none">
                   <button type="button" class="btn-secondary btn-sm" id="blogMediaAddBtn">+ Add file</button>
@@ -360,7 +368,7 @@
             </div>
 
 
-            <!-- â”€â”€ Generate footer â”€â”€ -->
+            <!-- ── Generate footer ── -->
             <div class="blog-generate-footer">
               <div class="blog-gen-status">
                 <div class="blog-status-idle" id="blogStatusIdle">
@@ -427,10 +435,10 @@
         </div><!-- /.blog-layout -->
       </div><!-- /#blogViewGenerate -->
 
-      <!-- â”€â”€ DASHBOARD VIEW â”€â”€ -->
+      <!-- ── DASHBOARD VIEW ── -->
       <div class="blog-view" id="blogViewDashboard">
         <div class="blog-dash-filters">
-          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search postsâ€¦"></div>
+          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search posts..."></div>
           <div class="field">
             <select id="blogDashStatus">
               <option value="">All statuses</option>
@@ -454,21 +462,21 @@
             <select id="blogDashSort">
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
-              <option value="title">Title Aâ€“Z</option>
+              <option value="title">Title A-Z</option>
             </select>
           </div>
           <button class="btn-secondary btn-sm" id="blogDashRefresh">Refresh</button>
         </div>
-        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading postsâ€¦</div>
+        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading posts...</div>
         <div class="blog-dash-list" id="blogDashList"></div>
       </div><!-- /#blogViewDashboard -->
 
-      <!-- â”€â”€ EDITOR VIEW â”€â”€ -->
+      <!-- ── EDITOR VIEW ── -->
       <div class="blog-view" id="blogViewEditor">
 
         <!-- Header bar -->
         <div class="blog-editor-header">
-          <button class="btn-secondary btn-sm" id="blogEditorBack">â† Back to dashboard</button>
+          <button class="btn-secondary btn-sm" id="blogEditorBack"><- Back to dashboard</button>
           <div class="blog-editor-header-right">
             <span class="blog-editor-status-badge" id="blogEditorStatusBadge"></span>
             <button class="btn-secondary btn-sm" id="blogEditorCancel">Discard</button>
@@ -480,7 +488,7 @@
         <div class="blog-editor-meta-row">
           <div class="blog-editor-meta-field blog-editor-meta-title">
             <label for="blogEditorTitle">Title</label>
-            <input type="text" id="blogEditorTitle" placeholder="Post titleâ€¦">
+            <input type="text" id="blogEditorTitle" placeholder="Post title...">
           </div>
           <div class="blog-editor-meta-field">
             <label for="blogEditorSlug">Slug</label>
@@ -494,7 +502,7 @@
         <div class="blog-editor-meta-row">
           <div class="blog-editor-meta-field" style="flex:1">
             <label for="blogEditorMeta">Meta description</label>
-            <input type="text" id="blogEditorMeta" placeholder="SEO meta descriptionâ€¦">
+            <input type="text" id="blogEditorMeta" placeholder="SEO meta description...">
           </div>
           <div class="blog-editor-meta-field">
             <label for="blogEditorKeyword">Focus keyword</label>
@@ -554,17 +562,17 @@
           </label>
           <div class="editor-toolbar-sep"></div>
           <!-- Lists & alignment -->
-          <button class="editor-tool-btn" data-cmd="insertUnorderedList" title="Bullet list">â˜°</button>
-          <button class="editor-tool-btn" data-cmd="insertOrderedList"   title="Numbered list">â„–</button>
+          <button class="editor-tool-btn" data-cmd="insertUnorderedList" title="Bullet list"></button>
+          <button class="editor-tool-btn" data-cmd="insertOrderedList"   title="Numbered list">№</button>
           <div class="editor-toolbar-sep"></div>
-          <button class="editor-tool-btn" data-cmd="justifyLeft"   title="Align left">â«·</button>
-          <button class="editor-tool-btn" data-cmd="justifyCenter" title="Align centre">â‰¡</button>
-          <button class="editor-tool-btn" data-cmd="justifyRight"  title="Align right">â«¸</button>
+          <button class="editor-tool-btn" data-cmd="justifyLeft"   title="Align left">⫷</button>
+          <button class="editor-tool-btn" data-cmd="justifyCenter" title="Align centre">≡</button>
+          <button class="editor-tool-btn" data-cmd="justifyRight"  title="Align right">⫸</button>
           <div class="editor-toolbar-sep"></div>
           <!-- Link & undo/redo -->
-          <button class="editor-tool-btn" id="editorInsertLink" title="Insert link">ðŸ”—</button>
-          <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">â†©</button>
-          <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">â†ª</button>
+          <button class="editor-tool-btn" id="editorInsertLink" title="Insert link"></button>
+          <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">↩</button>
+          <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">↪</button>
           <div class="editor-toolbar-sep"></div>
           <!-- Source toggle -->
           <button class="editor-tool-btn editor-tool-source" id="editorSourceToggle" title="Toggle HTML source">&lt;/&gt;</button>
@@ -583,7 +591,7 @@
 
     </section><!-- /#tab-blog -->
 
-    <!-- â”€â”€ BLOG ASSETS â”€â”€ -->
+    <!-- ── BLOG ASSETS ── -->
     <section class="tab-panel" id="tab-blog-assets" aria-label="Blog Assets">
 
       <!-- Persona Manager -->
@@ -593,7 +601,7 @@
         <div class="field">
           <label for="blogPersonaPicker">Active persona</label>
           <select id="blogPersonaPicker">
-            <option value="">â€” Default editorial voice â€”</option>
+            <option value="">- Default editorial voice -</option>
           </select>
         </div>
       </div>
@@ -602,27 +610,27 @@
       <div class="form-section" style="padding: 0 0 20px; border-top: 1px solid var(--border); margin-top: 8px; display:flex; flex-direction:column; flex:1; min-height:0;">
         <div class="media-lib-header">
           <h3>Media Library</h3>
-          <span style="font-size:11px;color:var(--text-muted)">Stored in Cloudflare R2 Â· blog-media/</span>
+          <span style="font-size:11px;color:var(--text-muted)">Stored in Cloudflare R2 · blog-media/</span>
           <button class="btn-secondary btn-sm" id="mediaLibRefresh" style="margin-left:auto">Refresh</button>
         </div>
 
         <!-- Drop zone -->
         <div class="media-lib-drop-zone" id="mediaLibDropZone">
           <input type="file" id="mediaLibInput" multiple accept="image/*,.pdf,.doc,.docx" style="display:none">
-          <span class="drop-icon">â˜ï¸</span>
+          <span class="drop-icon"></span>
           <span class="drop-label">Drop files here or click to upload</span>
-          <span class="drop-hint">Images, PDFs, Word docs Â· max 20 MB each</span>
+          <span class="drop-hint">Images, PDFs, Word docs · max 20 MB each</span>
         </div>
 
         <!-- Upload progress -->
         <div class="media-lib-upload-progress" id="mediaLibProgress">
           <div class="media-lib-progress-bar"><div class="media-lib-progress-fill" id="mediaLibProgressFill"></div></div>
-          <span class="media-lib-progress-label" id="mediaLibProgressLabel">Uploadingâ€¦</span>
+          <span class="media-lib-progress-label" id="mediaLibProgressLabel">Uploading...</span>
         </div>
 
         <!-- Toolbar -->
         <div class="media-lib-toolbar">
-          <input type="search" id="mediaLibSearch" placeholder="Search assetsâ€¦">
+          <input type="search" id="mediaLibSearch" placeholder="Search assets...">
           <select id="mediaLibType">
             <option value="">All types</option>
             <option value="image">Images</option>
@@ -634,7 +642,7 @@
 
         <!-- Asset grid -->
         <div class="media-lib-grid" id="mediaLibGrid">
-          <div class="media-lib-loading">Loading assetsâ€¦</div>
+          <div class="media-lib-loading">Loading assets...</div>
         </div>
       </div>
 
@@ -643,9 +651,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-blog -->
 
-    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    <!-- ══════════════════════════════════════════════
          MODULE: SHOP  (5 sub-tabs: Products / Services / Payments / Analytics / Settings)
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-shop" data-module="shop">
 
       <!-- Per-tab headers -->
@@ -696,16 +704,16 @@
         <section class="tab-panel active" id="tab-shop-products" aria-label="Products">
           <div class="prod-panel-body">
             <div class="prod-toolbar">
-              <input type="search" id="shopProductSearch" placeholder="Search productsâ€¦" aria-label="Search products">
+              <input type="search" id="shopProductSearch" placeholder="Search products..." aria-label="Search products">
               <select id="shopProductCategory" aria-label="Filter by section">
                 <option value="">All sections</option>
-                <option value="field-guide">ðŸ“— Field Guides</option>
-                <option value="playbook">âš¡ Playbooks</option>
-                <option value="research">ðŸ” Research</option>
-                <option value="tool">ðŸ”§ Tools</option>
-                <option value="saas">â˜ï¸ SaaS Products</option>
-                <option value="service">ðŸ¤ Services</option>
-                <option value="bundle">ðŸ“¦ Bundles</option>
+                <option value="field-guide"> Field Guides</option>
+                <option value="playbook"> Playbooks</option>
+                <option value="research"> Research</option>
+                <option value="tool"> Tools</option>
+                <option value="saas"> SaaS Products</option>
+                <option value="service"> Services</option>
+                <option value="bundle"> Bundles</option>
               </select>
               <select id="shopProductStatus" aria-label="Filter by status">
                 <option value="">All statuses</option>
@@ -725,12 +733,12 @@
           </div>
         </section>
 
-        <!-- Product overlays â€” module level (fixed), not inside scroll panel -->
+        <!-- Product overlays - module level (fixed), not inside scroll panel -->
             <div class="prod-form-overlay" id="prodFormOverlay">
               <div class="prod-form-panel" id="prodFormPanel">
                 <div class="prod-form-header">
                   <h3 id="prodFormTitle">Add Product</h3>
-                  <button class="btn-secondary btn-sm" id="prodFormCancel">âœ• Close</button>
+                  <button class="btn-secondary btn-sm" id="prodFormCancel"> Close</button>
                 </div>
                 <form class="prod-form-body" id="prodFormEl">
                   <div class="prod-form-section">
@@ -742,23 +750,23 @@
                       <div class="field">
                         <label for="prodFormCategory">Library Section <span class="required">*</span></label>
                         <select id="prodFormCategory">
-                          <option value="">â€” Select section â€”</option>
-                          <option value="field-guide">ðŸ“— Field Guide</option>
-                          <option value="playbook">âš¡ Automation Playbook</option>
-                          <option value="research">ðŸ” Research / Case Study</option>
-                          <option value="tool">ðŸ”§ Tool / Extension</option>
-                          <option value="saas">â˜ï¸ SaaS Product</option>
-                          <option value="service">ðŸ¤ Agency Service</option>
-                          <option value="bundle">ðŸ“¦ Bundle</option>
+                          <option value="">- Select section -</option>
+                          <option value="field-guide"> Field Guide</option>
+                          <option value="playbook"> Automation Playbook</option>
+                          <option value="research"> Research / Case Study</option>
+                          <option value="tool"> Tool / Extension</option>
+                          <option value="saas"> SaaS Product</option>
+                          <option value="service"> Agency Service</option>
+                          <option value="bundle"> Bundle</option>
                         </select>
                       </div>
                       <div class="field">
                         <label for="prodFormType">Fulfillment Type <span class="required">*</span></label>
                         <select id="prodFormType">
-                          <option value="download">â¬‡ï¸ Download (ebook, PDF, template)</option>
-                          <option value="subscription">ðŸ”„ Subscription (recurring)</option>
-                          <option value="service">ðŸ“ž Service (booking / consultation)</option>
-                          <option value="saas">â˜ï¸ SaaS (app access)</option>
+                          <option value="download">⬇ Download (ebook, PDF, template)</option>
+                          <option value="subscription"> Subscription (recurring)</option>
+                          <option value="service"> Service (booking / consultation)</option>
+                          <option value="saas"> SaaS (app access)</option>
                         </select>
                       </div>
                     </div>
@@ -773,7 +781,7 @@
                       <div class="field"><label for="prodFormFeatured">Featured</label>
                         <select id="prodFormFeatured">
                           <option value="false">No</option>
-                          <option value="true">Yes â€” show on hub page</option>
+                          <option value="true">Yes - show on hub page</option>
                         </select>
                       </div>
                     </div>
@@ -782,16 +790,16 @@
                       <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
                       <div class="field"><label for="prodFormCurrency">Currency</label>
                         <select id="prodFormCurrency">
-                          <option value="USD">USD â€” US Dollar</option>
-                          <option value="NGN">NGN â€” Nigerian Naira</option>
-                          <option value="GBP">GBP â€” British Pound</option>
-                          <option value="EUR">EUR â€” Euro</option>
+                          <option value="USD">USD - US Dollar</option>
+                          <option value="NGN">NGN - Nigerian Naira</option>
+                          <option value="GBP">GBP - British Pound</option>
+                          <option value="EUR">EUR - Euro</option>
                         </select>
                       </div>
                     </div>
 
-                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pagesâ€¦"></textarea></div>
-                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://â€¦"></div>
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pages..."></textarea></div>
+                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://..."></div>
                     <div class="field"><label for="prodFormFulfillment">Fulfillment metadata (JSON)</label><textarea id="prodFormFulfillment" rows="3" placeholder='{"r2_key":"intelligence/playbooks/hospitality.zip","filename":"Hospitality Automation Suite.zip"}'></textarea></div>
                   </div>
                   <div class="prod-form-error" id="prodFormError" hidden></div>
@@ -814,14 +822,14 @@
                   </div>
                   <div class="prod-detail-actions">
                     <button class="btn-primary btn-sm" id="prodDetailEditBtn">Edit</button>
-                    <button class="btn-secondary btn-sm" id="prodDetailClose">âœ•</button>
+                    <button class="btn-secondary btn-sm" id="prodDetailClose"></button>
                   </div>
                 </div>
                 <div class="prod-detail-body" id="prodDetailBody"></div>
               </div>
             </div>
 
-        <!-- Consulting & Bookings â€” CMS + Calendly + intake + Notion -->
+        <!-- Consulting & Bookings - CMS + Calendly + intake + Notion -->
         <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
@@ -850,7 +858,7 @@
           </div>
         </section>
 
-        <!-- Payments â€” orders + subscriptions combined -->
+        <!-- Payments - orders + subscriptions combined -->
         <section class="tab-panel" id="tab-shop-payments" aria-label="Payments and Subscriptions">
           <div class="shop-panel-body">
             <!-- Orders section -->
@@ -894,10 +902,10 @@
             <!-- Sales pane -->
             <div class="shop-analytics-pane active" id="shopAnalyticsPaneSales">
               <div class="shop-stat-grid">
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">â€”</div><div class="shop-stat-label">Revenue</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">â€”</div><div class="shop-stat-label">Orders paid</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">â€”</div><div class="shop-stat-label">Avg order value</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">â€”</div><div class="shop-stat-label">Conversion</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatRevenue">-</div><div class="shop-stat-label">Revenue</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatOrders">-</div><div class="shop-stat-label">Orders paid</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatAov">-</div><div class="shop-stat-label">Avg order value</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatConv">-</div><div class="shop-stat-label">Conversion</div></div>
               </div>
               <div class="shop-empty"><p>Click Refresh to load sales analytics.</p></div>
             </div>
@@ -913,8 +921,8 @@
                 <button class="btn-secondary btn-sm" id="shopTrafficRefresh">Refresh</button>
               </div>
               <div class="shop-stat-grid">
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatViews">â€”</div><div class="shop-stat-label">Total pageviews</div></div>
-                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatSessions">â€”</div><div class="shop-stat-label">Unique sessions</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatViews">-</div><div class="shop-stat-label">Total pageviews</div></div>
+                <div class="shop-stat-card"><div class="shop-stat-value" id="shopStatSessions">-</div><div class="shop-stat-label">Unique sessions</div></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
                 <div>
@@ -952,11 +960,11 @@
               </div>
               <div class="field">
                 <label for="shopTcTerms">Terms of service</label>
-                <textarea id="shopTcTerms" rows="3" placeholder="Governing terms for purchases made on this platformâ€¦"></textarea>
+                <textarea id="shopTcTerms" rows="3" placeholder="Governing terms for purchases made on this platform..."></textarea>
               </div>
               <div class="field">
                 <label for="shopTcPrivacy">Privacy policy</label>
-                <textarea id="shopTcPrivacy" rows="3" placeholder="How you collect, use, and protect customer dataâ€¦"></textarea>
+                <textarea id="shopTcPrivacy" rows="3" placeholder="How you collect, use, and protect customer data..."></textarea>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap">
                 <button type="button" class="btn-secondary" id="shopTcLoad">Load from DigiFusion</button>
@@ -1012,9 +1020,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-shop -->
 
-    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    <!-- ══════════════════════════════════════════════
          MODULE: ANALYTICS  (site-wide pageview stats)
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-analytics" data-module="analytics">
       <div class="module-headers">
         <header class="panel-header active" data-for="analytics">
@@ -1045,15 +1053,15 @@
             <div class="analytics-body">
               <div class="analytics-kpi-row">
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiViews">â€”</div>
+                  <div class="analytics-kpi-val" id="akpiViews">-</div>
                   <div class="analytics-kpi-label">Total Views</div>
                 </div>
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiSessions">â€”</div>
+                  <div class="analytics-kpi-val" id="akpiSessions">-</div>
                   <div class="analytics-kpi-label">Sessions</div>
                 </div>
                 <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiAvgPerDay">â€”</div>
+                  <div class="analytics-kpi-val" id="akpiAvgPerDay">-</div>
                   <div class="analytics-kpi-label">Avg / Day</div>
                 </div>
               </div><!-- /.analytics-kpi-row -->
@@ -1061,21 +1069,21 @@
               <div class="analytics-section">
                 <div class="analytics-section-title">Daily Views</div>
                 <div class="analytics-chart-bars" id="analyticsDailyChart">
-                  <div class="analytics-empty">Loadingâ€¦</div>
+                  <div class="analytics-empty">Loading...</div>
                 </div>
               </div>
 
               <div class="analytics-section">
                 <div class="analytics-section-title">Top Pages</div>
                 <div id="analyticsTopPages">
-                  <div class="analytics-empty">Loadingâ€¦</div>
+                  <div class="analytics-empty">Loading...</div>
                 </div>
               </div>
 
               <div class="analytics-section">
                 <div class="analytics-section-title">Top Referrers</div>
                 <div id="analyticsTopReferrers">
-                  <div class="analytics-empty">Loadingâ€¦</div>
+                  <div class="analytics-empty">Loading...</div>
                 </div>
               </div>
             </div><!-- /.analytics-body -->
@@ -1084,9 +1092,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-analytics -->
 
-    <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    <!-- ══════════════════════════════════════════════
          MODULE: AGENTS  (Network / Console / Tasks / Leads)
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+    ══════════════════════════════════════════════ -->
     <div class="module-shell" id="module-agents" data-module="agents">
 
       <!-- Per-tab headers -->
@@ -1219,10 +1227,10 @@
 
       <div class="module-body">
 
-        <!-- â”€â”€ NEXUS COMMAND CENTER â”€â”€ -->
+        <!-- ── NEXUS COMMAND CENTER ── -->
         <section class="tab-panel active" id="tab-agents-command" aria-label="Nexus Command Center">
           <div class="nexus-ops-body">
-            <p class="nexus-ops-intro">Unified operations view â€” cadence, approvals, content queue, growth funnel, client delivery, and firm IP. Boss approval gates all publishing.</p>
+            <p class="nexus-ops-intro">Unified operations view - cadence, approvals, content queue, growth funnel, client delivery, and firm IP. Boss approval gates all publishing.</p>
 
             <div class="nexus-approval-panel" id="nexusApprovalPanel" hidden>
               <h3 class="nexus-ops-agents-title">Publishing approval required</h3>
@@ -1237,12 +1245,12 @@
             </div>
 
             <div class="nexus-ops-grid" id="ceoOpsGrid">
-              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command centerâ€¦</span></div>
+              <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center...</span></div>
             </div>
             <div class="nexus-ops-agents" id="ceoOpsAgents"></div>
 
             <div class="nexus-funnel-panel" id="nexusFunnelPanel">
-              <h3 class="nexus-ops-agents-title">C2C Funnel â€” Lead magnet â†’ Email â†’ Nurture â†’ Attribution</h3>
+              <h3 class="nexus-ops-agents-title">C2C Funnel - Lead magnet -> Email -> Nurture -> Attribution</h3>
               <p class="nexus-ops-intro">Register gated assets and track captures from DigiFusion forms through nurture to closed deals.</p>
               <div class="nexus-workflow-form" style="margin-bottom:16px">
                 <div class="nexus-workflow-meta">
@@ -1283,7 +1291,7 @@
             </div>
 
             <div class="nexus-funnel-panel" id="nexusGemPanel">
-              <h3 class="nexus-ops-agents-title">GEM Lattice â€” Firm IP</h3>
+              <h3 class="nexus-ops-agents-title">GEM Lattice - Firm IP</h3>
               <p class="nexus-ops-intro">Synthesizer mines knowledge gems and crystallizes proprietary frameworks (IPMS-gated).</p>
               <div class="nexus-workflow-form" style="margin-bottom:16px">
                 <div class="nexus-workflow-meta">
@@ -1304,7 +1312,7 @@
                   </div>
                 </div>
                 <label class="form-label" for="cmdCrystalInstruction">Instruction (optional)</label>
-                <textarea id="cmdCrystalInstruction" class="form-textarea" rows="2" placeholder="Focus on African SME operators, 90-day ROIâ€¦"></textarea>
+                <textarea id="cmdCrystalInstruction" class="form-textarea" rows="2" placeholder="Focus on African SME operators, 90-day ROI..."></textarea>
                 <p class="nexus-ops-intro" id="cmdCrystalResult" style="margin:8px 0 0"></p>
               </div>
               <div class="analytics-section" id="gemCrystallizations"></div>
@@ -1313,19 +1321,19 @@
 
           <div class="cmd-drawer-backdrop" id="cmdDrawerBackdrop" aria-hidden="true"></div>
           <aside class="cmd-drawer" id="cmdEngDrawer" aria-hidden="true">
-            <button type="button" class="cmd-drawer-close" id="cmdDrawerClose" aria-label="Close">Ã—</button>
+            <button type="button" class="cmd-drawer-close" id="cmdDrawerClose" aria-label="Close">x</button>
             <div id="cmdDrawerBody"></div>
           </aside>
         </section>
 
-        <!-- â”€â”€ TEAM WORKFLOW â”€â”€ -->
+        <!-- ── TEAM WORKFLOW ── -->
         <section class="tab-panel" id="tab-agents-workflow" aria-label="Team Workflow">
           <div class="nexus-workflow-body">
             <p class="nexus-ops-intro">Client blueprints (multi-agent action plans) and process workflows. Nexus coordinates; you implement; Pulse retunes weekly.</p>
 
             <div class="ip-synthesizer-card" style="margin-bottom:20px">
               <h3 class="ip-synth-title">Client Blueprint</h3>
-              <p class="ip-synth-sub">Orion research â†’ Atlas / Nova / Aether â†’ structured engagement pack for Boss implementation</p>
+              <p class="ip-synth-sub">Orion research -> Atlas / Nova / Aether -> structured engagement pack for Boss implementation</p>
               <div class="nexus-workflow-meta">
                 <div class="nexus-workflow-field">
                   <label class="form-label" for="blueprintClientInput">Client name</label>
@@ -1342,7 +1350,7 @@
                 </div>
               </div>
               <label class="form-label" for="blueprintGoalsInput">Goals &amp; context</label>
-              <textarea id="blueprintGoalsInput" class="form-textarea" rows="3" placeholder="What outcome does the client need? Pain points, budget, timelineâ€¦"></textarea>
+              <textarea id="blueprintGoalsInput" class="form-textarea" rows="3" placeholder="What outcome does the client need? Pain points, budget, timeline..."></textarea>
               <div class="ip-synth-actions" style="margin-top:12px">
                 <button class="btn-console-run" id="btnClientBlueprint" type="button">Build Client Blueprint</button>
                 <span class="ip-synth-status" id="blueprintStatus"></span>
@@ -1353,7 +1361,7 @@
             <p class="nexus-ops-intro">Map a client process to DigiFusion frameworks. Nexus designs the workflow; Nova receives the build task.</p>
             <div class="nexus-workflow-form">
               <label class="form-label" for="workflowProcessInput">Process description</label>
-              <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding â€” intake form â†’ Notion CRM â†’ kickoff deck â†’ delivery sprint"></textarea>
+              <textarea id="workflowProcessInput" class="form-textarea" rows="4" placeholder="e.g. Retainer client onboarding - intake form -> Notion CRM -> kickoff deck -> delivery sprint"></textarea>
               <div class="nexus-workflow-meta">
                 <div class="nexus-workflow-field">
                   <label class="form-label" for="workflowClientInput">Client</label>
@@ -1376,9 +1384,9 @@
                   <label class="form-label" for="workflowFrameworkInput">Framework</label>
                   <select id="workflowFrameworkInput" class="form-input">
                     <option value="">Auto-detect from process</option>
-                    <option value="ave">AVE â€” Automation Velocity Engine</option>
-                    <option value="deal">Deal Engine â€” BD &amp; consulting</option>
-                    <option value="c2c">C2C â€” Content-to-Capital</option>
+                    <option value="ave">AVE - Automation Velocity Engine</option>
+                    <option value="deal">Deal Engine - BD &amp; consulting</option>
+                    <option value="c2c">C2C - Content-to-Capital</option>
                     <option value="engagement">Engagement Model</option>
                   </select>
                 </div>
@@ -1391,7 +1399,7 @@
           </div>
         </section>
 
-        <!-- â”€â”€ ACTIVITY JOURNAL (agent action timeline) â”€â”€ -->
+        <!-- ── ACTIVITY JOURNAL (agent action timeline) ── -->
         <section class="tab-panel" id="tab-agents-activity" aria-label="Activity Journal">
           <div class="activity-journal-body">
             <div class="activity-journal-toolbar">
@@ -1409,25 +1417,25 @@
               <button class="btn-secondary btn-sm" id="activityRefreshBtn">Refresh journal</button>
             </div>
             <div class="activity-timeline" id="activityTimeline">
-              <div class="activity-timeline-empty">Loading agent journalâ€¦</div>
+              <div class="activity-timeline-empty">Loading agent journal...</div>
             </div>
           </div>
         </section>
 
-        <!-- â”€â”€ AGENT ROSTER â”€â”€ -->
+        <!-- ── AGENT ROSTER ── -->
         <section class="tab-panel" id="tab-agents-network" aria-label="Agent Network">
           <div class="agents-network-body">
             <div class="agents-grid" id="agentsGrid">
               <!-- Agent cards rendered by agents.js -->
               <div class="agents-grid-loading">
                 <div class="agents-spinner"></div>
-                <span>Polling agent statusâ€¦</span>
+                <span>Polling agent status...</span>
               </div>
             </div>
           </div>
         </section><!-- /#tab-agents-network -->
 
-        <!-- â”€â”€ CONSOLE TAB â”€â”€ -->
+        <!-- ── CONSOLE TAB ── -->
         <section class="tab-panel" id="tab-agents-console" aria-label="Agent Console">
           <div class="console-shell">
 
@@ -1447,7 +1455,7 @@
           </div><!-- /.console-shell -->
         </section><!-- /#tab-agents-console -->
 
-        <!-- â”€â”€ TASKS TAB â”€â”€ -->
+        <!-- ── TASKS TAB ── -->
         <section class="tab-panel" id="tab-agents-tasks" aria-label="Task History">
           <div class="agents-tasks-body">
             <div class="agents-table-wrap">
@@ -1463,40 +1471,40 @@
                   </tr>
                 </thead>
                 <tbody id="tasksTableBody">
-                  <tr><td colspan="6" class="agents-table-empty">Loading tasksâ€¦</td></tr>
+                  <tr><td colspan="6" class="agents-table-empty">Loading tasks...</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </section><!-- /#tab-agents-tasks -->
 
-        <!-- â”€â”€ LEADS TAB â”€â”€ -->
+        <!-- ── LEADS TAB ── -->
         <section class="tab-panel" id="tab-agents-leads" aria-label="Lead Pipeline">
           <div class="agents-leads-body">
             <div class="leads-grid" id="leadsGrid">
               <div class="agents-grid-loading">
                 <div class="agents-spinner"></div>
-                <span>Loading leadsâ€¦</span>
+                <span>Loading leads...</span>
               </div>
             </div>
           </div>
         </section><!-- /#tab-agents-leads -->
 
-        <!-- â”€â”€ AGENCY IP TAB â”€â”€ -->
+        <!-- ── AGENCY IP TAB ── -->
         <section class="tab-panel" id="tab-agents-ip" aria-label="Agency IP">
           <div class="agents-ip-body">
 
             <div class="intel-pipeline-banner">
-              <h3>Firm IP â€” Operating Frameworks + Intelligence Library</h3>
-              <p class="intel-frameworks-list">AVE Â· Deal Engine Â· C2C Â· Engagement Model Â· SME Scale Â· Enterprise Velocity Â· GovTech Â· FIRA Â· PCE Â· HRIS Â· CIMEF</p>
+              <h3>Firm IP - Operating Frameworks + Intelligence Library</h3>
+              <p class="intel-frameworks-list">AVE · Deal Engine · C2C · Engagement Model · SME Scale · Enterprise Velocity · GovTech · FIRA · PCE · HRIS · CIMEF</p>
               <div class="intel-pipeline-flow">
                 <span>Orion researches</span>
-                <span class="flow-arrow">â†’</span>
+                <span class="flow-arrow">-></span>
                 <span>Specialist builds playbook</span>
-                <span class="flow-arrow">â†’</span>
+                <span class="flow-arrow">-></span>
                 <span>Intelligence Library (gated)</span>
-                <span class="flow-arrow">â†’</span>
-                <a href="#" data-goto-dept="blogroom" data-goto-tab="blog">Blog Room</a>
+                <span class="flow-arrow">-></span>
+                <a href="#" data-goto-dept="intelligence" data-goto-tab="blog">Blog-room</a>
               </div>
             </div>
 
@@ -1506,9 +1514,9 @@
                 <h3 class="ip-synth-title">Firm IP Catalog</h3>
                 <button class="ip-btn-secondary" onclick="loadFirmIpCatalog()">Refresh</button>
               </div>
-              <p class="ip-synth-sub" style="margin:0 0 12px">Operating frameworks (agent DNA) and paywalled Intelligence Library blueprints â€” from <code>/api/firm-ip/library</code></p>
+              <p class="ip-synth-sub" style="margin:0 0 12px">Operating frameworks (agent DNA) and paywalled Intelligence Library blueprints - from <code>/api/firm-ip/library</code></p>
               <div id="firmIpCatalogBody">
-                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading catalogâ€¦</span></div>
+                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading catalog...</span></div>
               </div>
             </div>
 
@@ -1517,7 +1525,7 @@
               <div class="ip-synth-header">
                 <div>
                   <h3 class="ip-synth-title">Playbook Synthesizer</h3>
-                  <p class="ip-synth-sub">Run the 3-phase pipeline: Extract â†’ Hybridize â†’ Store as agency IP</p>
+                  <p class="ip-synth-sub">Run the 3-phase pipeline: Extract -> Hybridize -> Store as agency IP</p>
                 </div>
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.5;flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
               </div>
@@ -1573,8 +1581,8 @@
                 </div>
 
                 <div class="ip-field">
-                  <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional â€” guide the synthesis)</span></label>
-                  <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost toolsâ€¦"></textarea>
+                  <label class="ip-label">Additional Instruction <span class="ip-label-hint">(optional - guide the synthesis)</span></label>
+                  <textarea id="ipInstruction" class="console-textarea" rows="3" placeholder="e.g. Focus on African SMBs, include WhatsApp automation, emphasise low-cost tools..."></textarea>
                 </div>
 
                 <div class="ip-field" style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px">
@@ -1608,14 +1616,14 @@
                 <button class="ip-btn-secondary" onclick="loadIPLibrary()">Refresh</button>
               </div>
               <div id="ipLibraryBody">
-                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading IP libraryâ€¦</span></div>
+                <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading IP library...</span></div>
               </div>
             </div>
 
           </div><!-- /.agents-ip-body -->
         </section><!-- /#tab-agents-ip -->
 
-        <!-- â”€â”€ CONTENT TAB â”€â”€ -->
+        <!-- ── CONTENT TAB ── -->
         <section class="tab-panel" id="tab-agents-content" aria-label="Content Workflow">
           <div class="agents-content-body">
 
@@ -1623,7 +1631,7 @@
             <div class="agents-content-header">
               <div>
                 <h2 class="agents-content-title">Content Workflow</h2>
-                <p class="agents-content-subtitle">Researcher + Aether pipeline â€” generate briefs, publish articles, and schedule sector campaigns.</p>
+                <p class="agents-content-subtitle">Researcher + Aether pipeline - generate briefs, publish articles, and schedule sector campaigns.</p>
               </div>
               <button class="ip-btn-primary" id="genCalendarBtn">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -1648,7 +1656,7 @@
                 <div class="content-field">
                   <label class="content-label">Sector</label>
                   <select id="briefSector" class="content-select">
-                    <option value="">â€” select sector â€”</option>
+                    <option value="">- select sector -</option>
                     <option>Financial Institutions</option>
                     <option>Government &amp; Ministry</option>
                     <option>Large Enterprise</option>
@@ -1691,7 +1699,7 @@
                 <div class="content-field">
                   <label class="content-label">Sector</label>
                   <select id="publishSector" class="content-select">
-                    <option value="">â€” select sector â€”</option>
+                    <option value="">- select sector -</option>
                     <option>Financial Institutions</option>
                     <option>Government &amp; Ministry</option>
                     <option>Large Enterprise</option>
@@ -1703,7 +1711,7 @@
                 </div>
                 <div class="content-field">
                   <label class="content-label">Angle / Key Points</label>
-                  <textarea id="publishAngle" class="content-textarea" rows="3" placeholder="3â€“5 key points or a one-paragraph briefâ€¦"></textarea>
+                  <textarea id="publishAngle" class="content-textarea" rows="3" placeholder="3-5 key points or a one-paragraph brief..."></textarea>
                 </div>
                 <div class="content-field content-field-row">
                   <label class="content-label content-check-label">
@@ -1744,10 +1752,9 @@
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->
 
-  </main><!-- /.main-panel -->
-  </div><!-- /.app-chrome -->
+  </main>
+  </div>
 
-  <!-- â”€â”€ Task output drawer (shared across Console + Tasks tabs) â”€â”€ -->
   <div class="task-output-drawer" id="taskOutputDrawer" aria-hidden="true">
     <div class="task-output-header">
       <span class="task-output-title" id="taskOutputTitle">Task Output</span>
@@ -1757,7 +1764,7 @@
   </div>
   <div class="task-output-overlay" id="taskOutputOverlay"></div>
 
-  <!-- â”€â”€ Settings Modal â”€â”€ -->
+  <!-- Settings Modal -->
   <div class="modal-backdrop" id="settingsModal" style="display:none">
     <div class="modal">
       <div class="modal-header">
@@ -1817,7 +1824,7 @@
   <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
   <script src="agents.js"></script>
 
-  <!-- â”€â”€ Create Task Modal â”€â”€ -->
+  <!-- Create Task Modal -->
   <div class="modal-overlay" id="newTaskOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;">
     <div class="modal-box" style="background:var(--surface,#1a1a2e);border:1px solid var(--border,#2a2a4a);border-radius:12px;padding:28px 32px;width:min(520px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.5);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -1852,11 +1859,11 @@
           <div>
             <label style="display:block;font-size:.75rem;font-weight:600;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Priority</label>
             <select id="ntPriority" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border,#2a2a4a);background:var(--background,#111);color:var(--foreground,#fff);font-size:.9rem;">
-              <option value="1">ðŸ”´ Critical (1)</option>
-              <option value="2">ðŸŸ  High (2)</option>
-              <option value="3" selected>ðŸŸ¡ Normal (3)</option>
-              <option value="4">ðŸŸ¢ Low (4)</option>
-              <option value="5">âšª Minimal (5)</option>
+              <option value="1">Critical (1)</option>
+              <option value="2">High (2)</option>
+              <option value="3" selected>Normal (3)</option>
+              <option value="4">Low (4)</option>
+              <option value="5">Minimal (5)</option>
             </select>
           </div>
         </div>
@@ -1888,3 +1895,4 @@
   </div>
 </body>
 </html>
+

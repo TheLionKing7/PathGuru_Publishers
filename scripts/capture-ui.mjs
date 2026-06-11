@@ -10,7 +10,7 @@ const OUT = join(__dirname, '..', 'tmp-ui-captures');
 const BASE = process.env.PATHGURU_URL || 'http://localhost:8787';
 
 const DEPTS = {
-  publisher:    'button[data-dept="publisher"]',
+  blogroom:     'button[data-dept="blogroom"]',
   intelligence: 'button[data-dept="intelligence"]',
   products:     'button[data-dept="products"]',
   network:      'button[data-dept="network"]',
