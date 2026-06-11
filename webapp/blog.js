@@ -590,6 +590,13 @@
     return arr;
   }
 
+  function setBlogPanelMode(mode) {
+    const tab = document.getElementById('tab-blog');
+    if (!tab) return;
+    tab.classList.remove('blog-mode-generate', 'blog-mode-dashboard', 'blog-mode-editor');
+    if (mode) tab.classList.add(`blog-mode-${mode}`);
+  }
+
   async function loadDashboard() {
     const listEl    = document.getElementById('blogDashList');
     const loadingEl = document.getElementById('blogDashLoading');
@@ -597,8 +604,8 @@
     const postType  = document.getElementById('blogDashType')?.value     || '';
     const sortMode  = document.getElementById('blogDashSort')?.value     || 'newest';
     const search    = document.getElementById('blogDashSearch')?.value?.trim() || '';
-    loadingEl.classList.remove('hidden');
-    listEl.innerHTML = '';
+    if (loadingEl) loadingEl.classList.remove('hidden');
+    if (listEl) listEl.innerHTML = '';
     try {
       const backendUrl = getBackendUrl();
       const params = new URLSearchParams();
@@ -611,7 +618,7 @@
       const posts = data.posts || [];
       const subCount = document.getElementById('blogSubtabCount');
       if (subCount) { subCount.textContent = String(posts.length); subCount.hidden = posts.length === 0; }
-      loadingEl.classList.add('hidden');
+      if (loadingEl) loadingEl.classList.add('hidden');
       if (!posts.length) {
         listEl.innerHTML = `<div class="blog-dash-empty"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".3"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><p>No posts found.</p><p style="font-size:11px;color:var(--text-muted);margin-top:4px">Try clearing filters, or generate a new post.</p></div>`;
         return;
@@ -619,50 +626,36 @@
       const filtered = search ? posts.filter(p => (p.title || '').toLowerCase().includes(search.toLowerCase())) : posts;
       if (!filtered.length) { listEl.innerHTML = `<div class="blog-dash-empty"><p>No posts matching &ldquo;${escapeHtml(search)}&rdquo;.</p></div>`; return; }
       const sorted = sortPosts(filtered, sortMode);
-      const typeEmojiMap = { guide: '📘', listicle: '🔢', 'how-to': '🛠️', 'case-study': '📊', review: '⭐', roundup: '👥', opinion: '💭' };
+      const eyeIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+      const checkIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+      const unpublishIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+      const editIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+      const deleteIcon = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
       listEl.innerHTML = sorted.map(post => {
-        const typeLabel   = post.post_type || 'guide';
-        const typeEmoji   = typeEmojiMap[typeLabel] || '📄';
+        const typeLabel   = (post.post_type || 'article').replace(/-/g, ' ');
         const isPublished = post.status === 'published';
         const date = new Date(post.created_at || post.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const publishedUrl = post.published_url || (isPublished && post.slug ? `/blog/${post.slug}` : '');
-        return `<div class="blog-dash-item" data-id="${post.id}">
-          <span class="dash-status-pill ${isPublished ? 'published' : 'draft'}">${isPublished ? '● Published' : '○ Draft'}</span>
-          <div class="dash-item-main">
-            <div class="dash-item-title">${escapeHtml(post.title || 'Untitled')}</div>
-            <div class="dash-item-meta">
-              <span class="dash-item-type">${typeEmoji} ${typeLabel}</span>
-              <span class="dash-meta-dot"></span><span>${date}</span>
-              ${post.reading_time_minutes ? `<span class="dash-meta-dot"></span><span>${post.reading_time_minutes} min</span>` : ''}
-              ${post.slug ? `<span class="dash-meta-dot"></span><span class="dash-slug">/${escapeHtml(post.slug)}</span>` : ''}
-            </div>
+        return `<article class="blog-dash-card blog-dash-item" data-id="${post.id}">
+          <div class="blog-dash-card-head">
+            <span class="dash-status-pill ${isPublished ? 'published' : 'draft'}">${isPublished ? 'Published' : 'Draft'}</span>
+            <span class="blog-dash-card-date">${date}</span>
+          </div>
+          <h3 class="dash-item-title">${escapeHtml(post.title || 'Untitled')}</h3>
+          <div class="dash-item-meta">
+            <span class="dash-type-badge">${escapeHtml(typeLabel)}</span>
+            ${post.reading_time_minutes ? `<span>${post.reading_time_minutes} min read</span>` : ''}
+            ${post.slug ? `<span class="dash-slug">/${escapeHtml(post.slug)}</span>` : ''}
           </div>
           <div class="dash-item-actions">
-            ${publishedUrl ? `<a class="dash-btn dash-btn-preview" href="${escapeHtml(publishedUrl)}" target="_blank" rel="noopener" title="View live post">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              Preview
-            </a>` : `<button class="dash-btn dash-btn-preview dash-preview" data-id="${post.id}" title="Preview post">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              Preview
-            </button>`}
+            ${publishedUrl ? `<a class="dash-icon-btn dash-icon-preview" href="${escapeHtml(publishedUrl)}" target="_blank" rel="noopener" title="View live post" aria-label="View live post">${eyeIcon}</a>` : `<button type="button" class="dash-icon-btn dash-icon-preview dash-preview" data-id="${post.id}" title="Preview post" aria-label="Preview post">${eyeIcon}</button>`}
             ${isPublished
-              ? `<button class="dash-btn dash-btn-unpublish dash-unpublish" data-id="${post.id}" title="Set to draft">
-                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-                   Unpublish
-                 </button>`
-              : `<button class="dash-btn dash-btn-publish dash-publish" data-id="${post.id}" title="Publish post">
-                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                   Publish
-                 </button>`}
-            <button class="dash-btn dash-btn-edit dash-edit" data-id="${post.id}" data-slug="${escapeHtml(post.slug || '')}" title="Edit post">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Edit
-            </button>
-            <button class="dash-btn dash-btn-delete dash-delete" data-id="${post.id}" title="Delete post">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-            </button>
+              ? `<button type="button" class="dash-icon-btn dash-icon-unpublish dash-unpublish" data-id="${post.id}" title="Set to draft" aria-label="Set to draft">${unpublishIcon}</button>`
+              : `<button type="button" class="dash-icon-btn dash-icon-publish dash-publish" data-id="${post.id}" title="Publish post" aria-label="Publish post">${checkIcon}</button>`}
+            <button type="button" class="dash-icon-btn dash-icon-edit dash-edit" data-id="${post.id}" data-slug="${escapeHtml(post.slug || '')}" title="Edit post" aria-label="Edit post">${editIcon}</button>
+            <button type="button" class="dash-icon-btn dash-icon-delete dash-delete" data-id="${post.id}" title="Delete post" aria-label="Delete post">${deleteIcon}</button>
           </div>
-        </div>`;
+        </article>`;
       }).join('');
       listEl.querySelectorAll('.dash-publish').forEach(btn   => btn.addEventListener('click', () => handlePublishAction(btn.dataset.id, 'publish')));
       listEl.querySelectorAll('.dash-unpublish').forEach(btn => btn.addEventListener('click', () => handlePublishAction(btn.dataset.id, 'unpublish')));
@@ -670,8 +663,8 @@
       listEl.querySelectorAll('.dash-delete').forEach(btn    => btn.addEventListener('click', () => handleDeleteAction(btn.dataset.id)));
       listEl.querySelectorAll('.dash-edit').forEach(btn      => btn.addEventListener('click', () => handleEditAction(btn.dataset.id, btn.dataset.slug)));
     } catch (e) {
-      loadingEl.classList.add('hidden');
-      listEl.innerHTML = `<div class="blog-dash-empty"><p style="color:var(--red)">Error: ${escapeHtml(e.message)}</p></div>`;
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (listEl) listEl.innerHTML = `<div class="blog-dash-empty"><p style="color:var(--red)">Error: ${escapeHtml(e.message)}</p></div>`;
     }
   }
 
@@ -715,10 +708,14 @@
     const target = document.getElementById(viewId);
     if (target) target.classList.add('active');
     if (viewId === 'blogViewDashboard') {
-      // Sync the subtab highlight back to Dashboard
+      setBlogPanelMode('dashboard');
       document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
       document.querySelector('.blog-subtab[data-blogtab="dashboard"]')?.classList.add('active');
       loadDashboard();
+    } else if (viewId === 'blogViewEditor') {
+      setBlogPanelMode('editor');
+    } else if (viewId === 'blogViewGenerate') {
+      setBlogPanelMode('generate');
     }
   }
 
@@ -947,9 +944,22 @@
         document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
         const view = document.getElementById('blogView' + tab.charAt(0).toUpperCase() + tab.slice(1));
         if (view) view.classList.add('active');
+        setBlogPanelMode(tab === 'dashboard' ? 'dashboard' : 'generate');
         if (tab === 'dashboard') loadDashboard();
       });
     });
+
+    setBlogPanelMode('generate');
+
+    document.getElementById('blogWorkflowDismiss')?.addEventListener('click', () => {
+      document.getElementById('blogWorkflowHint')?.classList.add('is-dismissed');
+      try { localStorage.setItem('pg_blog_workflow_hint_dismissed', '1'); } catch {}
+    });
+    try {
+      if (localStorage.getItem('pg_blog_workflow_hint_dismissed') === '1') {
+        document.getElementById('blogWorkflowHint')?.classList.add('is-dismissed');
+      }
+    } catch {}
 
     // Dashboard filters
     ['blogDashStatus', 'blogDashType', 'blogDashSort', 'blogDashSearch'].forEach(id => {

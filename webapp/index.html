@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/departments.css">
   <link rel="stylesheet" href="css/command-dashboard.css">
   <link rel="stylesheet" href="css/launcher.css">
+  <link rel="stylesheet" href="css/blog-room.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -52,10 +53,10 @@
   <aside class="sidebar" role="navigation" aria-label="Department navigation">
     <div class="sidebar-brand">
       <div class="brand-lockup">
-        <div class="brand-mark">PG</div>
+        <img class="brand-logo" src="assets/gurucms-logo.png" alt="" width="40" height="40">
         <div class="brand-text">
-          <span class="brand-name">PathGuru</span>
-          <span class="brand-sub">Publishing Engine</span>
+          <span class="brand-name">GuruCMS</span>
+          <span class="brand-sub">Command Center</span>
         </div>
       </div>
     </div>
@@ -157,10 +158,10 @@
 
     <!-- ── BLOG: COMPOSE - derivative teasers from premium IP ── -->
     <section class="tab-panel" id="tab-blog" aria-label="Blog-room">
-      <div class="deprecated-notice">
-        <strong>Derivative workflow only.</strong> Premium playbooks are authored in
-        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Intelligence Library -> Blueprint Library</a>.
-        Use this panel to publish <em>teaser snippets</em> that attract traffic to paid IP on DigiFusion - not standalone blog posts.
+      <div class="blog-workflow-hint" id="blogWorkflowHint">
+        <span class="blog-workflow-hint-text">Derivative teasers from premium IP only — not standalone posts.</span>
+        <a href="#" data-goto-dept="intelligence" data-goto-tab="agents-ip">Blueprint Library</a>
+        <button type="button" class="blog-workflow-hint-dismiss" id="blogWorkflowDismiss" aria-label="Dismiss notice">&times;</button>
       </div>
       <!-- Blog Sub-tabs: Generate | Dashboard -->
       <div class="blog-subtabs">
@@ -437,38 +438,50 @@
 
       <!-- ── DASHBOARD VIEW ── -->
       <div class="blog-view" id="blogViewDashboard">
-        <div class="blog-dash-filters">
-          <div class="field"><input type="search" id="blogDashSearch" placeholder="Search posts..."></div>
-          <div class="field">
-            <select id="blogDashStatus">
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
+        <div class="blog-dash-toolbar">
+          <div class="blog-dash-toolbar-row">
+            <div class="blog-dash-search-wrap">
+              <input type="search" id="blogDashSearch" placeholder="Search posts..." aria-label="Search posts">
+            </div>
+            <button type="button" class="btn-secondary btn-sm btn-icon" id="blogDashRefresh" title="Refresh posts" aria-label="Refresh posts">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
           </div>
-          <div class="field">
-            <select id="blogDashType">
-              <option value="">All types</option>
-              <option value="guide">Guide</option>
-              <option value="listicle">Listicle</option>
-              <option value="how-to">How-To</option>
-              <option value="case-study">Case Study</option>
-              <option value="review">Review</option>
-              <option value="roundup">Roundup</option>
-              <option value="opinion">Opinion</option>
-            </select>
+          <div class="blog-dash-toolbar-row">
+            <div class="blog-dash-filter">
+              <select id="blogDashStatus" aria-label="Filter by status">
+                <option value="">All statuses</option>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+            <div class="blog-dash-filter">
+              <select id="blogDashType" aria-label="Filter by type">
+                <option value="">All types</option>
+                <option value="guide">Guide</option>
+                <option value="listicle">Listicle</option>
+                <option value="how-to">How-To</option>
+                <option value="case-study">Case Study</option>
+                <option value="review">Review</option>
+                <option value="roundup">Roundup</option>
+                <option value="opinion">Opinion</option>
+              </select>
+            </div>
+            <div class="blog-dash-filter">
+              <select id="blogDashSort" aria-label="Sort posts">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="title">Title A-Z</option>
+              </select>
+            </div>
           </div>
-          <div class="field">
-            <select id="blogDashSort">
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="title">Title A-Z</option>
-            </select>
-          </div>
-          <button class="btn-secondary btn-sm" id="blogDashRefresh">Refresh</button>
         </div>
-        <div id="blogDashLoading" class="blog-dash-loading hidden">Loading posts...</div>
-        <div class="blog-dash-list" id="blogDashList"></div>
+        <div class="blog-dash-body">
+          <div id="blogDashLoading" class="blog-dash-loading hidden">Loading posts...</div>
+          <div class="blog-dash-scroll">
+            <div class="blog-dash-list" id="blogDashList"></div>
+          </div>
+        </div>
       </div><!-- /#blogViewDashboard -->
 
       <!-- ── EDITOR VIEW ── -->

@@ -41,6 +41,15 @@ body.pg-shell-v3 .brand-lockup {
   gap: 12px;
 }
 
+body.pg-shell-v3 .brand-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
 body.pg-shell-v3 .brand-text {
   display: flex;
   flex-direction: column;
