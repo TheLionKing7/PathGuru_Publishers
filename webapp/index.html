@@ -53,7 +53,7 @@
   <aside class="sidebar" role="navigation" aria-label="Department navigation">
     <div class="sidebar-brand">
       <div class="brand-lockup">
-        <img class="brand-logo" src="assets/gurucms-logo.png" alt="GuruCMS" width="40" height="40">
+        <img class="brand-logo" src="assets/gurucms-logo.png" alt="GuruCMS" width="52" height="52">
         <div class="brand-text">
           <span class="brand-name">GuruCMS</span>
           <span class="brand-sub">Command Center</span>
@@ -1131,6 +1131,11 @@
             <p class="panel-eyebrow">Agent Network</p>
             <h1 class="panel-title">Team Workflow</h1>
           </div>
+          <div class="header-actions">
+            <button type="button" class="btn-secondary btn-sm btn-icon" id="workflowBoardRefresh" title="Refresh workflow board" aria-label="Refresh workflow board">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
         </header>
         <header class="panel-header" data-for="agents-activity">
           <div>
@@ -1346,6 +1351,44 @@
         <!-- ── TEAM WORKFLOW ── -->
         <section class="tab-panel" id="tab-agents-workflow" aria-label="Team Workflow">
           <div class="nexus-workflow-body">
+            <section class="workflow-board" aria-label="Workflow board">
+              <div class="workflow-board-intro">
+                <h2 class="workflow-board-heading">Workflow Board</h2>
+                <p class="nexus-ops-intro">Live lists — client blueprints, Nexus process designs, and active delivery engagements.</p>
+              </div>
+              <div class="workflow-board-columns">
+                <div class="workflow-board-col">
+                  <header class="workflow-board-col-head">
+                    <h3>Client Blueprints</h3>
+                    <span class="workflow-board-count" id="workflowBpCount">—</span>
+                  </header>
+                  <div class="workflow-board-scroll" id="workflowBlueprintsList">
+                    <div class="workflow-board-loading">Loading…</div>
+                  </div>
+                </div>
+                <div class="workflow-board-col">
+                  <header class="workflow-board-col-head">
+                    <h3>Process Designs</h3>
+                    <span class="workflow-board-count" id="workflowDesignCount">—</span>
+                  </header>
+                  <div class="workflow-board-scroll" id="workflowDesignsList">
+                    <div class="workflow-board-loading">Loading…</div>
+                  </div>
+                </div>
+                <div class="workflow-board-col">
+                  <header class="workflow-board-col-head">
+                    <h3>Active Engagements</h3>
+                    <span class="workflow-board-count" id="workflowEngCount">—</span>
+                  </header>
+                  <div class="workflow-board-scroll" id="workflowEngagementsList">
+                    <div class="workflow-board-loading">Loading…</div>
+                  </div>
+                </div>
+              </div>
+              <div class="workflow-board-detail" id="workflowBoardDetail" hidden></div>
+            </section>
+
+            <h2 class="workflow-section-title">Create new</h2>
             <p class="nexus-ops-intro">Client blueprints (multi-agent action plans) and process workflows. Nexus coordinates; you implement; Pulse retunes weekly.</p>
 
             <div class="ip-synthesizer-card" style="margin-bottom:20px">

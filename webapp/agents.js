@@ -648,9 +648,131 @@
   /* ═══════════════════════════════════════════════════════════════
      TEAM WORKFLOW
   ═══════════════════════════════════════════════════════════════ */
+  function renderWorkflowBoardEmpty (msg) {
+    return `<div class="workflow-board-empty">${esc(msg)}</div>`;
+  }
+
+  function isWorkflowTask (t) {
+    const title = String(t.title || '');
+    const desc  = String(t.description || '');
+    return /workflow/i.test(title) || /workflow/i.test(desc) || /implement workflow/i.test(title);
+  }
+
+  async function openWorkflowBlueprintDetail (id) {
+    const panel = $('workflowBoardDetail');
+    if (!panel) return;
+    panel.hidden = false;
+    panel.innerHTML = '<div class="workflow-board-loading">Loading blueprint…</div>';
+    try {
+      const bp = await apiFetch(`/api/client-blueprint/${encodeURIComponent(id)}`);
+      const meta = bp.metadata || {};
+      const tasks = (bp.bossTasks || bp.actionPlan || []).slice(0, 6);
+      panel.innerHTML = `
+        <div class="workflow-board-detail-header">
+          <h4>${esc(meta.client_name || meta.company || id)}</h4>
+          <button type="button" class="workflow-board-detail-close" id="workflowDetailClose" aria-label="Close">&times;</button>
+        </div>
+        <p class="nexus-ops-intro">${esc(bp.engagement?.current_phase || bp.status || 'active')} · ${esc(meta.industry || 'general')} · Quality ${esc(bp.quality?.grade || '—')}</p>
+        ${tasks.length ? `<ul style="margin:12px 0 0;padding-left:18px;font-size:13px;line-height:1.6">${tasks.map((t, i) => `<li>${esc(typeof t === 'string' ? t : t.title || t.task || JSON.stringify(t))}</li>`).join('')}</ul>` : '<p class="nexus-ops-intro">No action items in blueprint.</p>'}`;
+      $('workflowDetailClose')?.addEventListener('click', () => { panel.hidden = true; });
+    } catch (e) {
+      panel.innerHTML = renderWorkflowBoardEmpty(e.message);
+    }
+  }
+
+  async function loadWorkflowBoard () {
+    const bpEl   = $('workflowBlueprintsList');
+    const desEl  = $('workflowDesignsList');
+    const engEl  = $('workflowEngagementsList');
+    if (!bpEl || !desEl || !engEl) return;
+
+    const loading = '<div class="workflow-board-loading">Loading…</div>';
+    bpEl.innerHTML = loading;
+    desEl.innerHTML = loading;
+    engEl.innerHTML = loading;
+
+    try {
+      const base = getBackendUrl();
+      const [bpRes, tasksData, engData] = await Promise.all([
+        fetch(`${base}/api/client-blueprint`).then(r => r.json()),
+        fetchTasks('', ''),
+        apiFetch('/api/engagements').catch(() => ({ engagements: [] })),
+      ]);
+
+      let blueprints = Array.isArray(bpRes) ? bpRes : (bpRes.blueprints || []);
+      const tasks = (tasksData.tasks || tasksData || []).filter(isWorkflowTask);
+      const engagements = (engData.engagements || []).filter(e => e.status !== 'completed');
+
+      $('workflowBpCount').textContent = String(blueprints.length);
+      $('workflowDesignCount').textContent = String(tasks.length);
+      $('workflowEngCount').textContent = String(engagements.length);
+
+      if (!blueprints.length) {
+        bpEl.innerHTML = renderWorkflowBoardEmpty('No blueprints yet — build one below.');
+      } else {
+        bpEl.innerHTML = blueprints.map(bp => {
+          const when = bp.createdAt ? new Date(bp.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—';
+          return `<article class="workflow-board-card" data-kind="blueprint" data-id="${esc(bp.id)}" tabindex="0">
+            <span class="workflow-board-tag">${esc(bp.status || 'active')}</span>
+            <h4 class="workflow-board-card-title">${esc(bp.client || 'Client blueprint')}</h4>
+            <p class="workflow-board-card-meta">${esc(when)} · ${esc(bp.id)}</p>
+          </article>`;
+        }).join('');
+        bpEl.querySelectorAll('[data-kind="blueprint"]').forEach(card => {
+          card.addEventListener('click', () => openWorkflowBlueprintDetail(card.dataset.id));
+          card.addEventListener('keydown', e => { if (e.key === 'Enter') openWorkflowBlueprintDetail(card.dataset.id); });
+        });
+      }
+
+      if (!tasks.length) {
+        desEl.innerHTML = renderWorkflowBoardEmpty('No process designs — use Design workflow below.');
+      } else {
+        desEl.innerHTML = tasks.map(t => {
+          const agent = AGENTS.find(a => a.id === t.agent_id) || { name: t.agent_id };
+          const when = t.created_at ? relTime(t.created_at) : '—';
+          return `<article class="workflow-board-card" data-kind="task" data-id="${esc(t.id)}" tabindex="0">
+            ${statusBadge(t.status)}
+            <h4 class="workflow-board-card-title">${esc(t.title || 'Workflow task')}</h4>
+            <p class="workflow-board-card-meta">${esc(agent.name)} · ${esc(when)}</p>
+          </article>`;
+        }).join('');
+        desEl.querySelectorAll('[data-kind="task"]').forEach(card => {
+          const task = tasks.find(t => String(t.id) === card.dataset.id);
+          if (!task) return;
+          const open = () => openTaskDrawer(task);
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+        });
+      }
+
+      if (!engagements.length) {
+        engEl.innerHTML = renderWorkflowBoardEmpty('No active engagements.');
+      } else {
+        engEl.innerHTML = engagements.map(e => `<article class="workflow-board-card" data-kind="engagement" data-id="${esc(e.id)}" tabindex="0">
+          ${healthLabel(e.health)}
+          <h4 class="workflow-board-card-title">${esc(e.client_name || 'Engagement')}</h4>
+          <p class="workflow-board-card-meta">${esc(formatPhase(e.current_phase))} · ${esc(e.track || '—')}</p>
+          <div class="workflow-board-card-tags"><span class="workflow-board-tag">${esc(e.status || 'active')}</span></div>
+        </article>`).join('');
+        engEl.querySelectorAll('[data-kind="engagement"]').forEach(card => {
+          const open = () => openEngagementDrawer(card.dataset.id);
+          card.addEventListener('click', open);
+          card.addEventListener('keydown', e => { if (e.key === 'Enter') open(); });
+        });
+      }
+    } catch (err) {
+      const msg = renderWorkflowBoardEmpty(err.message);
+      bpEl.innerHTML = msg;
+      desEl.innerHTML = msg;
+      engEl.innerHTML = msg;
+    }
+  }
+
   function wireWorkflowTab () {
     if (wireWorkflowTab._wired) return;
     wireWorkflowTab._wired = true;
+
+    $('workflowBoardRefresh')?.addEventListener('click', loadWorkflowBoard);
 
     $('btnClientBlueprint')?.addEventListener('click', async () => {
       const clientName = $('blueprintClientInput')?.value.trim();
@@ -676,6 +798,7 @@
           out.style.display = 'block';
           out.textContent = JSON.stringify(data.blueprint, null, 2);
         }
+        loadWorkflowBoard();
       } catch (e) {
         status.textContent = `✗ ${e.message}`;
       } finally {
@@ -719,6 +842,7 @@
             </div>
             <pre class="nexus-workflow-spec">${esc(data.spec || '')}</pre>`;
         }
+        loadWorkflowBoard();
       } catch (e) {
         if (out) out.innerHTML = `<div class="content-empty content-empty-err">${esc(e.message)}</div>`;
       } finally {
@@ -3009,7 +3133,7 @@
        Piggyback on the sidebar nav-btn clicks + module-tab clicks. */
     function onAgentsTabActivated (tab) {
       if (tab === 'agents-command')  loadCeoOps();
-      if (tab === 'agents-workflow') wireWorkflowTab();
+      if (tab === 'agents-workflow') { wireWorkflowTab(); loadWorkflowBoard(); }
       if (tab === 'agents-activity') loadActivityTimeline();
       if (tab === 'agents-network') loadNetworkStatus();
       if (tab === 'agents-tasks')   loadTasks();

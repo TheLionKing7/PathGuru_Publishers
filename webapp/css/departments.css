@@ -42,8 +42,8 @@ body.pg-shell-v3 .brand-lockup {
 }
 
 body.pg-shell-v3 .brand-logo {
-  width: 40px;
-  height: 40px;
+  width: 52px;
+  height: 52px;
   border-radius: 8px;
   object-fit: contain;
   flex-shrink: 0;
@@ -601,7 +601,7 @@ body.pg-shell-v3 .module-body > .tab-panel.active {
   text-transform: capitalize;
 }
 .nexus-ops-chip-running { border-color: rgba(62,207,142,.4); color: var(--green); }
-.nexus-workflow-body { max-width: 880px; }
+/* Workflow board uses full width — see workflow-board block below */
 .nexus-workflow-form {
   display: flex;
   flex-direction: column;
@@ -787,6 +787,198 @@ body.pg-dept-analytics .analytics-row-label {
   font-size: 12px;
   margin-bottom: 12px;
   color: var(--text-secondary);
+}
+
+/* ── Workflow board (Network → Workflow tab) ── */
+.nexus-workflow-body {
+  max-width: none;
+  padding: 24px 28px 32px;
+}
+
+.workflow-board {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.workflow-board-heading {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+}
+
+.workflow-section-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+}
+
+.workflow-board-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+  min-height: 280px;
+}
+
+.workflow-board-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.workflow-board-col-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.workflow-board-col-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.workflow-board-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dept-network);
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: 999px;
+  padding: 2px 8px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.workflow-board-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workflow-board-loading,
+.workflow-board-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.workflow-board-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.workflow-board-card:hover,
+.workflow-board-card:focus-visible {
+  border-color: rgba(167, 139, 250, 0.45);
+  background: rgba(167, 139, 250, 0.06);
+  outline: none;
+}
+
+.workflow-board-card-title {
+  margin: 6px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.workflow-board-card-meta {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.workflow-board-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.workflow-board-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.workflow-board-detail {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.workflow-board-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.workflow-board-detail-header h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.workflow-board-detail-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+}
+
+@media (max-width: 960px) {
+  .workflow-board-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .workflow-board-scroll {
+    max-height: 240px;
+  }
 }
 
 /* Products: compact shop tabs — no page-wide horizontal scroll */
