@@ -2923,7 +2923,7 @@
     $('nexusRejectBtn')?.addEventListener('click', () => resolvePendingApproval('rejected'));
     $('ceoNotionSyncBtn')?.addEventListener('click', async () => {
       const btn = $('ceoNotionSyncBtn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+      if (btn) { btn.disabled = true; btn.classList.add('is-loading'); btn.setAttribute('aria-busy', 'true'); }
       try {
         await apiFetch('/api/agents/nexus/sync-notion', { method: 'POST', body: '{}' });
         const summary = $('agentsStatusSummary');
@@ -2931,7 +2931,7 @@
       } catch (e) {
         alert(`Notion sync failed: ${e.message}`);
       } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'Sync Notion'; }
+        if (btn) { btn.disabled = false; btn.classList.remove('is-loading'); btn.removeAttribute('aria-busy'); }
       }
     });
     $('activityRefreshBtn')?.addEventListener('click', loadActivityTimeline);

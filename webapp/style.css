@@ -208,6 +208,25 @@ body {
   flex-wrap: wrap;
 }
 
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  line-height: 0;
+}
+
+.btn-icon svg {
+  flex-shrink: 0;
+  display: block;
+}
+
+.btn-icon.is-loading svg {
+  animation: spin 0.75s linear infinite;
+}
+
 .backend-url {
   font-size: 11px;
   color: var(--text-muted);
