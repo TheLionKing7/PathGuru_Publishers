@@ -487,83 +487,67 @@
 
       <!-- ── EDITOR VIEW ── -->
       <div class="blog-view" id="blogViewEditor">
+        <div class="blog-editor-shell">
 
-        <!-- Header bar -->
-        <div class="blog-editor-header">
-          <button class="btn-secondary btn-sm" id="blogEditorBack"><- Back</button>
-          <div class="blog-editor-header-right">
-            <select id="blogEditorStatusSelect" class="editor-select editor-select-sm" aria-label="Post status">
-              <option value="draft">Draft</option>
-              <option value="published">Published</option>
-            </select>
-            <span class="blog-editor-status-badge" id="blogEditorStatusBadge"></span>
-            <button class="btn-secondary btn-sm" id="blogEditorCancel">Discard</button>
-            <button class="btn-primary btn-sm"   id="blogEditorSave">Save changes</button>
+        <div class="blog-editor-meta">
+          <div class="blog-editor-meta-row">
+            <div class="blog-editor-meta-field blog-editor-meta-title">
+              <label for="blogEditorTitle">Title</label>
+              <input type="text" id="blogEditorTitle" placeholder="Post title...">
+            </div>
+            <div class="blog-editor-meta-field">
+              <label for="blogEditorSlug">Slug</label>
+              <input type="text" id="blogEditorSlug" placeholder="url-slug">
+            </div>
+            <div class="blog-editor-meta-field">
+              <label for="blogEditorAuthor">Author</label>
+              <input type="text" id="blogEditorAuthor" placeholder="Author name">
+            </div>
+          </div>
+          <div class="blog-editor-meta-row">
+            <div class="blog-editor-meta-field blog-editor-meta-wide">
+              <label for="blogEditorMeta">Meta description</label>
+              <input type="text" id="blogEditorMeta" placeholder="SEO meta description...">
+            </div>
+            <div class="blog-editor-meta-field">
+              <label for="blogEditorKeyword">Focus keyword</label>
+              <input type="text" id="blogEditorKeyword" placeholder="SEO keyword">
+            </div>
           </div>
         </div>
 
-        <!-- Meta fields -->
-        <div class="blog-editor-meta-row">
-          <div class="blog-editor-meta-field blog-editor-meta-title">
-            <label for="blogEditorTitle">Title</label>
-            <input type="text" id="blogEditorTitle" placeholder="Post title...">
-          </div>
-          <div class="blog-editor-meta-field">
-            <label for="blogEditorSlug">Slug</label>
-            <input type="text" id="blogEditorSlug" placeholder="url-slug">
-          </div>
-          <div class="blog-editor-meta-field">
-            <label for="blogEditorAuthor">Author</label>
-            <input type="text" id="blogEditorAuthor" placeholder="Author name">
-          </div>
-        </div>
-        <div class="blog-editor-meta-row">
-          <div class="blog-editor-meta-field" style="flex:1">
-            <label for="blogEditorMeta">Meta description</label>
-            <input type="text" id="blogEditorMeta" placeholder="SEO meta description...">
-          </div>
-          <div class="blog-editor-meta-field">
-            <label for="blogEditorKeyword">Focus keyword</label>
-            <input type="text" id="blogEditorKeyword" placeholder="SEO keyword">
-          </div>
-        </div>
-
-        <!-- Rich-text toolbar -->
         <div class="blog-editor-toolbar" id="blogEditorToolbar" role="toolbar" aria-label="Formatting">
-          <!-- Font family -->
-          <select class="editor-select" id="editorFontFamily" title="Font family">
-            <option value="">Default font</option>
-            <option value="Georgia, serif">Georgia</option>
-            <option value="'Playfair Display', serif">Playfair Display</option>
-            <option value="'DM Sans', sans-serif">DM Sans</option>
-            <option value="Arial, sans-serif">Arial</option>
-            <option value="'Times New Roman', serif">Times New Roman</option>
-            <option value="'Courier New', monospace">Courier New</option>
-          </select>
-          <!-- Font size -->
-          <select class="editor-select editor-select-sm" id="editorFontSize" title="Font size">
-            <option value="">Size</option>
-            <option value="1">Small (10px)</option>
-            <option value="2">12px</option>
-            <option value="3">Normal (14px)</option>
-            <option value="4">16px</option>
-            <option value="5">Large (18px)</option>
-            <option value="6">24px</option>
-            <option value="7">36px</option>
-          </select>
-          <div class="editor-toolbar-sep"></div>
-          <!-- Block format -->
-          <select class="editor-select" id="editorBlockFormat" title="Paragraph style">
-            <option value="p">Paragraph</option>
-            <option value="h1">Heading 1</option>
-            <option value="h2">Heading 2</option>
-            <option value="h3">Heading 3</option>
-            <option value="h4">Heading 4</option>
-            <option value="blockquote">Blockquote</option>
-            <option value="pre">Code</option>
-          </select>
-          <div class="editor-toolbar-sep"></div>
-          <!-- Inline styles -->
+          <div class="blog-editor-toolbar-typo">
+            <select class="editor-select editor-select-compact" id="editorFontFamily" title="Font family" aria-label="Font family">
+              <option value="">Default font</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="'Playfair Display', serif">Playfair Display</option>
+              <option value="'DM Sans', sans-serif">DM Sans</option>
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+              <option value="'Courier New', monospace">Courier New</option>
+            </select>
+            <select class="editor-select editor-select-compact" id="editorFontSize" title="Font size" aria-label="Font size">
+              <option value="">Size</option>
+              <option value="1">Small (10px)</option>
+              <option value="2">12px</option>
+              <option value="3">Normal (14px)</option>
+              <option value="4">16px</option>
+              <option value="5">Large (18px)</option>
+              <option value="6">24px</option>
+              <option value="7">36px</option>
+            </select>
+            <select class="editor-select editor-select-compact" id="editorBlockFormat" title="Paragraph style" aria-label="Paragraph style">
+              <option value="p">Paragraph</option>
+              <option value="h1">Heading 1</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+              <option value="h4">Heading 4</option>
+              <option value="blockquote">Blockquote</option>
+              <option value="pre">Code</option>
+            </select>
+          </div>
+          <div class="blog-editor-toolbar-actions">
           <button class="editor-tool-btn" data-cmd="bold"        title="Bold (Ctrl+B)"><b>B</b></button>
           <button class="editor-tool-btn" data-cmd="italic"      title="Italic (Ctrl+I)"><i>I</i></button>
           <button class="editor-tool-btn" data-cmd="underline"   title="Underline (Ctrl+U)"><u>U</u></button>
@@ -594,20 +578,39 @@
           <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">↩</button>
           <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">↪</button>
           <div class="editor-toolbar-sep"></div>
-          <!-- Source toggle -->
           <button class="editor-tool-btn editor-tool-source" id="editorSourceToggle" title="Toggle HTML source">&lt;/&gt;</button>
+          </div>
         </div>
 
-        <!-- Editable content area -->
         <div class="blog-editor-body">
           <div class="blog-editor-area" id="blogEditorArea" contenteditable="true" spellcheck="true"></div>
           <textarea class="blog-editor-source" id="blogEditorSource" hidden spellcheck="false"></textarea>
         </div>
 
+        <footer class="blog-editor-footer">
+          <button type="button" class="btn-secondary btn-sm" id="blogEditorPreview">Preview</button>
+          <div class="blog-editor-footer-actions">
+            <button type="button" class="btn-secondary btn-sm" id="blogEditorSaveDraft">Save as Draft</button>
+            <button type="button" class="btn-primary btn-sm" id="blogEditorPublish">Publish</button>
+          </div>
+        </footer>
+
+        </div><!-- /.blog-editor-shell -->
+
         <input type="hidden" id="blogEditorPostId">
         <input type="hidden" id="blogEditorPostSlug">
-
+        <input type="hidden" id="blogEditorStatus" value="draft">
       </div><!-- /#blogViewEditor -->
+
+      <div class="modal-backdrop blog-editor-preview-backdrop" id="blogEditorPreviewModal" style="display:none" aria-hidden="true">
+        <div class="modal blog-editor-preview-modal" role="dialog" aria-labelledby="blogEditorPreviewHeading" aria-modal="true">
+          <div class="modal-header">
+            <h2 class="modal-title" id="blogEditorPreviewHeading">Post preview</h2>
+            <button type="button" class="modal-close" id="blogEditorPreviewClose" aria-label="Close preview">&times;</button>
+          </div>
+          <div class="modal-body blog-editor-preview-body" id="blogEditorPreviewBody"></div>
+        </div>
+      </div>
 
       <!-- ── SCHEDULE VIEW (manual + queue) ── -->
       <div class="blog-view" id="blogViewSchedule">

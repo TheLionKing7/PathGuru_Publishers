@@ -611,14 +611,59 @@
   }
 
   function setEditorStatus(status = 'draft') {
-    const badge = document.getElementById('blogEditorStatusBadge');
-    const select = document.getElementById('blogEditorStatusSelect');
-    const isPublished = status === 'published';
-    if (select) select.value = isPublished ? 'published' : 'draft';
-    if (badge) {
-      badge.textContent = isPublished ? 'Published' : 'Draft';
-      badge.className = `blog-editor-status-badge ${isPublished ? 'published' : 'draft'}`;
+    const hidden = document.getElementById('blogEditorStatus');
+    if (hidden) hidden.value = status === 'published' ? 'published' : 'draft';
+  }
+
+  function syncEditorSourceToArea() {
+    if (_editorSourceMode) {
+      document.getElementById('blogEditorArea').innerHTML =
+        document.getElementById('blogEditorSource').value;
     }
+  }
+
+  function collectEditorPayload(status = 'draft') {
+    syncEditorSourceToArea();
+    const titleInput = document.getElementById('blogEditorTitle').value.trim();
+    const slugInput  = document.getElementById('blogEditorSlug').value.trim();
+    const oldSlug    = document.getElementById('blogEditorPostSlug').value;
+    const slug       = slugInput || oldSlug || makeSlug(titleInput);
+    return {
+      title: titleInput,
+      slug,
+      content: document.getElementById('blogEditorArea').innerHTML,
+      authorName:      document.getElementById('blogEditorAuthor').value.trim(),
+      author_name:     document.getElementById('blogEditorAuthor').value.trim(),
+      metaDescription: document.getElementById('blogEditorMeta').value.trim(),
+      meta_description: document.getElementById('blogEditorMeta').value.trim(),
+      focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
+      focus_keyword:   document.getElementById('blogEditorKeyword').value.trim(),
+      status: status === 'published' ? 'published' : 'draft',
+    };
+  }
+
+  function openEditorPreview() {
+    syncEditorSourceToArea();
+    const title = document.getElementById('blogEditorTitle').value.trim() || 'Untitled';
+    const modal = document.getElementById('blogEditorPreviewModal');
+    const body  = document.getElementById('blogEditorPreviewBody');
+    const heading = document.getElementById('blogEditorPreviewHeading');
+    if (!modal || !body) return;
+    if (heading) heading.textContent = title;
+    body.innerHTML = `
+      <article class="blog-editor-preview-article">
+        <h1 class="blog-editor-preview-title">${escapeHtml(title)}</h1>
+        ${document.getElementById('blogEditorArea').innerHTML}
+      </article>`;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeEditorPreview() {
+    const modal = document.getElementById('blogEditorPreviewModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   async function loadDashboard() {
@@ -865,40 +910,20 @@
     switchBlogView('blogViewEditor');
   }
 
-  async function handleSaveEdit() {
-    const id      = document.getElementById('blogEditorPostId').value;
-    const oldSlug = document.getElementById('blogEditorPostSlug').value;
+  async function handleSaveEdit(status = 'draft', options = {}) {
+    const id = document.getElementById('blogEditorPostId').value;
+    const payload = collectEditorPayload(status);
+    if (!payload.title) { blogToast('Title is required.', 'error'); return false; }
+    if (!payload.slug) { blogToast('Slug is required.', 'error'); return false; }
 
-    // Sync source textarea → editor area if in source mode
-    if (_editorSourceMode) {
-      document.getElementById('blogEditorArea').innerHTML =
-        document.getElementById('blogEditorSource').value;
+    const saveBtn = status === 'published'
+      ? document.getElementById('blogEditorPublish')
+      : document.getElementById('blogEditorSaveDraft');
+    const defaultLabel = status === 'published' ? 'Publish' : 'Save as Draft';
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = status === 'published' ? 'Publishing…' : 'Saving…';
     }
-
-    const content = document.getElementById('blogEditorArea').innerHTML;
-    const titleInput = document.getElementById('blogEditorTitle').value.trim();
-    const slugInput  = document.getElementById('blogEditorSlug').value.trim();
-    const slug    = slugInput || oldSlug || makeSlug(titleInput);
-    const title = titleInput;
-    if (!title) { blogToast('Title is required.', 'error'); return; }
-    if (!slug) { blogToast('Slug is required.', 'error'); return; }
-
-    const payload = {
-      title,
-      slug,
-      content,
-      authorName:      document.getElementById('blogEditorAuthor').value.trim(),
-      author_name:     document.getElementById('blogEditorAuthor').value.trim(),
-      metaDescription: document.getElementById('blogEditorMeta').value.trim(),
-      meta_description: document.getElementById('blogEditorMeta').value.trim(),
-      focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
-      focus_keyword:   document.getElementById('blogEditorKeyword').value.trim(),
-      status:          document.getElementById('blogEditorStatusSelect')?.value || 'draft',
-    };
-
-    const saveBtn = document.getElementById('blogEditorSave');
-    saveBtn.disabled    = true;
-    saveBtn.textContent = 'Saving…';
 
     try {
       const backendUrl = getBackendUrl();
@@ -909,23 +934,43 @@
       const res = await fetch(endpoint, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Save failed');
       }
-      blogToast('Post saved!', 'success');
-      if (!id) {
-        document.getElementById('blogEditorPostId').value = slug;
-      }
-      document.getElementById('blogEditorPostSlug').value = slug;
+      const data = await res.json().catch(() => ({}));
+      const savedSlug = data.slug || payload.slug;
+      const savedId = data.supabase?.id || savedSlug;
+      document.getElementById('blogEditorPostId').value = String(savedId);
+      document.getElementById('blogEditorPostSlug').value = savedSlug;
+      document.getElementById('blogEditorSlug').value = savedSlug;
       setEditorStatus(payload.status);
+
+      if (status === 'published') {
+        const pubRes = await fetch(
+          `${backendUrl}/api/posts/${encodeURIComponent(savedSlug)}/publish`,
+          { method: 'PATCH' },
+        );
+        if (!pubRes.ok) {
+          const d = await pubRes.json().catch(() => ({}));
+          throw new Error(d.error || 'Publish failed after save');
+        }
+      }
+
+      if (!options.silent) {
+        blogToast(status === 'published' ? 'Post published!' : 'Draft saved.', 'success');
+      }
+      return true;
     } catch (e) {
       blogToast(e.message, 'error');
+      return false;
     } finally {
-      saveBtn.disabled    = false;
-      saveBtn.textContent = 'Save changes';
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = defaultLabel;
+      }
     }
   }
 
@@ -1028,22 +1073,17 @@
       editorArea.addEventListener('mouseup', updateToolbarState);
     }
 
-    // Save button
-    const saveBtn = document.getElementById('blogEditorSave');
-    if (saveBtn) saveBtn.addEventListener('click', handleSaveEdit);
-
-    const statusSelect = document.getElementById('blogEditorStatusSelect');
-    if (statusSelect) {
-      statusSelect.addEventListener('change', () => setEditorStatus(statusSelect.value));
-    }
-
-    // Back / Discard buttons
-    const goBack = () => switchBlogView(lastNonEditorBlogView || 'blogViewDashboard');
-    const backBtn    = document.getElementById('blogEditorBack');
-    const cancelBtn  = document.getElementById('blogEditorCancel');
-    if (backBtn)   backBtn.addEventListener('click', goBack);
-    if (cancelBtn) cancelBtn.addEventListener('click', () => {
-      if (confirm('Discard unsaved changes?')) goBack();
+    // Save / publish / preview
+    document.getElementById('blogEditorSaveDraft')?.addEventListener('click', () => {
+      handleSaveEdit('draft');
+    });
+    document.getElementById('blogEditorPublish')?.addEventListener('click', () => {
+      handleSaveEdit('published');
+    });
+    document.getElementById('blogEditorPreview')?.addEventListener('click', openEditorPreview);
+    document.getElementById('blogEditorPreviewClose')?.addEventListener('click', closeEditorPreview);
+    document.getElementById('blogEditorPreviewModal')?.addEventListener('click', (e) => {
+      if (e.target.id === 'blogEditorPreviewModal') closeEditorPreview();
     });
   }
 
