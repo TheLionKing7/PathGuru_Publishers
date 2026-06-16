@@ -3,6 +3,7 @@
  */
 
 import { handleApprovalReply, findPendingApproval, parseApprovalReply, resolveApproval } from './approvalGate.js';
+import { isWhatsAppOutboundRequest, isWhatsAppApprovalReceiptQuery } from './whatsappChatIntents.js';
 
 /**
  * Build a user-facing reply after an approval decision (approve/reject + optional publish).
@@ -95,13 +96,13 @@ export function isApprovalStatusQuery(text) {
     return false;
   }
 
-  return /approval|gotten|received|waiting.*(yes|approval|blog)|pending.*(blog|approval)|have you.*(approval|yes|blog)|did you (get|receive).*(approval|yes|blog)|sent.*yes|honor|whatsapp|via wa|don'?t know if you got|got my (reply|message|response)/i.test(t);
+  return /approval|gotten|received|waiting.*(yes|approval|blog)|pending.*(blog|approval)|have you.*(approval|yes|blog)|did you (get|receive).*(approval|yes|blog)|sent.*yes|honor|don'?t know if you got|got my (reply|message|response)/i.test(t);
 }
 
-/** Boss asking whether WhatsApp / webhook received their reply. */
+/** Boss asking whether WhatsApp / webhook received their approval reply (not: send me a WhatsApp). */
 export function isWhatsAppApprovalQuery(text) {
-  const t = (text || '').toLowerCase();
-  return /whatsapp|via wa|twilio|don'?t know if you got|got my (reply|message|response)|sent.*(whatsapp|wa|response)/i.test(t);
+  if (isWhatsAppOutboundRequest(text)) return false;
+  return isWhatsAppApprovalReceiptQuery(text);
 }
 
 /**

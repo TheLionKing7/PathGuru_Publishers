@@ -52,6 +52,10 @@ import {
   buildApprovalChannelGuidance,
   getNotionCapabilityReply,
 } from '../skills/approvalActions.js';
+import {
+  isWhatsAppOutboundRequest,
+  extractOutboundWhatsAppBody,
+} from '../skills/whatsappChatIntents.js';
 import { findPendingApproval } from '../skills/approvalGate.js';
 import {
   isResearchStatusQuery,
@@ -1416,6 +1420,34 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     }
 
+    // ── ACTION: Boss wants outbound WhatsApp (test ping / text me) ───────
+    if (isWhatsAppOutboundRequest(message)) {
+      const bodyText = extractOutboundWhatsAppBody(message);
+      const toRaw = (process.env.WHATSAPP_TO || process.env.OWNER_PHONE || '').trim();
+      if (!toRaw) {
+        return 'Boss, outbound WhatsApp is not configured — set OWNER_PHONE (or WHATSAPP_TO) plus Twilio credentials on the server.';
+      }
+      try {
+        const { sendImmediate } = await import('../skills/notifier.js');
+        const result = await sendImmediate('Nexus', bodyText, 'whatsapp');
+        const wa = result?.whatsapp;
+        if (wa?.skipped) {
+          const reason = wa.reason === 'no_credentials'
+            ? 'Twilio/Meta WhatsApp credentials are missing.'
+            : 'No WhatsApp recipient is configured.';
+          return `Could not send — ${reason}`;
+        }
+        const sent = wa?.results?.some((r) => r.sent || r.sid);
+        if (sent) {
+          return `Done Boss — sent "${bodyText}" to your WhatsApp. Check your phone; if nothing arrives, verify Twilio sandbox join and OWNER_PHONE.`;
+        }
+        const err = wa?.results?.find((r) => r.error)?.error || wa?.error;
+        return `WhatsApp send failed${err ? `: ${err}` : ''}. Check Twilio logs and webhook config.`;
+      } catch (e) {
+        return `WhatsApp send failed — ${e.message}`;
+      }
+    }
+
     // ── ACTION: Boss YES/NO on pending approval (chat + WhatsApp parity) ───
     try {
       const approvalResult = await processBossApprovalMessage(message);
@@ -1435,8 +1467,8 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     }
 
-    // ── ACTION: WhatsApp / approval channel guidance (fast — no LLM) ───────
-    if (isWhatsAppApprovalQuery(message) || (isApprovalStatusQuery(message) && /whatsapp|got it|got my|via wa/i.test(lower))) {
+    // ── ACTION: WhatsApp approval receipt (fast — no LLM) ─────────────────
+    if (isWhatsAppApprovalQuery(message)) {
       try {
         return await buildApprovalChannelGuidance(/notion/i.test(lower));
       } catch (e) {
