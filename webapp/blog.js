@@ -5,6 +5,8 @@
 (function () {
   let currentBlogResult = null;
   let mediaFiles = []; // { file, name, type } — reference files for writer agent
+  let currentBlogView = 'blogViewGenerate';
+  let lastNonEditorBlogView = 'blogViewDashboard';
 
   function getBackendUrl() {
     return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
@@ -789,6 +791,8 @@
     document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
     const target = document.getElementById(viewId);
     if (target) target.classList.add('active');
+    currentBlogView = viewId;
+    if (viewId !== 'blogViewEditor') lastNonEditorBlogView = viewId;
     if (viewId === 'blogViewDashboard') {
       setBlogPanelMode('dashboard');
       document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
@@ -802,8 +806,12 @@
     } else if (viewId === 'blogViewEditor') {
       const hasId = !!document.getElementById('blogEditorPostId')?.value;
       setBlogPanelMode(hasId ? 'editor' : 'writer');
+      document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
+      document.querySelector('.blog-subtab[data-blogtab="writer"]')?.classList.add('active');
     } else if (viewId === 'blogViewGenerate') {
       setBlogPanelMode('generate');
+      document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
+      document.querySelector('.blog-subtab[data-blogtab="generate"]')?.classList.add('active');
     }
   }
 
@@ -1030,10 +1038,7 @@
     }
 
     // Back / Discard buttons
-    const goBack = () => {
-      const hasId = !!document.getElementById('blogEditorPostId')?.value;
-      switchBlogView(hasId ? 'blogViewDashboard' : 'blogViewGenerate');
-    };
+    const goBack = () => switchBlogView(lastNonEditorBlogView || 'blogViewDashboard');
     const backBtn    = document.getElementById('blogEditorBack');
     const cancelBtn  = document.getElementById('blogEditorCancel');
     if (backBtn)   backBtn.addEventListener('click', goBack);
@@ -1086,11 +1091,11 @@
           switchBlogView('blogViewSchedule');
           return;
         }
-        document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
-        const view = document.getElementById('blogView' + tab.charAt(0).toUpperCase() + tab.slice(1));
-        if (view) view.classList.add('active');
-        setBlogPanelMode(tab === 'dashboard' ? 'dashboard' : 'generate');
-        if (tab === 'dashboard') loadDashboard();
+        if (tab === 'dashboard') {
+          switchBlogView('blogViewDashboard');
+          return;
+        }
+        switchBlogView('blogViewGenerate');
       });
     });
 

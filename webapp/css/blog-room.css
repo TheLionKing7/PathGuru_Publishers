@@ -13,7 +13,9 @@ body.pg-dept-intelligence #tab-blog {
 
 body.pg-dept-blogroom #tab-blog.active,
 body.pg-dept-intelligence #tab-blog.active {
-  overflow: hidden !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  align-items: stretch;
 }
 
 /* Give Blog-room predictable vertical scroll ownership */
@@ -129,16 +131,17 @@ body.pg-dept-intelligence #tab-blog.blog-mode-schedule .blog-subtabs-right {
 body.pg-dept-blogroom .blog-view,
 body.pg-dept-intelligence .blog-view {
   min-height: 0;
+  overflow: visible;
 }
 
 body.pg-dept-blogroom #blogViewGenerate,
 body.pg-dept-intelligence #blogViewGenerate {
-  overflow: hidden;
+  overflow: visible;
 }
 
 body.pg-dept-blogroom #blogViewSchedule,
 body.pg-dept-intelligence #blogViewSchedule {
-  overflow-y: auto;
+  overflow: visible;
   padding: 16px 24px 24px;
   gap: 14px;
 }
@@ -146,18 +149,20 @@ body.pg-dept-intelligence #blogViewSchedule {
 /* Cleaner split layout for Generate */
 body.pg-dept-blogroom .blog-layout,
 body.pg-dept-intelligence .blog-layout {
-  min-height: 0;
+  min-height: auto;
   display: grid;
   grid-template-columns: minmax(340px, 460px) minmax(0, 1fr);
+  overflow: visible;
+  align-items: start;
 }
 
 body.pg-dept-blogroom .blog-form-col,
 body.pg-dept-intelligence .blog-form-col {
   width: auto;
   min-width: 0;
-  overflow-y: auto;
+  overflow: visible;
   padding: 18px 20px 0;
-  scrollbar-gutter: stable;
+  border-right: 1px solid var(--border);
 }
 
 body.pg-dept-blogroom .blog-results-col,
@@ -212,7 +217,7 @@ body.pg-dept-intelligence .blog-editor-toolbar {
 body.pg-dept-blogroom .blog-editor-body,
 body.pg-dept-intelligence .blog-editor-body {
   padding: 14px 16px 18px;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 body.pg-dept-blogroom .blog-editor-area,
@@ -331,20 +336,18 @@ body.pg-dept-intelligence .blog-editor-meta-field input:focus {
 }
 
 .blog-dash-body {
-  flex: 1;
-  min-height: 0;
+  flex: 0 0 auto;
+  min-height: auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .blog-dash-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
   padding: 20px 24px 28px;
-  scrollbar-gutter: stable;
 }
 
 .blog-dash-loading {
@@ -465,13 +468,13 @@ body.pg-dept-intelligence .blog-editor-meta-field input:focus {
 /* Editor view scroll */
 #blogViewEditor {
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #blogViewEditor .blog-editor-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex: 0 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 body.pg-dept-blogroom .blog-form-col,
