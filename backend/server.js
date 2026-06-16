@@ -2151,7 +2151,7 @@ const server = createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       const { rateMessage, recordFeedbackMemory } = await import('./skills/agentChatStore.js');
-      const row = await rateMessage(chatMsgRateMatch[1], body.rating, body.feedback || '');
+      const row = await rateMessage(decodeURIComponent(chatMsgRateMatch[1]), body.rating, body.feedback || '');
       if (row) await recordFeedbackMemory(row.agent_id, row, body.rating, body.feedback || '');
       json(res, { ok: true, message: row });
     } catch (e) { err(res, e.message, 500); }
@@ -2184,14 +2184,14 @@ const server = createServer(async (req, res) => {
       const parentRef = replyTo || parentId || null;
       const agentMessage = await resolveReplyContext(parentRef, message.trim());
 
+      const dbHistory = clientHistory.length
+        ? clientHistory
+        : await loadChatContext(agentId, 16);
+
       const userRow = await appendChatMessage(agentId, 'user', message.trim(), {
         parentId: parentRef,
         metadata: parentRef ? { replyTo: parentRef } : {},
       });
-
-      const dbHistory = clientHistory.length
-        ? clientHistory
-        : await loadChatContext(agentId, 16);
 
       const chatTimeoutMs = Number(process.env.AGENT_CHAT_TIMEOUT_MS || 28000);
       const reply = await Promise.race([

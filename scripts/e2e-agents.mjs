@@ -102,7 +102,7 @@ async function runApiChecks() {
     const chat = await apiJson('POST', '/api/agents/assistant/chat', {
       message: 'E2E ping: reply with exactly OK if you received this.',
     });
-    const reply = chat.reply || chat.message || chat.content || '';
+    const reply = chat.reply || chat.response || chat.message || chat.content || '';
     if (!reply || reply.length < 2) fail('nexus chat', new Error('empty reply'));
     pass('assistant chat', reply.slice(0, 80).replace(/\s+/g, ' '));
   } else {

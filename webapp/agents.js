@@ -1435,10 +1435,11 @@
   }
 
   async function deleteChatMessage (messageId) {
-    const base = getBackendUrl();
-    const res = await fetch(`${base}/api/agents/chat/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Delete failed');
-    return res.json();
+    const out = await apiFetch(`/api/agents/chat/messages/${encodeURIComponent(messageId)}`, {
+      method: 'DELETE',
+    });
+    if (!out?.ok) throw new Error('Delete failed');
+    return out;
   }
 
   async function rateChatMessage (messageId, rating, feedback = '') {
@@ -1569,7 +1570,8 @@
         });
         actions.querySelector('.chat-act-up')?.addEventListener('click', async () => {
           try {
-            await rateChatMessage(msg.id, 1);
+            const out = await rateChatMessage(msg.id, 1);
+            if (!out?.ok) throw new Error('Rating not saved');
             actions.querySelector('.chat-act-up')?.classList.add('active');
             actions.querySelector('.chat-act-down')?.classList.remove('active');
           } catch (e) { alert(e.message); }
@@ -1577,7 +1579,8 @@
         actions.querySelector('.chat-act-down')?.addEventListener('click', async () => {
           const note = prompt('What should the agent do differently? (optional)') || '';
           try {
-            await rateChatMessage(msg.id, -1, note);
+            const out = await rateChatMessage(msg.id, -1, note);
+            if (!out?.ok) throw new Error('Rating not saved');
             actions.querySelector('.chat-act-down')?.classList.add('active');
             actions.querySelector('.chat-act-up')?.classList.remove('active');
           } catch (e) { alert(e.message); }
@@ -1652,10 +1655,12 @@
       try {
         const data = await sendChatMessage(agentId, msg, { replyTo });
         $(`chatTyping-${agentId}`)?.remove();
-        appendBubble('agent', data.reply || '', {
-          id: data.assistantMessageId,
-          parent_id: data.userMessageId,
-        });
+        const normalizedReply = String(data.reply || '').trim().toLowerCase();
+        const normalizedMsg = msg.trim().toLowerCase();
+        if (normalizedReply && normalizedReply === normalizedMsg) {
+          appendBubble('agent', 'I received your message. Reframing now…');
+        }
+        await refreshHistory();
       } catch (e) {
         $(`chatTyping-${agentId}`)?.remove();
         appendBubble('agent', `⚠ ${e.message}`);

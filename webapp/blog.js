@@ -593,8 +593,30 @@
   function setBlogPanelMode(mode) {
     const tab = document.getElementById('tab-blog');
     if (!tab) return;
-    tab.classList.remove('blog-mode-generate', 'blog-mode-dashboard', 'blog-mode-editor');
+    tab.classList.remove('blog-mode-generate', 'blog-mode-dashboard', 'blog-mode-editor', 'blog-mode-writer', 'blog-mode-schedule');
     if (mode) tab.classList.add(`blog-mode-${mode}`);
+  }
+
+  function makeSlug(input) {
+    return String(input || '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 90);
+  }
+
+  function setEditorStatus(status = 'draft') {
+    const badge = document.getElementById('blogEditorStatusBadge');
+    const select = document.getElementById('blogEditorStatusSelect');
+    const isPublished = status === 'published';
+    if (select) select.value = isPublished ? 'published' : 'draft';
+    if (badge) {
+      badge.textContent = isPublished ? 'Published' : 'Draft';
+      badge.className = `blog-editor-status-badge ${isPublished ? 'published' : 'draft'}`;
+    }
   }
 
   async function loadDashboard() {
@@ -668,6 +690,66 @@
     }
   }
 
+  async function loadBlogScheduleCalendar() {
+    const body = document.getElementById('blogContentCalendarBody');
+    if (!body) return;
+    body.innerHTML = '<div class="content-empty">Loading queue…</div>';
+    try {
+      const backendUrl = getBackendUrl();
+      const res = await fetch(`${backendUrl}/api/content/calendar`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      const items = Array.isArray(data) ? data : (data.calendar || data.items || data.articles || []);
+      if (!items.length) {
+        body.innerHTML = '<div class="content-empty">No articles queued yet.</div>';
+        return;
+      }
+      body.innerHTML = `
+        <table class="content-table">
+          <thead>
+            <tr><th>Topic</th><th>Sector</th><th>Publish At</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            ${items.map(a => `
+              <tr>
+                <td>${escapeHtml(a.topic || a.title || '—')}</td>
+                <td>${escapeHtml(a.sector || '—')}</td>
+                <td>${a.publishAt ? new Date(a.publishAt).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : '—'}</td>
+                <td><span class="content-badge content-badge-${escapeHtml(a.status || 'queued')}">${escapeHtml(a.status || 'queued')}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+    } catch (e) {
+      body.innerHTML = `<div class="content-empty content-empty-err">Failed to load queue: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
+  async function scheduleBlogArticle() {
+    const topic = prompt('Article topic:');
+    if (!topic) return;
+    const sector = prompt('Sector (optional):') || '';
+    const angle = prompt('Angle / key points (optional):') || '';
+    const dateStr = prompt('Publish date (YYYY-MM-DD, blank for tomorrow):') || '';
+    const publishAt = dateStr
+      ? new Date(dateStr).toISOString()
+      : new Date(Date.now() + 86400000).toISOString();
+    try {
+      const backendUrl = getBackendUrl();
+      const res = await fetch(`${backendUrl}/api/content/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, sector, angle, publishAt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      blogToast('Article scheduled.', 'success');
+      await loadBlogScheduleCalendar();
+    } catch (e) {
+      blogToast(`Scheduling failed: ${e.message}`, 'error');
+    }
+  }
+
   async function handlePublishAction(id, action) {
     try {
       const backendUrl = getBackendUrl();
@@ -712,8 +794,14 @@
       document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
       document.querySelector('.blog-subtab[data-blogtab="dashboard"]')?.classList.add('active');
       loadDashboard();
+    } else if (viewId === 'blogViewSchedule') {
+      setBlogPanelMode('schedule');
+      document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
+      document.querySelector('.blog-subtab[data-blogtab="schedule"]')?.classList.add('active');
+      loadBlogScheduleCalendar();
     } else if (viewId === 'blogViewEditor') {
-      setBlogPanelMode('editor');
+      const hasId = !!document.getElementById('blogEditorPostId')?.value;
+      setBlogPanelMode(hasId ? 'editor' : 'writer');
     } else if (viewId === 'blogViewGenerate') {
       setBlogPanelMode('generate');
     }
@@ -736,10 +824,7 @@
       document.getElementById('blogEditorKeyword').value   = post.focus_keyword    || '';
 
       // Status badge
-      const badge = document.getElementById('blogEditorStatusBadge');
-      const isPublished = post.status === 'published';
-      badge.textContent  = isPublished ? 'Published' : 'Draft';
-      badge.className    = `blog-editor-status-badge ${isPublished ? 'published' : 'draft'}`;
+      setEditorStatus(post.status === 'published' ? 'published' : 'draft');
 
       // Populate editor
       const area   = document.getElementById('blogEditorArea');
@@ -758,10 +843,23 @@
     } catch (e) { blogToast(e.message, 'error'); }
   }
 
+  function startWriterDraft() {
+    document.getElementById('blogEditorPostId').value = '';
+    document.getElementById('blogEditorPostSlug').value = '';
+    document.getElementById('blogEditorTitle').value = '';
+    document.getElementById('blogEditorSlug').value = '';
+    document.getElementById('blogEditorAuthor').value = 'Boroji Adebayo-Hopewell';
+    document.getElementById('blogEditorMeta').value = '';
+    document.getElementById('blogEditorKeyword').value = '';
+    document.getElementById('blogEditorArea').innerHTML = '<p></p>';
+    document.getElementById('blogEditorSource').value = '';
+    setEditorStatus('draft');
+    switchBlogView('blogViewEditor');
+  }
+
   async function handleSaveEdit() {
     const id      = document.getElementById('blogEditorPostId').value;
     const oldSlug = document.getElementById('blogEditorPostSlug').value;
-    if (!id) return;
 
     // Sync source textarea → editor area if in source mode
     if (_editorSourceMode) {
@@ -770,18 +868,24 @@
     }
 
     const content = document.getElementById('blogEditorArea').innerHTML;
-    const title   = document.getElementById('blogEditorTitle').value.trim();
-    const slug    = document.getElementById('blogEditorSlug').value.trim() || oldSlug;
+    const titleInput = document.getElementById('blogEditorTitle').value.trim();
+    const slugInput  = document.getElementById('blogEditorSlug').value.trim();
+    const slug    = slugInput || oldSlug || makeSlug(titleInput);
+    const title = titleInput;
+    if (!title) { blogToast('Title is required.', 'error'); return; }
+    if (!slug) { blogToast('Slug is required.', 'error'); return; }
 
     const payload = {
       title,
       slug,
       content,
       authorName:      document.getElementById('blogEditorAuthor').value.trim(),
+      author_name:     document.getElementById('blogEditorAuthor').value.trim(),
       metaDescription: document.getElementById('blogEditorMeta').value.trim(),
+      meta_description: document.getElementById('blogEditorMeta').value.trim(),
       focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
-      status:          document.getElementById('blogEditorStatusBadge')?.classList.contains('published')
-        ? 'published' : 'draft',
+      focus_keyword:   document.getElementById('blogEditorKeyword').value.trim(),
+      status:          document.getElementById('blogEditorStatusSelect')?.value || 'draft',
     };
 
     const saveBtn = document.getElementById('blogEditorSave');
@@ -790,8 +894,12 @@
 
     try {
       const backendUrl = getBackendUrl();
-      const res = await fetch(`${backendUrl}/api/posts/${encodeURIComponent(id)}`, {
-        method:  'PUT',
+      const endpoint = id
+        ? `${backendUrl}/api/posts/${encodeURIComponent(id)}`
+        : `${backendUrl}/api/posts`;
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(endpoint, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(payload),
       });
@@ -800,7 +908,11 @@
         throw new Error(d.error || 'Save failed');
       }
       blogToast('Post saved!', 'success');
+      if (!id) {
+        document.getElementById('blogEditorPostId').value = slug;
+      }
       document.getElementById('blogEditorPostSlug').value = slug;
+      setEditorStatus(payload.status);
     } catch (e) {
       blogToast(e.message, 'error');
     } finally {
@@ -863,6 +975,23 @@
       if (url) execEditorCmd('createLink', url);
     });
 
+    const imgBtn = document.getElementById('editorInsertImage');
+    if (imgBtn) imgBtn.addEventListener('click', () => {
+      const url = prompt('Image URL to insert:');
+      if (!url) return;
+      execEditorCmd('insertHTML', `<figure><img src="${escapeHtml(url)}" alt="" style="max-width:100%;height:auto;border-radius:8px" /><figcaption>Image caption</figcaption></figure>`);
+    });
+
+    const chartBtn = document.getElementById('editorInsertChart');
+    if (chartBtn) chartBtn.addEventListener('click', () => {
+      const title = prompt('Chart title:', 'Performance trend');
+      const safeTitle = escapeHtml(title || 'Chart');
+      execEditorCmd(
+        'insertHTML',
+        `<figure class="blog-chart-block"><div style="border:1px dashed #94a3b8;padding:12px;border-radius:8px;background:#f8fafc"><strong>${safeTitle}</strong><p style="margin-top:6px;color:#64748b">Paste your chart image, iframe, or data-visual embed here.</p></div><figcaption>Chart note</figcaption></figure>`,
+      );
+    });
+
     // Source toggle
     const sourceToggle = document.getElementById('editorSourceToggle');
     if (sourceToggle) sourceToggle.addEventListener('click', () => {
@@ -895,8 +1024,16 @@
     const saveBtn = document.getElementById('blogEditorSave');
     if (saveBtn) saveBtn.addEventListener('click', handleSaveEdit);
 
+    const statusSelect = document.getElementById('blogEditorStatusSelect');
+    if (statusSelect) {
+      statusSelect.addEventListener('change', () => setEditorStatus(statusSelect.value));
+    }
+
     // Back / Discard buttons
-    const goBack = () => switchBlogView('blogViewDashboard');
+    const goBack = () => {
+      const hasId = !!document.getElementById('blogEditorPostId')?.value;
+      switchBlogView(hasId ? 'blogViewDashboard' : 'blogViewGenerate');
+    };
     const backBtn    = document.getElementById('blogEditorBack');
     const cancelBtn  = document.getElementById('blogEditorCancel');
     if (backBtn)   backBtn.addEventListener('click', goBack);
@@ -935,12 +1072,20 @@
       });
     }
 
-    // Blog sub-tabs (Generate / Dashboard)
+    // Blog sub-tabs (Generate / Writer / Dashboard / Schedule)
     document.querySelectorAll('.blog-subtab').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.blog-subtab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const tab  = btn.dataset.blogtab;
+        if (tab === 'writer') {
+          startWriterDraft();
+          return;
+        }
+        if (tab === 'schedule') {
+          switchBlogView('blogViewSchedule');
+          return;
+        }
         document.querySelectorAll('.blog-view').forEach(v => v.classList.remove('active'));
         const view = document.getElementById('blogView' + tab.charAt(0).toUpperCase() + tab.slice(1));
         if (view) view.classList.add('active');
@@ -969,6 +1114,27 @@
     });
     const refreshBtn = document.getElementById('blogDashRefresh');
     if (refreshBtn) refreshBtn.addEventListener('click', loadDashboard);
+
+    document.getElementById('blogScheduleArticleBtn')?.addEventListener('click', scheduleBlogArticle);
+    document.getElementById('blogRefreshCalendarBtn')?.addEventListener('click', loadBlogScheduleCalendar);
+    document.getElementById('blogGenCalendarBtn')?.addEventListener('click', async () => {
+      const backendUrl = getBackendUrl();
+      const pillarTopic = prompt('Pillar topic for 90-day C2C calendar:', 'AI automation for African SMEs without enterprise budgets');
+      if (!pillarTopic) return;
+      try {
+        const res = await fetch(`${backendUrl}/api/c2c/pillar-plan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pillarTopic, sector: 'sme', enqueue: true }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        blogToast(`Calendar queued: ${data.queued || 0} items.`, 'success');
+        loadBlogScheduleCalendar();
+      } catch (e) {
+        blogToast(`Calendar failed: ${e.message}`, 'error');
+      }
+    });
 
     // Platform checkbox toggles
     [['wpEnabled','wpFields'],['ghostEnabled','ghostFields'],['wfEnabled','wfFields'],['dfEnabled','dfFields']].forEach(([chk, fld]) => {

@@ -112,7 +112,6 @@
     <nav class="dept-route-nav" id="deptRouteNav" role="tablist" aria-label="Intelligence sections" hidden>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
-      <button type="button" class="dept-route-tab" data-dept-tab="blog" role="tab" aria-selected="false">Blog-room</button>
     </nav>
 
     <!-- ══════════════════════════════════════════════
@@ -167,7 +166,9 @@
       <div class="blog-subtabs">
         <div class="blog-subtabs-left">
           <button class="blog-subtab active" data-blogtab="generate">Generate</button>
+          <button class="blog-subtab" data-blogtab="writer">Writer</button>
           <button class="blog-subtab" data-blogtab="dashboard">Dashboard <span class="blog-subtab-count" id="blogSubtabCount" hidden>0</span></button>
+          <button class="blog-subtab" data-blogtab="schedule">Schedule</button>
         </div>
         <div class="blog-subtabs-right" id="blogPreviewTabsBar">
           <button class="blog-preview-tab active" data-previewtab="preview">Preview</button>
@@ -489,8 +490,12 @@
 
         <!-- Header bar -->
         <div class="blog-editor-header">
-          <button class="btn-secondary btn-sm" id="blogEditorBack"><- Back to dashboard</button>
+          <button class="btn-secondary btn-sm" id="blogEditorBack"><- Back</button>
           <div class="blog-editor-header-right">
+            <select id="blogEditorStatusSelect" class="editor-select editor-select-sm" aria-label="Post status">
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+            </select>
             <span class="blog-editor-status-badge" id="blogEditorStatusBadge"></span>
             <button class="btn-secondary btn-sm" id="blogEditorCancel">Discard</button>
             <button class="btn-primary btn-sm"   id="blogEditorSave">Save changes</button>
@@ -584,6 +589,8 @@
           <div class="editor-toolbar-sep"></div>
           <!-- Link & undo/redo -->
           <button class="editor-tool-btn" id="editorInsertLink" title="Insert link"></button>
+          <button class="editor-tool-btn" id="editorInsertImage" title="Insert image">🖼</button>
+          <button class="editor-tool-btn" id="editorInsertChart" title="Insert chart block">📊</button>
           <button class="editor-tool-btn" data-cmd="undo"  title="Undo (Ctrl+Z)">↩</button>
           <button class="editor-tool-btn" data-cmd="redo"  title="Redo (Ctrl+Y)">↪</button>
           <div class="editor-toolbar-sep"></div>
@@ -601,6 +608,33 @@
         <input type="hidden" id="blogEditorPostSlug">
 
       </div><!-- /#blogViewEditor -->
+
+      <!-- ── SCHEDULE VIEW (manual + queue) ── -->
+      <div class="blog-view" id="blogViewSchedule">
+        <div class="content-card content-card-wide" style="margin: 0 0 16px;">
+          <div class="content-schedule-header">
+            <h3 class="content-card-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Manual Schedule
+            </h3>
+            <button class="ip-btn-primary" id="blogScheduleArticleBtn">+ Schedule Article</button>
+          </div>
+          <p class="content-card-desc" style="margin-bottom:10px">Queue non-AI or edited drafts for timed publication.</p>
+        </div>
+
+        <div class="content-card content-card-wide">
+          <div class="content-schedule-header">
+            <h3 class="content-card-title">Content Queue</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button class="ip-btn-secondary" id="blogRefreshCalendarBtn">Refresh</button>
+              <button class="ip-btn-primary" id="blogGenCalendarBtn">Generate Content Calendar</button>
+            </div>
+          </div>
+          <div id="blogContentCalendarBody">
+            <div class="content-empty">No articles queued yet.</div>
+          </div>
+        </div>
+      </div><!-- /#blogViewSchedule -->
 
     </section><!-- /#tab-blog -->
 

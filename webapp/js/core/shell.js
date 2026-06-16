@@ -16,6 +16,8 @@
       defaultTab:   'blog',
       sections: {
         blog:         'Compose',
+        writer:       'Writer',
+        schedule:     'Schedule',
         'blog-assets': 'Assets',
       },
     },
@@ -78,7 +80,7 @@
     'agents-ip', 'agents-content',
   ]);
 
-  const BLOGROOM_TABS = new Set(['blog', 'blog-assets']);
+  const BLOGROOM_TABS = new Set(['blog', 'writer', 'schedule', 'blog-assets']);
   const BLOG_MODULE_TABS = BLOGROOM_TABS;
 
   const NETWORK_TABS = new Set([
