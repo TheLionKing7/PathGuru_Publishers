@@ -226,6 +226,28 @@ body.pg-dept-intelligence .blog-editor-meta-field input {
   box-sizing: border-box;
 }
 
+.blog-editor-meta-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.blog-editor-meta-label-row .btn-link.btn-xs {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.blog-editor-meta-label-row .btn-link.btn-xs:hover {
+  border-color: var(--accent);
+}
+
 body.pg-dept-blogroom .blog-editor-toolbar,
 body.pg-dept-intelligence .blog-editor-toolbar {
   margin: 8px 20px 0;

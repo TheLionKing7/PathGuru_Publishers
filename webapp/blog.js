@@ -610,6 +610,28 @@
       .slice(0, 90);
   }
 
+  function generateMetaDescription() {
+    syncEditorSourceToArea();
+    const area = document.getElementById('blogEditorArea');
+    const metaEl = document.getElementById('blogEditorMeta');
+    if (!area || !metaEl) return;
+    const text = (area.innerText || area.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!text) {
+      blogToast('Add article body content first.', 'error');
+      return;
+    }
+    let desc = text.slice(0, 155);
+    if (text.length > 155) {
+      const cut = desc.lastIndexOf(' ');
+      if (cut > 100) desc = desc.slice(0, cut);
+      desc += '…';
+    }
+    metaEl.value = desc;
+    blogToast('Meta description generated.', 'success');
+  }
+
   function setEditorStatus(status = 'draft') {
     const hidden = document.getElementById('blogEditorStatus');
     if (hidden) hidden.value = status === 'published' ? 'published' : 'draft';
@@ -1161,6 +1183,7 @@
     if (refreshBtn) refreshBtn.addEventListener('click', loadDashboard);
 
     document.getElementById('blogScheduleArticleBtn')?.addEventListener('click', scheduleBlogArticle);
+    document.getElementById('blogEditorMetaAuto')?.addEventListener('click', generateMetaDescription);
     document.getElementById('blogRefreshCalendarBtn')?.addEventListener('click', loadBlogScheduleCalendar);
     document.getElementById('blogGenCalendarBtn')?.addEventListener('click', async () => {
       const backendUrl = getBackendUrl();
