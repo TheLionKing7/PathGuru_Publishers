@@ -528,11 +528,11 @@
                 </div>
                 <div class="blog-editor-featured-controls">
                   <div class="blog-editor-featured-buttons">
-                    <button type="button" class="btn btn-sm" id="blogEditorFeaturedUpload">Upload image</button>
+                    <input type="file" id="blogEditorFeaturedInput" class="blog-editor-featured-file-input" accept="image/jpeg,image/png,image/webp,image/gif">
+                    <label for="blogEditorFeaturedInput" class="btn-secondary btn-sm blog-editor-featured-upload-label" id="blogEditorFeaturedUpload">Upload image</label>
                     <button type="button" class="btn-link btn-xs" id="blogEditorFeaturedFromBody" title="Copy the first &lt;img&gt; in the article body">Use first image in body</button>
-                    <button type="button" class="btn-link btn-xs blog-editor-featured-clear" id="blogEditorFeaturedClear" hidden>Remove</button>
+                    <button type="button" class="btn-link btn-xs blog-editor-featured-clear" id="blogEditorFeaturedClear" disabled>Remove</button>
                   </div>
-                  <input type="file" id="blogEditorFeaturedInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
                   <input type="hidden" id="blogEditorFeaturedUrl" value="">
                   <input type="text" id="blogEditorFeaturedCredit" placeholder="Image credit (optional)">
                 </div>
@@ -1939,7 +1939,7 @@
   <script src="js/core/launcher.js"></script>
   <script src="js/core/shell.js"></script>
   <script src="app.js"></script>
-  <script src="blog.js"></script>
+  <script src="blog.js?v=20260617"></script>
   <script src="shop.js"></script>
   <script src="analytics.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>

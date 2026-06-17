@@ -662,12 +662,12 @@
       img.src = url;
       img.hidden = false;
       if (placeholder) placeholder.hidden = true;
-      if (clearBtn) clearBtn.hidden = false;
+      if (clearBtn) clearBtn.disabled = false;
     } else {
       img.removeAttribute('src');
       img.hidden = true;
       if (placeholder) placeholder.hidden = false;
-      if (clearBtn) clearBtn.hidden = true;
+      if (clearBtn) clearBtn.disabled = true;
     }
   }
 
@@ -696,9 +696,9 @@
     }
     mediaLibUploading = true;
     const preview = document.getElementById('blogEditorFeaturedPreview');
-    const uploadBtn = document.getElementById('blogEditorFeaturedUpload');
+    const uploadLabel = document.getElementById('blogEditorFeaturedUpload');
     if (preview) preview.classList.add('blog-editor-featured-uploading');
-    if (uploadBtn) uploadBtn.disabled = true;
+    if (uploadLabel) uploadLabel.classList.add('is-disabled');
 
     const params = new URLSearchParams({ filename: file.name, type: file.type || 'application/octet-stream' });
     const xhr = new XMLHttpRequest();
@@ -708,7 +708,7 @@
     xhr.addEventListener('load', () => {
       mediaLibUploading = false;
       if (preview) preview.classList.remove('blog-editor-featured-uploading');
-      if (uploadBtn) uploadBtn.disabled = false;
+      if (uploadLabel) uploadLabel.classList.remove('is-disabled');
       if (xhr.status === 201) {
         try {
           const asset = JSON.parse(xhr.responseText);
@@ -730,29 +730,41 @@
     xhr.addEventListener('error', () => {
       mediaLibUploading = false;
       if (preview) preview.classList.remove('blog-editor-featured-uploading');
-      if (uploadBtn) uploadBtn.disabled = false;
+      if (uploadLabel) uploadLabel.classList.remove('is-disabled');
       blogToast('Upload failed — network error.', 'error');
     });
 
     xhr.send(file);
   }
 
-  function wireFeaturedImageControls () {
-    const uploadBtn = document.getElementById('blogEditorFeaturedUpload');
-    const fileInput = document.getElementById('blogEditorFeaturedInput');
-    const fromBody  = document.getElementById('blogEditorFeaturedFromBody');
-    const clearBtn  = document.getElementById('blogEditorFeaturedClear');
+  let _featuredImageWired = false;
 
-    uploadBtn?.addEventListener('click', () => fileInput?.click());
-    fileInput?.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      fileInput.value = '';
+  function wireFeaturedImageControls () {
+    if (_featuredImageWired) return;
+    const root = document.getElementById('tab-blog');
+    if (!root) return;
+    _featuredImageWired = true;
+
+    root.addEventListener('change', (e) => {
+      if (e.target?.id !== 'blogEditorFeaturedInput') return;
+      const file = e.target.files?.[0];
+      e.target.value = '';
       if (file) uploadFeaturedImageFile(file);
     });
-    fromBody?.addEventListener('click', useFirstBodyImageAsFeatured);
-    clearBtn?.addEventListener('click', () => {
-      setFeaturedImage('', '');
-      blogToast('Featured image removed.', 'info');
+
+    root.addEventListener('click', (e) => {
+      if (e.target.closest('#blogEditorFeaturedFromBody')) {
+        e.preventDefault();
+        useFirstBodyImageAsFeatured();
+        return;
+      }
+      const clearBtn = e.target.closest('#blogEditorFeaturedClear');
+      if (clearBtn) {
+        e.preventDefault();
+        if (clearBtn.disabled) return;
+        setFeaturedImage('', '');
+        blogToast('Featured image removed.', 'info');
+      }
     });
   }
 
@@ -1227,6 +1239,8 @@
     document.getElementById('blogEditorPreviewModal')?.addEventListener('click', (e) => {
       if (e.target.id === 'blogEditorPreviewModal') closeEditorPreview();
     });
+
+    wireFeaturedImageControls();
   }
 
   // ── Init ───────────────────────────────────────────────────────────
@@ -1304,7 +1318,6 @@
 
     document.getElementById('blogScheduleArticleBtn')?.addEventListener('click', scheduleBlogArticle);
     document.getElementById('blogEditorMetaAuto')?.addEventListener('click', generateMetaDescription);
-    wireFeaturedImageControls();
     document.getElementById('blogRefreshCalendarBtn')?.addEventListener('click', loadBlogScheduleCalendar);
     document.getElementById('blogGenCalendarBtn')?.addEventListener('click', async () => {
       const backendUrl = getBackendUrl();
