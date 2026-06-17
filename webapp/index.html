@@ -517,6 +517,28 @@
               <input type="text" id="blogEditorKeyword" placeholder="SEO keyword">
             </div>
           </div>
+          <div class="blog-editor-meta-row blog-editor-featured-row">
+            <div class="blog-editor-meta-field blog-editor-featured-field">
+              <label for="blogEditorFeaturedCredit">Featured image</label>
+              <p class="blog-editor-featured-hint">Shown on the blog index and post header — separate from images in the article body.</p>
+              <div class="blog-editor-featured">
+                <div class="blog-editor-featured-preview" id="blogEditorFeaturedPreview">
+                  <span class="blog-editor-featured-placeholder" id="blogEditorFeaturedPlaceholder">No featured image yet</span>
+                  <img id="blogEditorFeaturedImg" alt="" hidden>
+                </div>
+                <div class="blog-editor-featured-controls">
+                  <div class="blog-editor-featured-buttons">
+                    <button type="button" class="btn btn-sm" id="blogEditorFeaturedUpload">Upload image</button>
+                    <button type="button" class="btn-link btn-xs" id="blogEditorFeaturedFromBody" title="Copy the first &lt;img&gt; in the article body">Use first image in body</button>
+                    <button type="button" class="btn-link btn-xs blog-editor-featured-clear" id="blogEditorFeaturedClear" hidden>Remove</button>
+                  </div>
+                  <input type="file" id="blogEditorFeaturedInput" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+                  <input type="hidden" id="blogEditorFeaturedUrl" value="">
+                  <input type="text" id="blogEditorFeaturedCredit" placeholder="Image credit (optional)">
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="blog-editor-toolbar" id="blogEditorToolbar" role="toolbar" aria-label="Formatting">

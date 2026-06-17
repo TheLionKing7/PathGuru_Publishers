@@ -475,6 +475,8 @@ const server = createServer(async (req, res) => {
           excerpt:          body.excerpt          || '',
           meta_description: body.metaDescription  || body.meta_description || '',
           focus_keyword:    body.focusKeyword      || body.focus_keyword    || '',
+          featured_image_url:    body.featured_image_url  || body.featuredImageUrl  || null,
+          featured_image_credit: body.featured_image_credit || body.featuredImageCredit || '',
           post_type:        body.postType          || body.post_type        || 'article',
           status,
           author_name:      body.authorName        || body.author_name      || '',

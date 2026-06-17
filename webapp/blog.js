@@ -644,12 +644,126 @@
     }
   }
 
+  function setFeaturedImage (url, credit) {
+    const urlEl    = document.getElementById('blogEditorFeaturedUrl');
+    const creditEl = document.getElementById('blogEditorFeaturedCredit');
+    if (urlEl) urlEl.value = (url || '').trim();
+    if (creditEl && credit !== undefined) creditEl.value = (credit || '').trim();
+    updateFeaturedImagePreview();
+  }
+
+  function updateFeaturedImagePreview () {
+    const url         = document.getElementById('blogEditorFeaturedUrl')?.value.trim() || '';
+    const img         = document.getElementById('blogEditorFeaturedImg');
+    const placeholder = document.getElementById('blogEditorFeaturedPlaceholder');
+    const clearBtn    = document.getElementById('blogEditorFeaturedClear');
+    if (!img) return;
+    if (url) {
+      img.src = url;
+      img.hidden = false;
+      if (placeholder) placeholder.hidden = true;
+      if (clearBtn) clearBtn.hidden = false;
+    } else {
+      img.removeAttribute('src');
+      img.hidden = true;
+      if (placeholder) placeholder.hidden = false;
+      if (clearBtn) clearBtn.hidden = true;
+    }
+  }
+
+  function useFirstBodyImageAsFeatured () {
+    syncEditorSourceToArea();
+    const firstImg = document.getElementById('blogEditorArea')?.querySelector('img[src]');
+    const src = firstImg?.getAttribute('src') || firstImg?.src || '';
+    if (!src || src.startsWith('data:')) {
+      blogToast('No usable image in the article body. Upload a file instead.', 'error');
+      return;
+    }
+    setFeaturedImage(src, document.getElementById('blogEditorFeaturedCredit')?.value || '');
+    blogToast('Featured image set from article body.', 'success');
+  }
+
+  function uploadFeaturedImageFile (file) {
+    if (!file) return;
+    const MAX_MB = 20;
+    if (file.size > MAX_MB * 1024 * 1024) {
+      blogToast(`File too large (max ${MAX_MB} MB).`, 'error');
+      return;
+    }
+    if (mediaLibUploading) {
+      blogToast('Another upload is in progress, please wait.', 'info');
+      return;
+    }
+    mediaLibUploading = true;
+    const preview = document.getElementById('blogEditorFeaturedPreview');
+    const uploadBtn = document.getElementById('blogEditorFeaturedUpload');
+    if (preview) preview.classList.add('blog-editor-featured-uploading');
+    if (uploadBtn) uploadBtn.disabled = true;
+
+    const params = new URLSearchParams({ filename: file.name, type: file.type || 'application/octet-stream' });
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${getBackendUrl()}/api/media/upload?${params.toString()}`);
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+
+    xhr.addEventListener('load', () => {
+      mediaLibUploading = false;
+      if (preview) preview.classList.remove('blog-editor-featured-uploading');
+      if (uploadBtn) uploadBtn.disabled = false;
+      if (xhr.status === 201) {
+        try {
+          const asset = JSON.parse(xhr.responseText);
+          if (asset?.url) {
+            setFeaturedImage(asset.url, document.getElementById('blogEditorFeaturedCredit')?.value || '');
+            blogToast('Featured image uploaded.', 'success');
+            loadMediaLibrary();
+            return;
+          }
+        } catch {}
+        blogToast('Upload succeeded but no URL was returned.', 'error');
+      } else {
+        let msg = `Upload failed (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch {}
+        blogToast(msg, 'error');
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      mediaLibUploading = false;
+      if (preview) preview.classList.remove('blog-editor-featured-uploading');
+      if (uploadBtn) uploadBtn.disabled = false;
+      blogToast('Upload failed — network error.', 'error');
+    });
+
+    xhr.send(file);
+  }
+
+  function wireFeaturedImageControls () {
+    const uploadBtn = document.getElementById('blogEditorFeaturedUpload');
+    const fileInput = document.getElementById('blogEditorFeaturedInput');
+    const fromBody  = document.getElementById('blogEditorFeaturedFromBody');
+    const clearBtn  = document.getElementById('blogEditorFeaturedClear');
+
+    uploadBtn?.addEventListener('click', () => fileInput?.click());
+    fileInput?.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      fileInput.value = '';
+      if (file) uploadFeaturedImageFile(file);
+    });
+    fromBody?.addEventListener('click', useFirstBodyImageAsFeatured);
+    clearBtn?.addEventListener('click', () => {
+      setFeaturedImage('', '');
+      blogToast('Featured image removed.', 'info');
+    });
+  }
+
   function collectEditorPayload(status = 'draft') {
     syncEditorSourceToArea();
     const titleInput = document.getElementById('blogEditorTitle').value.trim();
     const slugInput  = document.getElementById('blogEditorSlug').value.trim();
     const oldSlug    = document.getElementById('blogEditorPostSlug').value;
     const slug       = slugInput || oldSlug || makeSlug(titleInput);
+    const featuredUrl = document.getElementById('blogEditorFeaturedUrl')?.value.trim() || null;
+    const featuredCredit = document.getElementById('blogEditorFeaturedCredit')?.value.trim() || '';
     return {
       title: titleInput,
       slug,
@@ -660,6 +774,10 @@
       meta_description: document.getElementById('blogEditorMeta').value.trim(),
       focusKeyword:    document.getElementById('blogEditorKeyword').value.trim(),
       focus_keyword:   document.getElementById('blogEditorKeyword').value.trim(),
+      featuredImageUrl: featuredUrl,
+      featured_image_url: featuredUrl,
+      featuredImageCredit: featuredCredit,
+      featured_image_credit: featuredCredit,
       status: status === 'published' ? 'published' : 'draft',
     };
   }
@@ -897,6 +1015,7 @@
       document.getElementById('blogEditorAuthor').value    = post.author_name || '';
       document.getElementById('blogEditorMeta').value      = post.meta_description || '';
       document.getElementById('blogEditorKeyword').value   = post.focus_keyword    || '';
+      setFeaturedImage(post.featured_image_url || post.featuredImageUrl || '', post.featured_image_credit || post.featuredImageCredit || '');
 
       // Status badge
       setEditorStatus(post.status === 'published' ? 'published' : 'draft');
@@ -926,6 +1045,7 @@
     document.getElementById('blogEditorAuthor').value = 'Boroji Adebayo-Hopewell';
     document.getElementById('blogEditorMeta').value = '';
     document.getElementById('blogEditorKeyword').value = '';
+    setFeaturedImage('', '');
     document.getElementById('blogEditorArea').innerHTML = '<p></p>';
     document.getElementById('blogEditorSource').value = '';
     setEditorStatus('draft');
@@ -1184,6 +1304,7 @@
 
     document.getElementById('blogScheduleArticleBtn')?.addEventListener('click', scheduleBlogArticle);
     document.getElementById('blogEditorMetaAuto')?.addEventListener('click', generateMetaDescription);
+    wireFeaturedImageControls();
     document.getElementById('blogRefreshCalendarBtn')?.addEventListener('click', loadBlogScheduleCalendar);
     document.getElementById('blogGenCalendarBtn')?.addEventListener('click', async () => {
       const backendUrl = getBackendUrl();
