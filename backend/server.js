@@ -44,6 +44,7 @@ import {
   uploadMediaAsset,
   listMediaAssets,
   deleteMediaAsset,
+  fetchMediaObject,
   putJsonCache,
   getJsonCache,
   saveAgencyPlaybook,
@@ -785,6 +786,22 @@ const server = createServer(async (req, res) => {
       const asset = await uploadMediaAsset(filename, body, contentType);
       json(res, asset, 201);
     } catch (e) { err(res, e.message || 'Upload failed'); }
+    return;
+  }
+
+  // ── GET /api/media/:key — stream blog-media asset (writer preview + public fallback) ──
+  const mediaFileMatch = path.match(/^\/api\/media\/(.+)$/);
+  if (req.method === 'GET' && mediaFileMatch) {
+    try {
+      const key = decodeURIComponent(mediaFileMatch[1]);
+      if (!key.startsWith('blog-media/')) { err(res, 'Forbidden', 403); return; }
+      const { body, contentType } = await fetchMediaObject(key);
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+      });
+      res.end(body);
+    } catch (e) { err(res, e.message || 'Not found', 404); }
     return;
   }
 

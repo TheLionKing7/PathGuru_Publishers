@@ -193,10 +193,44 @@ export async function uploadMediaAsset (filename, body, contentType) {
   if (!isR2Enabled()) throw new Error('R2 is not configured. Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_R2_BUCKET, and CLOUDFLARE_API_TOKEN in .env');
   const safe = safeFileName(filename.replace(/\.[^.]+$/, '')) + '.' + (filename.split('.').pop() || 'bin');
   const key  = `${MEDIA_PREFIX}${Date.now()}-${safe}`;
-  const r2Url = await uploadToR2(key, body, contentType);
-  // If R2_PUBLIC_URL is set, swap the storage URL for the CDN URL
-  const url = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${key}` : r2Url;
-  return { key, url };
+  await uploadToR2(key, body, contentType);
+  const pub = publicUrl ? `${publicUrl.replace(/\/$/, '')}/${key}` : null;
+  return { key, url: pub, servePath: mediaServePath(key) };
+}
+
+/** Public path on this server to stream a blog-media object (writer preview + CMS fallback). */
+export function mediaServePath (key) {
+  return `/api/media/${encodeURIComponent(key)}`;
+}
+
+/**
+ * Fetch raw bytes for a blog-media object.
+ */
+export async function fetchMediaObject (key) {
+  if (!isR2Enabled()) throw new Error('R2 is not configured.');
+  if (!key || !key.startsWith(MEDIA_PREFIX)) throw new Error('Invalid media key');
+  if (publicUrl) {
+    const r = await fetch(`${publicUrl.replace(/\/$/, '')}/${encodeKey(key)}`);
+    if (r.ok) {
+      const contentType = r.headers.get('content-type') || guessImageMime(key);
+      return { body: Buffer.from(await r.arrayBuffer()), contentType };
+    }
+  }
+  const r = await fetch(getObjectUrl(key), {
+    headers: apiToken ? { Authorization: `Bearer ${apiToken}` } : {},
+  });
+  if (!r.ok) throw new Error(`R2 fetch failed: ${r.status}`);
+  const contentType = r.headers.get('content-type') || guessImageMime(key);
+  return { body: Buffer.from(await r.arrayBuffer()), contentType };
+}
+
+function guessImageMime (key) {
+  const ext = (key.split('.').pop() || '').toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'svg') return 'image/svg+xml';
+  return 'image/jpeg';
 }
 
 /**
