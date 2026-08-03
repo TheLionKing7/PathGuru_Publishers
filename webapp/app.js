@@ -15,6 +15,7 @@ const MODULE_OF_TAB = {
   'agents-console': 'agents', 'agents-tasks': 'agents',
   'agents-leads': 'agents', 'agents-ip': 'agents',
   'agents-content': 'agents',
+  frictioniq: 'frictioniq',
 };
 
 const DEFAULT_TAB_OF_MODULE = {
@@ -22,6 +23,7 @@ const DEFAULT_TAB_OF_MODULE = {
   shop: 'shop-products',
   analytics: 'analytics',
   agents: 'agents-command',
+  frictioniq: 'frictioniq',
 };
 
 function notifyTabChange (tab, mod) {

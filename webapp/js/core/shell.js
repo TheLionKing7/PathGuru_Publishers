@@ -72,6 +72,16 @@
         analytics: 'Site Analytics',
       },
     },
+    frictioniq: {
+      id:           'frictioniq',
+      label:        'FrictionIQ',
+      tagline:      'Diagnostic register & ops',
+      module:       'frictioniq',
+      defaultTab:   'frictioniq',
+      sections: {
+        frictioniq: 'Operator Console',
+      },
+    },
   };
 
   DEPARTMENTS.storefront = DEPARTMENTS.products;
@@ -172,12 +182,13 @@
     if (deptEl)    deptEl.textContent    = dept.label;
     if (sectionEl) sectionEl.textContent = section;
 
-    document.body.classList.remove('pg-dept-blogroom', 'pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products', 'pg-dept-analytics');
+    document.body.classList.remove('pg-dept-blogroom', 'pg-dept-network', 'pg-dept-intelligence', 'pg-dept-products', 'pg-dept-analytics', 'pg-dept-frictioniq');
     if (dept.id === 'blogroom')     document.body.classList.add('pg-dept-blogroom');
     if (dept.id === 'network')      document.body.classList.add('pg-dept-network');
     if (dept.id === 'intelligence') document.body.classList.add('pg-dept-intelligence');
     if (dept.id === 'products')     document.body.classList.add('pg-dept-products');
     if (dept.id === 'analytics')    document.body.classList.add('pg-dept-analytics');
+    if (dept.id === 'frictioniq')   document.body.classList.add('pg-dept-frictioniq');
 
     syncDeptRouteNav(dept, activeTab, activeModule);
 

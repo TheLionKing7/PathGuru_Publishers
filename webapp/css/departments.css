@@ -11,6 +11,7 @@
   --dept-products:      #7c8cff;
   --dept-network:       #a78bfa;
   --dept-analytics:     #38bdf8;
+  --dept-frictioniq:    #f472b6;
   --shell-header-h:     0px;
 }
 
@@ -140,12 +141,14 @@ body.pg-shell-v3 .nav-btn[data-dept="intelligence"] .nav-icon-wrap { background:
 body.pg-shell-v3 .nav-btn[data-dept="products"] .nav-icon-wrap  { background: rgba(124,140,255,.15); color: var(--dept-products); }
 body.pg-shell-v3 .nav-btn[data-dept="network"] .nav-icon-wrap     { background: rgba(167,139,250,.15); color: var(--dept-network); }
 body.pg-shell-v3 .nav-btn[data-dept="analytics"] .nav-icon-wrap   { background: rgba(56,189,248,.15);  color: var(--dept-analytics); }
+body.pg-shell-v3 .nav-btn[data-dept="frictioniq"] .nav-icon-wrap  { background: rgba(244,114,182,.15); color: var(--dept-frictioniq); }
 
 body.pg-shell-v3 .nav-btn.active[data-dept="publisher"]   { border-color: rgba(201,168,76,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="intelligence"] { border-color: rgba(78,205,196,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="products"]  { border-color: rgba(124,140,255,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="network"]     { border-color: rgba(167,139,250,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="analytics"]   { border-color: rgba(56,189,248,.35); }
+body.pg-shell-v3 .nav-btn.active[data-dept="frictioniq"]  { border-color: rgba(244,114,182,.35); }
 
 body.pg-shell-v3 .nav-label-block {
   display: flex;
@@ -1167,6 +1170,42 @@ body.pg-shell-v3 .prod-toolbar .btn-sm:not(.prod-toolbar-add) {
 .nexus-ops-table tbody tr:last-child td { border-bottom: none; }
 .nexus-ops-row-action { cursor: pointer; }
 .nexus-ops-row-action:hover td { background: rgba(201, 168, 76, 0.06); }
+
+/* ── FrictionIQ module — embedded operator console ── */
+body.pg-dept-frictioniq #module-frictioniq.module-shell.active {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "head tabs"
+    "body body";
+}
+body.pg-dept-frictioniq #module-frictioniq .module-topnav {
+  justify-content: flex-end;
+}
+body.pg-dept-frictioniq #module-frictioniq .module-body {
+  overflow: hidden;
+}
+body.pg-dept-frictioniq #module-frictioniq .panel-eyebrow {
+  color: var(--dept-frictioniq);
+}
+.fiq-embed {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--bg);
+}
+.fiq-embed-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  background: var(--bg);
+  z-index: 1;
+}
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
