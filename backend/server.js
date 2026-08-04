@@ -3227,6 +3227,56 @@ Write the full article now.`;
     return;
   }
 
+  // ── GET /api/frictioniq/sessions ──────────────────────────────────────────
+  if (req.method === 'GET' && path === '/api/frictioniq/sessions') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+
+      const { data: rows, error: dbErr } = await db
+        .from('frictioniq_session')
+        .select('created_at,total,band,sector,role,headcount_band,country,email,stage,organization')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (dbErr) { err(res, dbErr.message, 500); return; }
+
+      const sessions = (rows ?? []).map(r => ({
+        created_at: r.created_at,
+        total: r.total,
+        band: r.band,
+        sector: r.sector,
+        role: r.role,
+        headcount_band: r.headcount_band,
+        country: r.country,
+        email: r.email,
+        stage: r.stage || 'captured',
+        organization: r.organization,
+      }));
+
+      // Stats
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 86400000);
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const stats = {
+        total: sessions.length,
+        this_week: sessions.filter(s => new Date(s.created_at) >= weekAgo).length,
+        today: sessions.filter(s => new Date(s.created_at) >= dayStart).length,
+        with_email: sessions.filter(s => s.email).length,
+      };
+
+      // Band distribution
+      const bandDist = {};
+      for (const s of sessions) {
+        const band = s.band || 'Unknown';
+        bandDist[band] = (bandDist[band] ?? 0) + 1;
+      }
+
+      json(res, { sessions, stats, band_distribution: bandDist });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   err(res, `Not found: ${path}`, 404);
 });
 

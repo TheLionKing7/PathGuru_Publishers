@@ -1201,7 +1201,23 @@
       <div class="module-body">
         <section class="tab-panel active" id="tab-frictioniq" aria-label="FrictionIQ Operator Console">
           <div class="fiq-embed-loading" id="fiqEmbedLoading">Loading FrictionIQ console…</div>
-          <iframe class="fiq-embed" id="fiqEmbed" src="" title="FrictionIQ operator console" loading="eager"></iframe>
+          <div id="fiqNative" style="display:none">
+            <div class="fiq-summary" id="fiqSummary"></div>
+            <div class="fiq-bands" id="fiqBands"></div>
+            <div class="fiq-table-wrap">
+              <table class="fiq-table">
+                <thead>
+                  <tr><th>Date</th><th>Score</th><th>Band</th><th>Sector</th><th>Role</th><th>Size</th><th>Country</th><th>Email</th><th>Stage</th></tr>
+                </thead>
+                <tbody id="fiqSessionsBody">
+                  <tr><td colspan="9" class="fiq-empty">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="fiq-external">
+              <a href="https://www.digitafusion.com/fiq" target="_blank" rel="noopener">Open full FrictionIQ dashboard →</a>
+            </div>
+          </div>
         </section><!-- /#tab-frictioniq -->
       </div><!-- /.module-body -->
     </div><!-- /#module-frictioniq -->

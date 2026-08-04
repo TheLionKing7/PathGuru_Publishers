@@ -5296,3 +5296,157 @@ body.pg-shell-v3 .module-shell {
   .content-forms-row { grid-template-columns: 1fr; }
   .agents-content-body { padding: 12px; }
 }
+
+/* ── FrictionIQ Operator Console ── */
+.fiq-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.fiq-stat {
+  flex: 1;
+  min-width: 100px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+}
+.fiq-stat-value {
+  display: block;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--gold);
+  font-family: 'Playfair Display', serif;
+}
+.fiq-stat-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+.fiq-bands {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.fiq-band-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.fiq-band-label {
+  width: 80px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+.fiq-band-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fiq-band-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.fiq-band-bar--high      { background: #10b981; }
+.fiq-band-bar--medium    { background: #f59e0b; }
+.fiq-band-bar--low       { background: #ef4444; }
+.fiq-band-bar--critical  { background: #7c3aed; }
+.fiq-band-bar--unknown   { background: #6b7280; }
+.fiq-band-count {
+  width: 40px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+}
+.fiq-table-wrap {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.fiq-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.fiq-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.fiq-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text);
+  white-space: nowrap;
+}
+.fiq-table tbody tr:hover { background: var(--surface-2); }
+.fiq-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.fiq-error { color: #ef4444; }
+.fiq-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.fiq-badge--high      { background: rgba(16,185,129,.15); color: #34d399; }
+.fiq-badge--medium    { background: rgba(245,158,11,.15); color: #fbbf24; }
+.fiq-badge--low       { background: rgba(239,68,68,.15); color: #f87171; }
+.fiq-badge--critical  { background: rgba(124,58,237,.15); color: #a78bfa; }
+.fiq-badge--unknown   { background: rgba(107,114,128,.15); color: #9ca3af; }
+.fiq-stage {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.04em;
+}
+.fiq-stage--captured       { background: rgba(107,114,128,.15); color: #9ca3af; }
+.fiq-stage--working        { background: rgba(245,158,11,.15); color: #fbbf24; }
+.fiq-stage--conversation   { background: rgba(99,102,241,.15); color: #818cf8; }
+.fiq-stage--proposal       { background: rgba(16,185,129,.15); color: #34d399; }
+.fiq-stage--engaged        { background: rgba(59,130,246,.15); color: #60a5fa; }
+.fiq-stage--declined       { background: rgba(239,68,68,.15); color: #f87171; }
+.fiq-stage--dormant        { background: rgba(107,114,128,.1); color: #6b7280; }
+.fiq-external {
+  text-align: right;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.fiq-external a {
+  color: var(--gold);
+  font-size: 12px;
+  text-decoration: none;
+  font-weight: 500;
+}
+.fiq-external a:hover { text-decoration: underline; }
