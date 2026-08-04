@@ -15,9 +15,19 @@
   /* ── API helpers ── */
   function apiFetch(path) {
     const base = window.PathGuruBackend?.apiUrl?.('') || '';
-    return fetch(`${base}${path}`).then(r => {
+    const url = `${base}${path}`;
+
+    // Abort after 10 seconds — never leave the user staring at a spinner
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+
+    return fetch(url, { signal: ctrl.signal }).then(r => {
+      clearTimeout(timer);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
+    }).catch(err => {
+      clearTimeout(timer);
+      throw err;
     });
   }
 
