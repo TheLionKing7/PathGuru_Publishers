@@ -94,6 +94,7 @@ const STATIC = {
   '/shop.js':               { file: join(WEBAPP, 'shop.js'),               mime: 'application/javascript; charset=utf-8' },
   '/analytics.js':          { file: join(WEBAPP, 'analytics.js'),          mime: 'application/javascript; charset=utf-8' },
   '/agents.js':             { file: join(WEBAPP, 'agents.js'),             mime: 'application/javascript; charset=utf-8' },
+  '/frictioniq.js':         { file: join(WEBAPP, 'frictioniq.js'),         mime: 'application/javascript; charset=utf-8' },
   // OneSignal service worker — MUST be served as application/javascript from the origin root.
   // Browsers reject service workers with any other Content-Type.
   '/OneSignalSDKWorker.js': { file: join(WEBAPP, 'OneSignalSDKWorker.js'), mime: 'application/javascript; charset=utf-8' },
