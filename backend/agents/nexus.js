@@ -1672,28 +1672,90 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
 
   async getNetworkStatus() {
     const db = getSupabase();
-    if (!db) return { agents: [], activeTasks: [], pendingAlerts: [], snapshotAt: new Date().toISOString() };
 
-    const [agentsRes, tasksRes, notifRes] = await Promise.all([
-      db.from('agents').select('*').order('id'),
-      db.from('tasks')
-        .select('id, title, agent_id, status, priority, type, created_at, completed_at, error')
-        .in('status', ['pending', 'in_progress'])
-        .order('priority', { ascending: false })
-        .order('created_at', { ascending: true })
-        .limit(50),
-      db.from('notifications')
-        .select('*')
-        .eq('status', 'pending')
-        .in('severity', ['warning', 'critical'])
-        .order('created_at', { ascending: false })
-        .limit(10),
-    ]);
+    // Hard-coded agent roster — used as fallback when DB is unavailable
+    const AGENT_DEFS = [
+      { id: 'nexus',       name: 'Nexus',       role: 'CEO / Orchestrator',     color: '#f59e0b', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'atlas',       name: 'Atlas',       role: 'BD & Research Director',  color: '#3b82f6', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'nova',        name: 'Nova',        role: 'Automation Architect',    color: '#10b981', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'aether',      name: 'Aether',      role: 'Marketing Studio Lead',   color: '#8b5cf6', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'pulse',       name: 'Pulse',       role: 'Monitoring & Notifications', color: '#ef4444', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'synthesizer', name: 'Synthesizer', role: 'Knowledge & IP Engine',   color: '#ec4899', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'researcher',  name: 'Orion',       role: 'Research Agent',          color: '#06b6d4', status: 'idle', lastActivity: null, currentTask: null },
+      { id: 'assistant',   name: 'Aria',        role: 'Lead Intake & Assistant', color: '#84cc16', status: 'idle', lastActivity: null, currentTask: null },
+    ];
+
+    // If DB is unavailable, return roster with idle status
+    if (!db) {
+      const byId = {};
+      for (const a of AGENT_DEFS) {
+        a.lastActivity = 'unavailable';
+        byId[a.id] = { status: a.status, lastActivity: a.lastActivity, currentTask: a.currentTask, name: a.name, role: a.role, color: a.color };
+      }
+      return { agents: byId, activeTasks: [], pendingAlerts: [], snapshotAt: new Date().toISOString() };
+    }
+
+    // Try fetching from DB
+    let dbAgents = [];
+    let tasksRes, notifRes;
+    try {
+      const results = await Promise.all([
+        db.from('agents').select('*').order('id'),
+        db.from('tasks')
+          .select('id, title, agent_id, status, priority, type, created_at, completed_at, error')
+          .in('status', ['pending', 'in_progress'])
+          .order('priority', { ascending: false })
+          .order('created_at', { ascending: true })
+          .limit(50),
+        db.from('notifications')
+          .select('*')
+          .eq('status', 'pending')
+          .in('severity', ['warning', 'critical'])
+          .order('created_at', { ascending: false })
+          .limit(10),
+      ]);
+      dbAgents = results[0]?.data || [];
+      tasksRes = results[1];
+      notifRes = results[2];
+    } catch (_) {
+      // DB query failed — fall back to hard-coded roster
+    }
+
+    // Build agent map from DB rows, falling back to hard-coded defs
+    const dbAgentMap = {};
+    for (const row of dbAgents) {
+      const id = row.id || row.agent_id;
+      if (id) dbAgentMap[id] = row;
+    }
+
+    const agentStatuses = {};
+    for (const def of AGENT_DEFS) {
+      const dbRow = dbAgentMap[def.id];
+      const activeTasks = (tasksRes?.data || []).filter(t => t.agent_id === def.id);
+
+      // Determine status: prioritize DB row, then active tasks, then idle
+      let status = 'idle';
+      if (dbRow?.status) {
+        status = dbRow.status === 'active' ? 'active' : dbRow.status === 'busy' ? 'busy' : 'idle';
+      } else if (activeTasks.length > 0) {
+        const hasRunning = activeTasks.some(t => t.status === 'in_progress');
+        status = hasRunning ? 'busy' : 'active';
+      }
+
+      agentStatuses[def.id] = {
+        status,
+        lastActivity: dbRow?.last_active || dbRow?.updated_at || (activeTasks.length > 0 ? new Date().toISOString() : '—'),
+        currentTask: activeTasks[0]?.title || dbRow?.current_task || null,
+        name: def.name,
+        role: def.role,
+        color: def.color,
+      };
+    }
 
     return {
-      agents:        agentsRes.data || [],
-      activeTasks:   tasksRes.data  || [],
-      pendingAlerts: notifRes.data  || [],
+      agents:        agentStatuses,
+      activeTasks:   tasksRes?.data  || [],
+      pendingAlerts: notifRes?.data  || [],
       snapshotAt:    new Date().toISOString(),
     };
   }
