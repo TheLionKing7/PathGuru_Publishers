@@ -80,7 +80,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Nexus daily briefing** | `generateDailyBriefing()` — network status + leads + completed tasks → LLM summary → Notion |
 | **Nexus pipeline view** | `getPipelineView()` — leads grouped by status/stage |
 | **Post-service evaluation** | Atlas, Nova, Aether each trigger structured evaluation on `evaluation_triggered` milestone |
-| **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, etc.) |
+| **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, etc.); pre-flight Tavily health check prevents burning quota against dead APIs |
 | **Synthesizer** | PDF ingestion from R2 → structured knowledge → Supabase `knowledge_base` table |
 | **Agency Playbooks** | Synthesize + upload to R2 with AWS V4 signing; manifest tracking per folder |
 | **Notifications** | OneSignal push + WhatsApp (Twilio or Meta Cloud API); dispatched by Pulse on each sweep |
@@ -93,6 +93,10 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Persona system** | 4 personas; injected into LLM prompts at generation time |
 | **Notion integration** | `notionClient.js` — leads DB, clients DB, evaluations DB, tasks DB all wired |
 | **Conversational intake** | Aria runs structured per-track intake (BD, Automation, Digital Media) — one question at a time |
+| **Research quality gate** | `scoreResearchBrief()` — 10-dimension 0-100 scoring; grades A/B/C/D; failed briefs gated before reaching Boss |
+| **Intelligent retry logic** | Nexus checks `tavilyDown` flag before re-running Orion — skips retry (escalates) when API is dead, re-runs deeper when content is thin |
+| **Infrastructure escalation** | Critical-severity WhatsApp + Notion alerts when Tavily API is down (quota, expired key, rate-limit) — Boss knows what to fix |
+| **Boss-facing research output** | Quality scorecard + raw brief shown together (not scorecard-only) — Boss can assess partial output usefulness |
 
 ### Pending / known gaps
 
