@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * Print the first 600 characters of named posts, or of the five most recent.
+ *
+ *   node --env-file=.env.local backend/scripts/preview_posts.js [slug ...]
+ */
 import { config } from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

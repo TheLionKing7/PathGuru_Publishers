@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+/**
+ * Corpus health check: every post with its raw length, extracted body length,
+ * section count, type and status. Run it when the blog looks wrong and you need
+ * to know whether the problem is storage or extraction.
+ *
+ *   node --env-file=.env.local backend/scripts/audit_posts.js
+ */
 import { config } from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';

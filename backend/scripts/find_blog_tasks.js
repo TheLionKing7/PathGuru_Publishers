@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+/**
+ * The last 20 blog or pending-approval tasks, with topic and input size.
+ * The quickest way to see what the agents queued and whether it is stuck.
+ *
+ *   node --env-file=.env.local backend/scripts/find_blog_tasks.js
+ */
 import { config } from 'dotenv';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
