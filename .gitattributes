@@ -1,0 +1,22 @@
+# Line endings, settled once.
+#
+# Six files once showed 3,656 insertions and 3,656 deletions — exactly equal,
+# across unrelated files — because something on Windows rewrote them CRLF while
+# the committed versions are LF. Not one character of content had changed.
+# Committing that would have buried the real history under whole-file rewrites
+# and destroyed `git blame` on the blog module.
+#
+# `text=auto eol=lf` tells git to store LF and check out LF, so an editor that
+# writes CRLF no longer shows up as a diff.
+* text=auto eol=lf
+
+# Never touch these — normalising a binary corrupts it.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.epub binary
+*.woff binary
+*.woff2 binary
