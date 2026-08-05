@@ -12,6 +12,10 @@
   <link rel="stylesheet" href="css/command-dashboard.css">
   <link rel="stylesheet" href="css/launcher.css">
   <link rel="stylesheet" href="css/blog-room.css">
+  <!-- Last, so it wins: the login gate plus the FrictionIQ band ramp that
+       style.css never defined (its classes are --high/--medium/--low, the
+       bands are Opaque/Approaching/Legible/Engineered). -->
+  <link rel="stylesheet" href="css/operator-console.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -19,6 +23,26 @@
        registered to your PathGuru domain and add its App ID here. -->
 </head>
 <body>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       OPERATOR GATE
+       The API denies everything under /api/ without a session. This is the
+       door. It is raised by js/core/session.js on boot, and again whenever any
+       request comes back 401 — so a console left open overnight asks for the
+       password rather than quietly failing every click.
+       ══════════════════════════════════════════════════════════════════════ -->
+  <div id="pgAuthOverlay" class="pg-auth-overlay" hidden>
+    <div class="pg-auth-card" role="dialog" aria-modal="true" aria-labelledby="pgAuthTitle">
+      <h2 id="pgAuthTitle" class="pg-auth-title">DigiFusion Command</h2>
+      <p class="pg-auth-sub">This console holds the prospect register. Sign in to continue.</p>
+      <p class="pg-auth-note" id="pgAuthNote" hidden></p>
+      <label class="pg-auth-label" for="pgAuthPassword">Operator password</label>
+      <input type="password" id="pgAuthPassword" class="pg-auth-input"
+             autocomplete="current-password" spellcheck="false" />
+      <p class="pg-auth-error" id="pgAuthError" hidden></p>
+      <button type="button" id="pgAuthSubmit" class="pg-auth-btn">Sign in</button>
+    </div>
+  </div>
 
   <!-- Product launcher DigiFusion Command (Publisher shelved until redesign) -->
   <div id="productLauncher" hidden>
@@ -1203,19 +1227,24 @@
           <div class="fiq-embed-loading" id="fiqEmbedLoading">Loading FrictionIQ console…</div>
           <div id="fiqNative" style="display:none">
             <div class="fiq-summary" id="fiqSummary"></div>
+            <p class="fiq-page-note" id="fiqPageNote" hidden></p>
             <div class="fiq-bands" id="fiqBands"></div>
             <div class="fiq-table-wrap">
               <table class="fiq-table">
                 <thead>
-                  <tr><th>Date</th><th>Score</th><th>Band</th><th>Sector</th><th>Role</th><th>Size</th><th>Country</th><th>Email</th><th>Stage</th></tr>
+                  <tr>
+                    <th>Date</th><th>Score</th><th>Band</th><th>Organisation</th>
+                    <th>Sector</th><th>Role</th><th>Country</th><th>Email</th>
+                    <th>Replied</th><th>Stage</th>
+                  </tr>
                 </thead>
                 <tbody id="fiqSessionsBody">
-                  <tr><td colspan="9" class="fiq-empty">Loading…</td></tr>
+                  <tr><td colspan="10" class="fiq-empty">Loading…</td></tr>
                 </tbody>
               </table>
             </div>
             <div class="fiq-external">
-              <a href="https://www.digitafusion.com/fiq" target="_blank" rel="noopener">Open full FrictionIQ dashboard →</a>
+              <a href="https://www.digitafusion.com/fiq" target="_blank" rel="noopener">Open the storefront console →</a>
             </div>
           </div>
         </section><!-- /#tab-frictioniq -->
@@ -1990,6 +2019,10 @@
   </div>
 
   <script src="js/core/backend.js"></script>
+  <!-- session.js must load immediately after backend.js: it raises the login
+       overlay in response to the pg:unauthorized event backend.js dispatches,
+       and every module below assumes the door exists. -->
+  <script src="js/core/session.js"></script>
   <script src="js/core/products.js"></script>
   <script src="js/core/launcher.js"></script>
   <script src="js/core/shell.js"></script>

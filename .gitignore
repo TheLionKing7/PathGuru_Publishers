@@ -32,3 +32,18 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Staging folder for files the device bridge cannot delete — never commit
+_to_delete/
+*.tar.gz
+
+# IDE tooling — never commit
+.cursor/
+.continue/
+.cline/
+
+# Scratch artefacts
+tmp-*
+*.probe
+.probe*
+.buildprobe

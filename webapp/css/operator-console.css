@@ -1,0 +1,259 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Operator console — the login gate, and the FrictionIQ panel's corrections.
+
+   Loaded last, so it wins over style.css without that file needing to change.
+
+   ── ON THE BAND COLOURS ────────────────────────────────────────────────────
+
+   style.css defines .fiq-band-bar--high / --medium / --low / --critical. The
+   FrictionIQ bands are not called those things. They are Opaque, Approaching,
+   Legible and Engineered — so every bar was rendering with no background at
+   all, which is a second reason the panel looked broken.
+
+   The replacement is not four status colours. The bands are ORDINAL — Opaque
+   through Engineered is a ranked scale, not four unrelated categories — so the
+   correct encoding is a single-hue ramp, light to dark, in the brand teal. It
+   was validated rather than eyeballed:
+
+     validate_palette.js "#1d6f66,#25907f,#2bb3a3,#5fd3c4" \
+        --mode dark --surface "#1a2236" --ordinal
+     → lightness monotone PASS · adjacent ΔL PASS · light-end contrast 2.65:1
+       PASS · single hue (5° spread) PASS
+
+   Four status hues used as a categorical set is the mistake this estate already
+   made once on the storefront meters, where success and accent came out 8.7 ΔE
+   apart under NORMAL vision — indistinguishable to everyone, not just to
+   colourblind readers. The band name is printed beside every bar, so the colour
+   is reinforcement and never the only carrier of meaning.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --fiq-band-1: #1d6f66;   /* Opaque */
+  --fiq-band-2: #25907f;   /* Approaching */
+  --fiq-band-3: #2bb3a3;   /* Legible */
+  --fiq-band-4: #5fd3c4;   /* Engineered */
+  --fiq-band-0: #6b7280;   /* Unknown — neutral, deliberately outside the ramp */
+}
+
+/* ── The login gate ──────────────────────────────────────────────────────── */
+
+.pg-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 14, 23, 0.92);
+  backdrop-filter: blur(6px);
+  padding: 24px;
+}
+.pg-auth-overlay[hidden] { display: none; }
+
+/* Nothing behind the gate should scroll or be tabbed into while it is up. */
+html.pg-auth-locked, html.pg-auth-locked body { overflow: hidden; }
+
+.pg-auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface, #111827);
+  border: 1px solid var(--border, #263047);
+  border-radius: 14px;
+  padding: 30px 28px 26px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.pg-auth-title {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #e6edf7);
+}
+
+.pg-auth-sub {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-muted, #8b9ab5);
+}
+
+.pg-auth-note {
+  margin: 0 0 16px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid rgba(250, 178, 25, 0.35);
+  background: rgba(250, 178, 25, 0.09);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #fab219;
+}
+.pg-auth-note[hidden] { display: none; }
+
+.pg-auth-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted, #8b9ab5);
+}
+
+.pg-auth-input {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--border-light, #2e3d57);
+  background: var(--surface-2, #1a2236);
+  color: var(--text-primary, #e6edf7);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+.pg-auth-input:focus {
+  outline: none;
+  border-color: var(--fiq-band-3);
+  box-shadow: 0 0 0 3px rgba(43, 179, 163, 0.18);
+}
+.pg-auth-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pg-auth-error {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: #f87171;
+}
+.pg-auth-error[hidden] { display: none; }
+
+.pg-auth-btn {
+  margin-top: 18px;
+  width: 100%;
+  padding: 11px 16px;
+  border: none;
+  border-radius: 9px;
+  background: var(--fiq-band-3);
+  color: #06231f;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pg-auth-btn:hover:not(:disabled) { background: var(--fiq-band-4); }
+.pg-auth-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Band bars — the ordinal ramp ────────────────────────────────────────── */
+
+.fiq-band-bar--opaque       { background: var(--fiq-band-1); }
+.fiq-band-bar--approaching  { background: var(--fiq-band-2); }
+.fiq-band-bar--legible      { background: var(--fiq-band-3); }
+.fiq-band-bar--engineered   { background: var(--fiq-band-4); }
+.fiq-band-bar--unknown,
+.fiq-band-bar--—            { background: var(--fiq-band-0); }
+
+/* The bar is the magnitude; keep it thin and anchored, with a rounded data-end. */
+.fiq-band-bar {
+  height: 8px;
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+}
+
+.fiq-bands-caption {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted, #8b9ab5);
+}
+
+/* ── Badges — one readable ink, the word carries the state ───────────────── */
+
+.fiq-badge--opaque,
+.fiq-badge--approaching,
+.fiq-badge--legible,
+.fiq-badge--engineered,
+.fiq-badge--unknown {
+  color: #cfe9e4;
+  font-weight: 500;
+}
+.fiq-badge--opaque      { background: rgba(29, 111, 102, 0.30); }
+.fiq-badge--approaching { background: rgba(37, 144, 127, 0.28); }
+.fiq-badge--legible     { background: rgba(43, 179, 163, 0.24); }
+.fiq-badge--engineered  { background: rgba(95, 211, 196, 0.22); }
+.fiq-badge--unknown     { background: rgba(107, 114, 128, 0.25); color: #b6bfce; }
+
+/* ── The honesty affordances ─────────────────────────────────────────────── */
+
+/* "Total" now means the register; this line appears only when the table is a
+   window onto it. A silent cap reads as completeness. */
+.fiq-page-note {
+  margin: 4px 0 14px;
+  font-size: 12px;
+  color: #fab219;
+}
+.fiq-page-note[hidden] { display: none; }
+
+.fiq-stat-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted, #8b9ab5);
+}
+
+/* A capped band is the most productive opening line an operator has: the firm's
+   own total said ready and a blocked domain said otherwise. */
+.fiq-cap {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(250, 178, 25, 0.45);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: #fab219;
+}
+
+.fiq-depth {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #8b9ab5);
+}
+
+.fiq-error-hint {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-muted, #8b9ab5);
+}
+
+/* ── Operator controls in the table ──────────────────────────────────────── */
+
+.fiq-replied {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-muted, #8b9ab5);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.fiq-replied input { accent-color: var(--fiq-band-3); cursor: pointer; }
+
+.fiq-stage-select {
+  padding: 4px 7px;
+  border-radius: 7px;
+  border: 1px solid var(--border-light, #2e3d57);
+  background: var(--surface-2, #1a2236);
+  color: var(--text-primary, #e6edf7);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.fiq-stage-select:focus {
+  outline: none;
+  border-color: var(--fiq-band-3);
+}
+
+.fiq-email {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

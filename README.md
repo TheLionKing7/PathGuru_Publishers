@@ -221,6 +221,59 @@ supabase/
 
 ---
 
+## Operator authentication — read this before deploying
+
+**Every route under `/api/` now requires an operator session.** Until August
+2026 this server had no authentication at all: `GET /api/frictioniq/sessions`
+returned prospect names, emails, organisations and countries to anyone who
+asked, and `Access-Control-Allow-Origin: *` meant any website could read the
+register out of a visitor's browser. The same was true of `/api/clients`,
+`/api/invoices`, `/api/purchases` and about a hundred other routes.
+
+The gate lives in `backend/http/operatorAuth.js` and it **fails closed**: with
+no password configured, protected routes return 503 and nobody gets in —
+including you. That is the correct failure for a register of personal data.
+
+```bash
+# REQUIRED. Without it the console is closed to everyone.
+PATHGURU_OPERATOR_PASSWORD=      # 24+ random characters
+
+# Optional. A separate signing key, so the password can be rotated without
+# invalidating live sessions (or the reverse). Defaults to the password, which
+# means changing the password signs everyone out immediately.
+PATHGURU_OPERATOR_SECRET=
+
+# Optional. Session lifetime in hours. Default 12.
+PATHGURU_SESSION_HOURS=12
+
+# Optional. For machines — scripts, server-to-server calls — that have no
+# cookie jar. Sent as `Authorization: Bearer <token>`.
+PATHGURU_OPERATOR_TOKEN=
+
+# Optional. Comma-separated CORS allowlist, replacing the old wildcard.
+# Defaults to localhost:3000, localhost:8787 and digitafusion.com.
+# A wildcard is not an option here: the API carries a session cookie, and the
+# specification forbids `*` with credentialed requests. That rule is the
+# browser telling you something true.
+PATHGURU_ALLOWED_ORIGINS=https://digitafusion.com,https://www.digitafusion.com
+```
+
+**What stays public, and why.** `/ping`, `/health` and `/api/cron/ping` for
+uptime monitors; `/api/platform/config` for the webapp's boot; `/api/auth/*`
+because it is the door; `/api/agents/status` because digitafusion.com's agent
+widget calls it from the browser and it carries no personal data; the newsletter
+unsubscribe and NPS endpoints because the recipient of an email has no session
+and never will; and the third-party webhooks, which carry their own
+verification. `/api/cron/*` is excluded from this gate because it already has
+one — `CRON_SECRET`, in `backend/http/cronAuth.js`. Everything else is denied by
+default, so a route added next month is protected the moment it is written.
+
+Verify the allowlist after adding any route:
+
+```bash
+node backend/http/operatorAuth.test.mjs     # 48 assertions, exits non-zero on failure
+```
+
 ## Environment variables
 
 ```bash

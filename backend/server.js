@@ -57,6 +57,11 @@ import {
   getFirmIpDocumentBytes,
 } from './cloudflareR2.js';
 import { verifyCronAuth, cronAuthFail, isCronAuthRequired } from './http/cronAuth.js';
+import {
+  applyCors, isPublicPath, verifyOperator, operatorAuthFail,
+  isOperatorAuthConfigured, checkPassword, issueSession,
+  setSessionCookie, clearSessionCookie, logOperatorAuthStatus,
+} from './http/operatorAuth.js';
 import { buildPlatformConfig } from './skills/productRegistry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -100,10 +105,14 @@ const STATIC = {
   '/OneSignalSDKWorker.js': { file: join(WEBAPP, 'OneSignalSDKWorker.js'), mime: 'application/javascript; charset=utf-8' },
 };
 
-function cors(res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+/**
+ * CORS now comes from http/operatorAuth.js, which replaces the old
+ * `Access-Control-Allow-Origin: *` with an origin allowlist. The wildcard and
+ * credentialed requests are mutually exclusive by specification — and this API
+ * now carries a session cookie, so it has to know who is allowed to call it.
+ */
+function cors(req, res) {
+  applyCors(req, res);
 }
 
 function serveWebappFile(res, filePath, mime) {
@@ -143,11 +152,75 @@ function readRawBody(req) {
 }
 
 const server = createServer(async (req, res) => {
-  cors(res);
+  cors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  const url  = new URL(req.url, `http://localhost:${PORT}`);
-  const path = url.pathname;
+  /**
+   * Collapse repeated leading slashes BEFORE parsing. This is not tidiness.
+   *
+   * `//api/frictioniq/sessions` is a PROTOCOL-RELATIVE url. Passed to
+   * `new URL(req.url, base)` it resolved the host to `api` and the path to
+   * `/frictioniq/sessions`, which matched no route — and that is exactly why
+   * the FrictionIQ console sat on its loading spinner forever. Normalising
+   * after parsing would be too late: by then the path has already lost its
+   * first segment. The client bug that produced the double slash is fixed in
+   * webapp/js/core/backend.js; this is the second lock on the same door.
+   */
+  const rawUrl = String(req.url || '/').replace(/^\/{2,}/, '/');
+  const url  = new URL(rawUrl, `http://localhost:${PORT}`);
+  const path = url.pathname.replace(/\/{2,}/g, '/');
+
+  /* ── The gate ────────────────────────────────────────────────────────────
+   *
+   * Deny by default: everything under /api/ needs an operator session unless
+   * http/operatorAuth.js lists it as public. A route added next month is
+   * protected the moment it is written. The opposite arrangement — gating a
+   * list of sensitive routes — fails on the first route somebody forgets, and
+   * that route is always the interesting one.
+   *
+   * This sits above every handler on purpose. Anything below it can assume the
+   * caller is authorised, which is the only assumption that stays true as the
+   * file grows.
+   */
+  if (!isPublicPath(path)) {
+    if (!verifyOperator(req)) { operatorAuthFail(res, err); return; }
+  }
+
+  /* ── Auth routes ─────────────────────────────────────────────────────── */
+
+  if (path === '/api/auth/status') {
+    json(res, {
+      configured: isOperatorAuthConfigured(),
+      authenticated: verifyOperator(req),
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/auth/login') {
+    if (!isOperatorAuthConfigured()) {
+      err(res, 'Operator auth is not configured. Set PATHGURU_OPERATOR_PASSWORD.', 503);
+      return;
+    }
+    const body = await readBody(req);
+    if (!checkPassword(body.password)) {
+      // Deliberately slow and deliberately vague. A precise error message here
+      // is a hint, and this endpoint is reachable by anyone.
+      await new Promise((r) => setTimeout(r, 400));
+      err(res, 'Incorrect password', 401);
+      return;
+    }
+    const token = issueSession();
+    if (!token) { err(res, 'Cannot issue a session — no signing secret', 503); return; }
+    setSessionCookie(res, req, token);
+    json(res, { ok: true });
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/auth/logout') {
+    clearSessionCookie(res, req);
+    json(res, { ok: true });
+    return;
+  }
 
   // ── Ping (lightweight — point UptimeRobot here, 60s timeout) ─────────────
   if (path === '/ping' || path === '/api/cron/ping') {
@@ -3228,23 +3301,66 @@ Write the full article now.`;
     return;
   }
 
+  // ── GET /api/frameworks — the canonical IP registry ──────────────────────
+  //
+  // PathGuru owns this list. digitafusion.com consumes it rather than keeping a
+  // second hand-maintained copy, because two lists drift and the drift shows up
+  // in a client deck. The projection strips r2Key and kbSlug — internal storage
+  // paths have no business leaving this process even behind a gate.
+  if (req.method === 'GET' && path === '/api/frameworks') {
+    try {
+      const { publicFrameworkRegistry } = await import('./skills/firmFrameworks.js');
+      json(res, publicFrameworkRegistry());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     FrictionIQ operator console
+     ══════════════════════════════════════════════════════════════════════
+
+     Gated by the operator check at the top of this handler — these rows are
+     prospect names, emails, organisations and countries, and until August 2026
+     they were served to anyone who asked.
+
+     Two honesty rules are enforced here rather than in the UI, because a UI
+     that has to remember to be honest eventually forgets:
+
+       COUNTS ARE COUNTS, NOT PAGE LENGTHS. The old version returned
+       `total: sessions.length` after a .limit(200), so "Total" quietly meant
+       "total of the most recent 200". Every headline number below comes from a
+       separate count query against the whole table.
+
+       THE SCALE TRAVELS WITH THE SCORE. The screening instrument scores out of
+       24 and the deep instrument out of 120. Sending `total` without `max`
+       forced the client to hardcode /24, which mislabels every deep assessment.
+  ── */
+
   // ── GET /api/frictioniq/sessions ──────────────────────────────────────────
   if (req.method === 'GET' && path === '/api/frictioniq/sessions') {
     try {
       const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
 
+      const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 500);
+
       const { data: rows, error: dbErr } = await db
         .from('frictioniq_session')
-        .select('created_at,total,band,sector,role,headcount_band,country,email,stage,organization')
+        .select('token,created_at,total,max,depth,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority')
         .order('created_at', { ascending: false })
-        .limit(200);
+        .limit(limit);
 
       if (dbErr) { err(res, dbErr.message, 500); return; }
 
       const sessions = (rows ?? []).map(r => ({
+        token: r.token,
         created_at: r.created_at,
         total: r.total,
+        // Fall back to 24 only when the column is absent — the screening
+        // instrument's scale — and never silently for a deep assessment.
+        max: r.max ?? (r.depth && r.depth !== 'screening' ? null : 24),
+        depth: r.depth || 'screening',
         band: r.band,
+        capped: r.capped === true,
         sector: r.sector,
         role: r.role,
         headcount_band: r.headcount_band,
@@ -3252,28 +3368,117 @@ Write the full article now.`;
         email: r.email,
         stage: r.stage || 'captured',
         organization: r.organization,
+        replied: Boolean(r.replied_at),
+        lead_score: r.lead_score,
+        priority: r.priority,
       }));
 
-      // Stats
+      /* Real counts, against the whole register rather than this page. Four
+         head-only queries cost nothing and are the difference between a
+         dashboard and a decoration. */
       const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 86400000);
-      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo  = new Date(now.getTime() - 7 * 86400000).toISOString();
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-      const stats = {
-        total: sessions.length,
-        this_week: sessions.filter(s => new Date(s.created_at) >= weekAgo).length,
-        today: sessions.filter(s => new Date(s.created_at) >= dayStart).length,
-        with_email: sessions.filter(s => s.email).length,
+      const countOf = async (build) => {
+        try {
+          const { count } = await build(
+            db.from('frictioniq_session').select('token', { count: 'exact', head: true })
+          );
+          return count ?? 0;
+        } catch { return 0; }
       };
 
-      // Band distribution
+      const [total, thisWeek, today, withEmail] = await Promise.all([
+        countOf(q => q),
+        countOf(q => q.gte('created_at', weekAgo)),
+        countOf(q => q.gte('created_at', dayStart)),
+        countOf(q => q.not('email', 'is', null)),
+      ]);
+
+      const stats = { total, this_week: thisWeek, today, with_email: withEmail };
+
+      // Band distribution over the returned page. Labelled as such in the UI —
+      // it is a sample, and calling a sample a benchmark is the exact failure
+      // this product exists to expose in other people's operations.
       const bandDist = {};
       for (const s of sessions) {
         const band = s.band || 'Unknown';
         bandDist[band] = (bandDist[band] ?? 0) + 1;
       }
 
-      json(res, { sessions, stats, band_distribution: bandDist });
+      json(res, {
+        sessions,
+        stats,
+        band_distribution: bandDist,
+        page: { returned: sessions.length, limit, truncated: sessions.length >= limit },
+      });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/frictioniq/session?token= — one prospect, with touch history ──
+  if (req.method === 'GET' && path === '/api/frictioniq/session') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const token = (url.searchParams.get('token') || '').trim();
+      if (!token) { err(res, 'token required', 400); return; }
+
+      const { data: session, error: sErr } = await db
+        .from('frictioniq_session').select('*').eq('token', token).maybeSingle();
+      if (sErr) { err(res, sErr.message, 500); return; }
+      if (!session) { err(res, 'unknown session', 404); return; }
+
+      // The outbox, if migration 0010 has been applied. A register that has not
+      // been migrated should still show the prospect rather than erroring.
+      let touches = [];
+      try {
+        const { data } = await db
+          .from('frictioniq_touch')
+          .select('kind,step,scheduled_for,sent_at,cancelled_at,cancel_reason,attempts,last_error,subject,channel,delivered_on,wa_status')
+          .eq('token', token)
+          .order('scheduled_for', { ascending: true });
+        touches = data ?? [];
+      } catch { touches = []; }
+
+      json(res, { session, touches });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/frictioniq/session — operator updates stage / replied ───────
+  if (req.method === 'POST' && path === '/api/frictioniq/session') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const body  = await readBody(req);
+      const token = String(body.token || '').trim();
+      if (!token) { err(res, 'token required', 400); return; }
+
+      /* An allowlist, not a passthrough. This route can write to a table
+         holding personal data, and "update whatever the client sent" is how a
+         console becomes an injection surface. */
+      const STAGES = new Set(['captured', 'working', 'conversation', 'proposal', 'engaged', 'declined', 'dormant']);
+      const patch = {};
+
+      if (body.stage !== undefined) {
+        if (!STAGES.has(body.stage)) { err(res, `unknown stage: ${body.stage}`, 400); return; }
+        patch.stage = body.stage;
+        patch.stage_at = new Date().toISOString();
+      }
+
+      if (body.replied !== undefined) {
+        // Ticking this is the single switch that stops a live sequence talking
+        // over a real conversation. Untick sets it back to null rather than to
+        // a date, so the register never claims a reply that did not happen.
+        patch.replied_at = body.replied ? new Date().toISOString() : null;
+      }
+
+      if (!Object.keys(patch).length) { err(res, 'nothing to update', 400); return; }
+
+      const { error: uErr } = await db.from('frictioniq_session').update(patch).eq('token', token);
+      if (uErr) { err(res, uErr.message, 500); return; }
+
+      json(res, { ok: true, updated: Object.keys(patch) });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -3344,6 +3549,7 @@ async function startup() {
       if (seed.seeded) console.log('[FirmIP] Seeded Engagement Model into knowledge_base');
     }
   } catch (e) { console.warn('[FirmIP] Engagement Model seed skipped:', e.message); }
+  logOperatorAuthStatus();
   if (isCronAuthRequired()) {
     console.log('[Cron] CRON_SECRET set — external /api/cron/* routes require auth');
   } else {
