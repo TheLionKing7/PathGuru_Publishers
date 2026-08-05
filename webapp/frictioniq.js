@@ -102,7 +102,9 @@
         ? ` <span class="fiq-cap" title="Band capped by a blocked domain">capped</span>`
         : '';
 
-      const depthMark = r.depth && r.depth !== 'screening'
+      // 'short' is the screening instrument's stored value — NOT 'screening'.
+      // Getting this wrong tagged every ordinary row with a depth chip.
+      const depthMark = r.depth && r.depth !== 'short'
         ? ` <span class="fiq-depth">${esc(r.depth)}</span>`
         : '';
 
@@ -131,6 +133,20 @@
   function renderSummary(stats, page) {
     const el = document.getElementById('fiqSummary');
     if (!el) return;
+
+    // Counts missed their deadline server-side. Say so. Rendering zeroes here
+    // would be a lie, and an unexplained blank is a bug report waiting to happen.
+    if (!stats) {
+      el.innerHTML = `<div class="fiq-stat fiq-stat--unavailable">
+        <span class="fiq-stat-value">—</span>
+        <span class="fiq-stat-label">Counts unavailable</span>
+        <span class="fiq-stat-note">the database was too slow to total the register; the rows below are current</span>
+      </div>`;
+      const n0 = document.getElementById('fiqPageNote');
+      if (n0) n0.hidden = true;
+      return;
+    }
+
     const cell = (v, label, note) => `
       <div class="fiq-stat">
         <span class="fiq-stat-value">${v ?? 0}</span>
@@ -139,17 +155,17 @@
       </div>`;
 
     el.innerHTML =
-      cell(stats?.total, 'Total', 'whole register') +
-      cell(stats?.this_week, 'This week') +
-      cell(stats?.today, 'Today') +
-      cell(stats?.with_email, 'With email');
+      cell(stats.total, 'Total', 'whole register') +
+      cell(stats.this_week, 'This week') +
+      cell(stats.today, 'Today') +
+      cell(stats.with_email, 'With email');
 
     const note = document.getElementById('fiqPageNote');
     if (note) {
       // Say when the table is a window rather than the whole thing. A silent
       // cap reads as "you are looking at everything" when you are not.
       note.textContent = page?.truncated
-        ? `Showing the most recent ${page.returned} of ${stats?.total ?? '?'}. Older rows are not on this screen.`
+        ? `Showing the most recent ${page.returned} of ${stats?.total ?? 'an unknown number'}. Older rows are not on this screen.`
         : '';
       note.hidden = !page?.truncated;
     }

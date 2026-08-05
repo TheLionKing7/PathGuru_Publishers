@@ -257,3 +257,9 @@ html.pg-auth-locked, html.pg-auth-locked body { overflow: hidden; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Counts that missed their server-side deadline. An em dash and a sentence,
+   never a zero — a fabricated zero in a register is the exact failure this
+   product is sold to find in other people's dashboards. */
+.fiq-stat--unavailable { opacity: 0.75; }
+.fiq-stat--unavailable .fiq-stat-value { color: var(--text-muted, #8b9ab5); }

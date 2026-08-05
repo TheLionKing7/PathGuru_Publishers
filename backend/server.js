@@ -3343,24 +3343,38 @@ Write the full article now.`;
 
       const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 500);
 
+      /* Every name here is a real column. `max` was not — it was invented, and
+         PostgREST rejects the whole select when one name is wrong, which takes
+         the register down rather than degrading it. The scale is DERIVED below
+         from depth_ceiling, which migration 0011 added for exactly this reason:
+         "report it beside the score or a partial assessment reads as a poor one." */
       const { data: rows, error: dbErr } = await db
         .from('frictioniq_session')
-        .select('token,created_at,total,max,depth,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority')
+        .select('token,created_at,total,depth,depth_ceiling,full_total,full_band,full_capped,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority')
         .order('created_at', { ascending: false })
         .limit(limit);
 
       if (dbErr) { err(res, dbErr.message, 500); return; }
 
+      /* Which score to show, and out of what.
+         A respondent who went deep has TWO scores on the row — the screening
+         total out of 24 and the full total out of depth_ceiling. Showing the
+         screening one for a deep assessment understates them by a factor of
+         five; showing the full one without its ceiling makes a partial
+         assessment read as a poor one. So both travel together, always. */
+      const deep = r => r.depth && r.depth !== 'short' && r.full_total !== null && r.full_total !== undefined;
+
       const sessions = (rows ?? []).map(r => ({
         token: r.token,
         created_at: r.created_at,
-        total: r.total,
-        // Fall back to 24 only when the column is absent — the screening
-        // instrument's scale — and never silently for a deep assessment.
-        max: r.max ?? (r.depth && r.depth !== 'screening' ? null : 24),
-        depth: r.depth || 'screening',
-        band: r.band,
-        capped: r.capped === true,
+        total: deep(r) ? r.full_total : r.total,
+        // 24 is the screening instrument's scale. For a deep assessment the
+        // ceiling is whatever depth they actually reached — null rather than a
+        // guess if the column was never populated.
+        max: deep(r) ? (r.depth_ceiling ?? null) : 24,
+        depth: r.depth || 'short',
+        band: deep(r) ? (r.full_band ?? r.band) : r.band,
+        capped: (deep(r) ? r.full_capped : r.capped) === true,
         sector: r.sector,
         role: r.role,
         headcount_band: r.headcount_band,
@@ -3380,23 +3394,46 @@ Write the full article now.`;
       const weekAgo  = new Date(now.getTime() - 7 * 86400000).toISOString();
       const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
+      /* ── The counts, on a leash ──────────────────────────────────────────
+       *
+       * These four are the honest headline numbers — real counts against the
+       * whole table rather than the length of one page. But they are also four
+       * extra round trips on a route that previously made one, and on a slow
+       * link that turns a working register into a spinner. The rows are the
+       * point of this screen; the counts are decoration on top of them.
+       *
+       * So they get a deadline. Miss it and stats comes back null, the rows
+       * still render, and the console says the counts are unavailable — rather
+       * than showing zeroes, which would be a lie of exactly the kind this
+       * product exists to expose in other people's dashboards. */
+      const COUNT_DEADLINE_MS = Number(process.env.FRICTIONIQ_COUNT_TIMEOUT_MS) || 4000;
+
       const countOf = async (build) => {
-        try {
-          const { count } = await build(
-            db.from('frictioniq_session').select('token', { count: 'exact', head: true })
-          );
-          return count ?? 0;
-        } catch { return 0; }
+        const { count } = await build(
+          db.from('frictioniq_session').select('token', { count: 'exact', head: true })
+        );
+        return count ?? 0;
       };
 
-      const [total, thisWeek, today, withEmail] = await Promise.all([
-        countOf(q => q),
-        countOf(q => q.gte('created_at', weekAgo)),
-        countOf(q => q.gte('created_at', dayStart)),
-        countOf(q => q.not('email', 'is', null)),
-      ]);
-
-      const stats = { total, this_week: thisWeek, today, with_email: withEmail };
+      let stats = null;
+      try {
+        stats = await Promise.race([
+          Promise.all([
+            countOf(q => q),
+            countOf(q => q.gte('created_at', weekAgo)),
+            countOf(q => q.gte('created_at', dayStart)),
+            countOf(q => q.not('email', 'is', null)),
+          ]).then(([total, thisWeek, today, withEmail]) => ({
+            total, this_week: thisWeek, today, with_email: withEmail,
+          })),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('count timeout')), COUNT_DEADLINE_MS)
+          ),
+        ]);
+      } catch (e) {
+        console.warn('[frictioniq] counts unavailable:', e.message);
+        stats = null;
+      }
 
       // Band distribution over the returned page. Labelled as such in the UI —
       // it is a sample, and calling a sample a benchmark is the exact failure
