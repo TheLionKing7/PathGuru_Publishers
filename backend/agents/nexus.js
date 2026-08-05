@@ -392,6 +392,7 @@ export class Nexus extends AgentBase {
     const db = getSupabase();
     let brief = null;
     let researchMeta = {};
+    let tavilyDown = null; // API status flag — if set, retries are pointless
 
     try {
       const { researcher } = await import('./researcher.js');
@@ -402,6 +403,7 @@ export class Nexus extends AgentBase {
         mergeWithKB: true,
       });
       brief        = result?.brief || result?.summary || String(result || '');
+      tavilyDown   = result?.tavilyDown || null;
       researchMeta = {
         sources:      result?.sources      || [],
         gaps:         result?.gaps         || [],
@@ -422,35 +424,80 @@ export class Nexus extends AgentBase {
     let qScore = scoreResearchBrief({ brief, ...researchMeta });
     console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100)`);
 
+    // ── Intelligent retry: only re-run if the API is healthy and quality failed on content, not connectivity ──
     if (!qScore.passed) {
-      console.warn('[Nexus] Research quality too low — re-running Orion at deep depth with expanded web grounding');
-      try {
-        const { researcher } = await import('./researcher.js');
-        const deepResult = await researcher.research({
-          topic:       instruction,
-          forAgent:    'nexus',
-          depth:       'deep',
-          mergeWithKB: true,
-          focusAreas:  ['market data and statistics', 'expert frameworks', 'regional context', 'competitive landscape'],
-        });
-        brief        = deepResult?.brief || brief;
-        researchMeta = {
-          sources:      deepResult?.sources      || researchMeta.sources,
-          gaps:         deepResult?.gaps         || researchMeta.gaps,
-          coverStats:   deepResult?.coverStats   || researchMeta.coverStats,
-          mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
-          depth:        'deep',
-        };
-        qScore = scoreResearchBrief({ brief, ...researchMeta });
-      } catch (e) {
-        console.error('[Nexus] Deep re-run failed:', e.message);
+      const apiDown = tavilyDown && !tavilyDown.ok;
+
+      if (apiDown) {
+        // Tavily is dead — re-running would waste time and burn quota.
+        // Escalate infrastructure alert immediately.
+        console.error(`[Nexus] Skipping deep re-run — Tavily API is down: ${tavilyDown.reason}`);
+        try {
+          await this.escalateToOwner({
+            subject:  `⚠️ Tavily API down — Orion research blocked`,
+            body:     `Orion tried to research "${instruction.slice(0, 100)}" but Tavily is unavailable: ${tavilyDown.reason}\n\nNo amount of re-running will fix this. Action: check TAVILY_API_KEY on Render (quota, expiry, rotation). Once the key is healthy, re-run this task from the Command Center.`,
+            severity: 'critical',
+            context:  { taskId, instruction: instruction.slice(0, 200), tavilyReason: tavilyDown.reason },
+          });
+        } catch (escErr) {
+          console.warn('[Nexus] Infrastructure escalation failed:', escErr.message);
+        }
+      } else {
+        // API is healthy but content quality was poor — worth re-running deeper
+        console.warn('[Nexus] Research quality too low — re-running Orion at deep depth with expanded web grounding');
+        try {
+          const { researcher } = await import('./researcher.js');
+          const deepResult = await researcher.research({
+            topic:       instruction,
+            forAgent:    'nexus',
+            depth:       'deep',
+            mergeWithKB: true,
+            focusAreas:  ['market data and statistics', 'expert frameworks', 'regional context', 'competitive landscape'],
+          });
+          brief        = deepResult?.brief || brief;
+          tavilyDown   = deepResult?.tavilyDown || tavilyDown;
+          researchMeta = {
+            sources:      deepResult?.sources      || researchMeta.sources,
+            gaps:         deepResult?.gaps         || researchMeta.gaps,
+            coverStats:   deepResult?.coverStats   || researchMeta.coverStats,
+            mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
+            depth:        'deep',
+          };
+          qScore = scoreResearchBrief({ brief, ...researchMeta });
+        } catch (e) {
+          console.error('[Nexus] Deep re-run failed:', e.message);
+        }
       }
     }
 
-    const briefGated = !qScore.passed || !(researchMeta.sources?.length);
-    const bossBrief  = briefGated
-      ? `${formatQualityBadge(qScore)}\n\n---\n\n**Brief withheld** — Tavily/Firecrawl returned insufficient sources (${researchMeta.sources?.length || 0}). Check \`TAVILY_API_KEY\` quota on Render, deploy latest Orion code, then re-run with a shorter research prompt.`
-      : brief;
+    const apiDown        = tavilyDown && !tavilyDown.ok;
+    const briefGated     = !qScore.passed || !(researchMeta.sources?.length);
+    const rawBriefText   = brief || '';
+
+    // ── Show Boss the quality scorecard AND whatever raw content exists ──────
+    // Previously the brief was entirely replaced by the scorecard when quality
+    // failed — meaning Boss saw a D-grade label with no actual intelligence.
+    // Now Boss sees: quality badge first, then the raw brief (even if thin),
+    // so they can decide whether the partial output is still useful.
+    let bossBrief;
+    if (briefGated) {
+      const reasonBlock = apiDown
+        ? `⚠️ *Tavily API is currently unavailable:* ${tavilyDown.reason}\nOrion produced whatever it could from cached/internal sources below.`
+        : `Brief withheld — Tavily/Firecrawl returned insufficient sources (${researchMeta.sources?.length || 0}). Check \`TAVILY_API_KEY\` quota on Render, then re-run from Command Center.`;
+
+      bossBrief = [
+        formatQualityBadge(qScore),
+        '',
+        '---',
+        reasonBlock,
+        '',
+        rawBriefText && rawBriefText.trim().length > 10
+          ? `**Partial output (may be useful):**\n\n${rawBriefText}`
+          : '**No output produced.** Orion was unable to generate any brief from the available sources.',
+      ].filter(Boolean).join('\n');
+    } else {
+      bossBrief = brief;
+    }
 
     const workflowSignals = parseWorkflowSignals(instruction);
     const nextSteps       = briefGated ? [] : this._suggestNextSteps(brief, workflowSignals);

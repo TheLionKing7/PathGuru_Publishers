@@ -85,6 +85,48 @@ export class Researcher extends AgentBase {
     return { tavily, firecrawl };
   }
 
+  /**
+   * Pre-flight Tavily health check — runs a single cheap query to verify
+   * the API key is active and quota is available BEFORE dispatching a full
+   * research mission.  Returns { ok, reason } so callers can decide whether
+   * to abort, retry with fallback, or escalate.
+   */
+  async _healthCheckTavily() {
+    if (!process.env.TAVILY_API_KEY) {
+      return { ok: false, reason: 'TAVILY_API_KEY not set' };
+    }
+    try {
+      const res = await fetch(`${TAVILY_BASE}/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.TAVILY_API_KEY}`,
+        },
+        body: JSON.stringify({
+          api_key:       process.env.TAVILY_API_KEY,
+          query:         'test ping',
+          search_depth:  'basic',
+          max_results:   1,
+          include_answer: false,
+        }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, reason: `Tavily auth failed (HTTP ${res.status}) — key may be expired or revoked` };
+      }
+      if (res.status === 429) {
+        return { ok: false, reason: 'Tavily rate-limited (HTTP 429) — quota may be exhausted' };
+      }
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        return { ok: false, reason: `Tavily returned HTTP ${res.status}: ${body.slice(0, 200)}` };
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, reason: `Tavily unreachable: ${e.message}` };
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // PRIMARY ENTRY POINT
   // ══════════════════════════════════════════════════════════════════════════
@@ -107,21 +149,33 @@ export class Researcher extends AgentBase {
     const queries = await this._generateQueries(topic, context, focusAreas, depth);
     console.log(`[Researcher] Generated ${queries.length} queries`);
 
+    // ── Pre-flight: verify Tavily is operational before burning queries ──────
+    let tavilyDown = null; // { ok: false, reason } if the API is unreachable / dead
+
     // Layer 1: Tavily discovery (+ expansion pass if thin)
     let tavilyResults = [];
     if (process.env.TAVILY_API_KEY) {
       tavilyResults = await this._tavilySearch(queries);
       let tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
       if (tavilyHitCount === 0) {
-        const expanded = this._buildFallbackQueries(topic, focusAreas, depth);
-        console.warn(`[Researcher] Tavily thin — retrying with ${expanded.length} short fallback queries`);
-        const retry = await this._tavilySearch(expanded);
-        tavilyResults = this._mergeTavilyResults(tavilyResults, retry);
-        tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+        // If ALL queries returned zero results, run a health check before
+        // wasting time on fallback queries — the key may be dead.
+        const health = await this._healthCheckTavily();
+        if (!health.ok) {
+          tavilyDown = { ok: false, reason: health.reason };
+          console.error(`[Researcher] Tavily health check FAILED — aborting retries: ${health.reason}`);
+        } else {
+          const expanded = this._buildFallbackQueries(topic, focusAreas, depth);
+          console.warn(`[Researcher] Tavily thin — retrying with ${expanded.length} short fallback queries`);
+          const retry = await this._tavilySearch(expanded);
+          tavilyResults = this._mergeTavilyResults(tavilyResults, retry);
+          tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+        }
       }
-      console.log(`[Researcher] Tavily: ${tavilyHitCount} results across ${tavilyResults.length} queries`);
+      console.log(`[Researcher] Tavily: ${tavilyHitCount} results across ${tavilyResults.length} queries${tavilyDown ? ` (API DOWN: ${tavilyDown.reason})` : ''}`);
     } else {
       console.warn('[Researcher] Tavily skipped — TAVILY_API_KEY not set');
+      tavilyDown = { ok: false, reason: 'TAVILY_API_KEY not set — Orion cannot search the web' };
     }
 
     // Layer 2: Firecrawl deep scrape — seed from Tavily URLs + answers
@@ -183,6 +237,7 @@ export class Researcher extends AgentBase {
       forAgent,
       topic,
       researchedAt: new Date().toISOString(),
+      tavilyDown,  // null | { ok: false, reason } — Nexus uses this for intelligent retry
     };
   }
 
