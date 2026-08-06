@@ -843,6 +843,13 @@
     const slug       = slugInput || oldSlug || makeSlug(titleInput);
     const featuredUrl = document.getElementById('blogEditorFeaturedUrl')?.value.trim() || null;
     const featuredCredit = document.getElementById('blogEditorFeaturedCredit')?.value.trim() || '';
+    // Word count and reading time are computed here because nothing else does it.
+    // The backend falls back to a hardcoded 5 minutes when the payload omits them
+    // (blogPublisher.js), which stamped every post edited through the Writer as a
+    // 5-minute read regardless of length. 200 wpm matches the POST /api/posts path.
+    const plainText   = (document.getElementById('blogEditorArea').textContent || '').trim();
+    const wordCount   = plainText ? plainText.split(/\s+/).length : 0;
+    const readingTime = Math.max(1, Math.round(wordCount / 200));
     return {
       title: titleInput,
       slug,
@@ -857,6 +864,10 @@
       featured_image_url: featuredUrl,
       featuredImageCredit: featuredCredit,
       featured_image_credit: featuredCredit,
+      wordCount,
+      word_count: wordCount,
+      readingTime,
+      reading_time_minutes: readingTime,
       status: status === 'published' ? 'published' : 'draft',
     };
   }
