@@ -1143,7 +1143,7 @@ ORION RESEARCH (verified from Supabase — do not invent):
 — ${researchPipe.textBlock}
 
 AGENT NETWORK STATUS:
-${status.agents.map(a => `- ${a.display_name || a.id}: ${a.status}${a.current_task_id ? ' (on task)' : ''}`).join('\n') || 'Status unavailable'}
+${Nexus.agentList(status).map(a => `- ${a.name}: ${a.status}${a.currentTask ? ' (on task)' : ''}`).join('\n') || 'Status unavailable'}
 
 ACTIVE / PENDING TASKS (${status.activeTasks.length}):
 ${status.activeTasks.slice(0, 8).map(t => `- [P${t.priority}] ${t.title} → ${t.agent_id} (${t.status})`).join('\n') || 'No active tasks'}
@@ -1260,7 +1260,7 @@ Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog s
       blogCadenceDays: BLOG_CADENCE_DAYS,
       ops,
       context:         ctx,
-      agentSummary:    status.agents?.map(a => ({ id: a.id, status: a.status })) || [],
+      agentSummary:    Nexus.agentList(status).map(a => ({ id: a.id, status: a.status })),
       activeTaskCount: status.activeTasks?.length || 0,
       generatedAt:     new Date().toISOString(),
     };
@@ -1807,6 +1807,37 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     };
   }
 
+  /**
+   * getNetworkStatus() returns `agents` as an OBJECT KEYED BY AGENT ID, not an
+   * array — see the two return statements above, both of which build `{}`.
+   * Three call sites called `.map` on it directly, which is why the command tab
+   * died with "status.agents?.map is not a function". The optional chaining at
+   * one of them made it worse, not better: it silenced the null case and left
+   * the type error, so the failure surfaced in the browser instead of at the
+   * boundary.
+   *
+   * Field names differ too, and that is the second half of the bug. The object's
+   * values carry `name`, `lastActivity` and `currentTask`; the call sites were
+   * reading `display_name`, `last_active_at` and `current_task_id`, which do not
+   * exist on this shape and would have rendered "undefined" into a prompt sent
+   * to a model even once the crash was fixed. Normalising in one place is the
+   * only way that stays fixed.
+   */
+  static agentList(status) {
+    const agents = status?.agents;
+    if (!agents) return [];
+    const rows = Array.isArray(agents)
+      ? agents.map(a => [a.id, a])
+      : Object.entries(agents);
+    return rows.map(([id, a]) => ({
+      id,
+      name:        a?.name || a?.display_name || id,
+      status:      a?.status || 'unknown',
+      currentTask: a?.currentTask || a?.current_task || a?.current_task_id || null,
+      lastActive:  a?.lastActivity || a?.last_active_at || a?.last_active || null,
+    }));
+  }
+
   async getTaskHistory({ agentId = null, status = null, limit = 30, offset = 0 } = {}) {
     const db = getSupabase();
     if (!db) return { tasks: [] };
@@ -1830,7 +1861,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     const reportPrompt = `You are Nexus, the project manager. Generate a concise status report for the DigiFusion team.
 
 AGENT STATUSES:
-${status.agents.map(a => `- ${a.display_name}: ${a.status}${a.current_task_id ? ' (on task)' : ''}, last active: ${a.last_active_at ? new Date(a.last_active_at).toLocaleString() : 'never'}`).join('\n')}
+${Nexus.agentList(status).map(a => `- ${a.name}: ${a.status}${a.currentTask ? ' (on task)' : ''}, last active: ${a.lastActive && a.lastActive !== '—' ? new Date(a.lastActive).toLocaleString() : 'never'}`).join('\n') || 'Status unavailable'}
 
 ACTIVE / PENDING TASKS (${status.activeTasks.length}):
 ${status.activeTasks.map(t => `- [${t.priority}] ${t.title} → ${t.agent_id} (${t.status})`).join('\n') || 'No active tasks'}
