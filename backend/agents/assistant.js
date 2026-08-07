@@ -26,6 +26,7 @@ import { getSupabase }    from '../supabaseClient.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
 import { buildAriaFrameworkContext } from '../skills/firmKnowledge.js';
+import { guardAssistantReply, looksLikeProbing } from './assistantGuard.js';
 
 // ── VA system prompt ───────────────────────────────────────────────────────────
 
@@ -321,7 +322,7 @@ Visitor: ${message}
 Respond as Aria. Be concise and direct — 1 to 3 sentences unless the question genuinely requires more depth. No bullet lists unless explicitly asked. No filler openings.
 ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the strategy session in one sentence. The booking link will be appended by the system.' : ''}`;
 
-      response = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
+      response = await this._speak(prompt, { visitorMessage: message, sessionId });
     }
 
     // ── 3. Extract qualification data ───────────────────────────────────────
@@ -614,7 +615,7 @@ Write a warm, professional closing message that:
 
 Keep it natural and concise — 3–4 short paragraphs maximum.`;
 
-      return callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
+      return this._speak(prompt, { visitorMessage: message });
     }
 
     // Ask the next question, informed by their previous answer
@@ -638,7 +639,7 @@ Do not say "Question ${nextStep + 1} of ${flow.questions.length}". Do not add fi
 
 If their answer reveals something significant (a constraint, an opportunity, a risk), note it briefly before moving on.`;
 
-    return callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true });
+    return this._speak(prompt, { visitorMessage: message });
   }
 
   async _onIntakeComplete(leadState, sessionId, sourceUrl, history) {
@@ -876,6 +877,49 @@ If their answer reveals something significant (a constraint, an opportunity, a r
     if (leadState.budget_range && !leadState.budget_range.match(/no budget|none|zero/i)) score += 1;
     if (leadState.intake?.complete) score = Math.max(score, 4); // completed intake = hot
     return Math.min(5, Math.round(score));
+  }
+
+  /**
+   * The single door every visitor-facing reply leaves through.
+   *
+   * Three call sites used to invoke callAiProvider directly, which meant the
+   * disclosure boundary depended on whoever added the fourth remembering to guard
+   * it. It now depends on nothing. If you are adding a new thing Aria says to a
+   * member of the public, call this — not callAiProvider.
+   *
+   * The JSON extraction path (_extractQualData) deliberately does NOT come through
+   * here: it is internal, never shown to a visitor, and running a prose guard over
+   * a JSON payload would corrupt it.
+   */
+  async _speak(prompt, { visitorMessage = '', sessionId = null } = {}) {
+    const draft = await callAiProvider(
+      resolveProvider(), prompt, this.systemPrompt, { json: false, fallback: true },
+    );
+
+    const verdict = guardAssistantReply(draft);
+
+    if (!verdict.safe) {
+      // Loud on purpose. A trip here means either the model was talked past its
+      // system prompt or our own copy leaked a vendor name — both are worth a
+      // human looking at, and neither is visible from the visitor's side.
+      console.error(
+        '[Aria] OUTPUT GUARD TRIPPED — reply suppressed.',
+        JSON.stringify({
+          sessionId,
+          violations: verdict.violations,
+          probing: looksLikeProbing(visitorMessage),
+          visitorMessage: String(visitorMessage).slice(0, 200),
+          draftPreview: String(draft).slice(0, 200),
+        }),
+      );
+    } else if (looksLikeProbing(visitorMessage)) {
+      // The reply was clean, so Aria handled it. Still worth counting: a run of
+      // these from one session is someone working at it rather than asking.
+      console.warn('[Aria] probing pattern in visitor message',
+        JSON.stringify({ sessionId, visitorMessage: String(visitorMessage).slice(0, 200) }));
+    }
+
+    return verdict.reply;
   }
 
   async _extractQualData(message, currentState, history) {

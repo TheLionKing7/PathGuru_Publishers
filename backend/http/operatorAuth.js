@@ -220,6 +220,22 @@ const PUBLIC_EXACT = new Set([
   // and digitafusion.com falls back to mock data when it fails — but gating it
   // would silently degrade a live page, so it stays public deliberately.
   '/api/agents/status',
+  // ── Aria, the storefront chat ──────────────────────────────────────────
+  // These three are called from digitafusion.com by a visitor's browser. The
+  // visitor has no operator session and must never be asked for one, so they are
+  // public by necessity rather than by preference.
+  //
+  // They were MISSED when deny-by-default auth landed, which silently 401'd every
+  // conversation on the public site. The lesson is worth keeping: adding
+  // deny-by-default to a server means enumerating every browser-reached endpoint,
+  // and the storefront's endpoints do not live in this repository, so grepping
+  // this codebase for callers finds nothing. Check the storefront too.
+  //
+  // Public does NOT mean unprotected. These carry visitor input into a model, so
+  // they need their own rate limit and an output guard — see assistantGuard.js.
+  '/api/agents/assistant/chat',
+  '/api/agents/assistant/lead',
+  '/api/agents/assistant/intake',
   // Public actions reached from links in outbound email. The recipient has no
   // operator session and never will; the token in the payload is the credential.
   '/api/newsletter/subscribe',

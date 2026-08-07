@@ -62,6 +62,7 @@ import {
   isOperatorAuthConfigured, checkPassword, issueSession,
   setSessionCookie, clearSessionCookie, logOperatorAuthStatus,
 } from './http/operatorAuth.js';
+import { enforce as rateLimit } from './http/rateLimit.js';
 import { buildPlatformConfig } from './skills/productRegistry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -2156,6 +2157,11 @@ const server = createServer(async (req, res) => {
 
   // POST /api/agents/assistant/chat
   if (req.method === 'POST' && path === '/api/agents/assistant/chat') {
+    // Public, unauthenticated, and every turn is a model call we pay for. The
+    // limiter runs before readBody so a flood costs us a header write, not a
+    // parsed payload. See http/rateLimit.js for what in-process does and does
+    // not buy us.
+    if (rateLimit('chat', req, res)) return;
     try {
       const body = await readBody(req);
       if (!body.message) { err(res, 'message required', 400); return; }
@@ -2166,6 +2172,7 @@ const server = createServer(async (req, res) => {
 
   // POST /api/agents/assistant/lead
   if (req.method === 'POST' && path === '/api/agents/assistant/lead') {
+    if (rateLimit('lead', req, res)) return;
     try {
       json(res, await assistant.saveLead(await readBody(req)));
     } catch (e) { err(res, e.message, 500); }
@@ -2174,6 +2181,7 @@ const server = createServer(async (req, res) => {
 
   // POST /api/agents/assistant/intake  — start or continue a structured intake conversation
   if (req.method === 'POST' && path === '/api/agents/assistant/intake') {
+    if (rateLimit('intake', req, res)) return;
     try {
       const body = await readBody(req);
       if (!body.track) { err(res, 'track required (bd|automation|digital_media)', 400); return; }
