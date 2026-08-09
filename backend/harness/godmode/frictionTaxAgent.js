@@ -76,6 +76,8 @@ export function computeFrictionTax(i) {
       buildCost: n(i.buildCost),
       paybackMonths: n(i.buildCost) && (low * n(i.wedgeShare)) > 0 ? Math.round((n(i.buildCost) / ((low * n(i.wedgeShare)) / 12)) * 10) / 10 : null,
     } : null,
+  };
+}
 
 // ── Step 1: Extract inputs from raw client data ─────────────────────────────
 
@@ -110,9 +112,6 @@ export async function step1_extractInputs({
   await consumeBudget({ runId, tokensIn: result.tokensIn || 0, tokensOut: result.tokensOut || 0, costUsdMills: 0 });
   if (verdict === 'failed') throw new Error(`[FrictionTaxAgent] Extraction failed: ${errorMessage}`);
   return { inputs };
-}
-
-  };
 }
 
 
@@ -172,5 +171,3 @@ export async function queryTaxRuns({ agentId, limit = 10 } = {}) {
   if (error) { console.warn('[FrictionTaxAgent] Query failed:', error.message); return []; }
   return data || [];
 }
-
-const DEFAULT_UNCERTAINTY = { queue: 0.30, rework: 0.25, translation: 0.15, coordination: 0.35 };

@@ -70,6 +70,10 @@ export async function step1_extractDeviations({
   await writeTrace({ runId, agentId, stepIndex: 0, chainLength, verified: false, input: truncated.slice(0, 2000), output: JSON.stringify(deviations).slice(0, 2000), providerName: result.providerName || 'unknown', modelName: result.modelName || 'unknown', tokensIn: result.tokensIn || 0, tokensOut: result.tokensOut || 0, durationMs: dur, verdict, errorMessage, verificationCheck: 'schema: deviation array', namespacesAccessed: ['knowledge_base.automation'] });
   await consumeBudget({ runId, tokensIn: result.tokensIn || 0, tokensOut: result.tokensOut || 0, costUsdMills: 0 });
 
+  if (verdict === 'failed') throw new Error(`[ExceptionHarvest] Step 1 failed: ${errorMessage}`);
+  return { deviations, raw: result.text || '' };
+}
+
 // ── Step 2: Clustering → 4-Field Catalog ────────────────────────────────────
 
 export async function step2_clusterDeviations({
@@ -190,9 +194,4 @@ export async function queryHarvestCatalogs({ agentId, limit = 10 } = {}) {
   const { data, error } = await q;
   if (error) { console.warn('[ExceptionHarvest] Query failed:', error.message); return []; }
   return data || [];
-}
-
-
-  if (verdict === 'failed') throw new Error(`[ExceptionHarvest] Step 1 failed: ${errorMessage}`);
-  return { deviations, raw: result.text || '' };
 }

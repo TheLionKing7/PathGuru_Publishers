@@ -152,6 +152,8 @@ export async function runThreeInkFirstPass({
 
   await persistProposedClassifications({ runId, agentId, classifications, flowInputHash: hashContent(processDescription) });
   console.log(`[ThreeInk] Run ${runId} complete — awaiting human reclassification`);
+  return { runId, flows, classifications, inkDistribution: { green: greens, blue: blues, red: reds } };
+}
 
 // ── Reclassification Tracking (THE honest metric) ───────────────────────────
 
@@ -208,7 +210,4 @@ export async function queryInkClassifications({ runId, limit = 50 } = {}) {
   const { data, error } = await q;
   if (error) { console.warn('[ThreeInk] Query failed:', error.message); return []; }
   return data || [];
-}
-
-  return { runId, flows, classifications, inkDistribution: { green: greens, blue: blues, red: reds } };
 }
