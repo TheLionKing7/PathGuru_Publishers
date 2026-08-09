@@ -22,6 +22,11 @@ import { callAiProvider, resolveProvider } from '../aiProviders.js';
 const LLM_CALL_OPTS = { fallback: true };
 import { notion }        from '../notionClient.js';
 import { getFrameworksForAgent } from '../skills/firmKnowledge.js';
+import { checkPermission, filterNamespaces } from '../harness/perimeter.js';
+import { writeTrace }    from '../harness/trace.js';
+import { hashContent }   from '../harness/trace.js';
+import { assertChainLength, assertNonEmpty, MAX_UNVERIFIED_STEPS } from '../harness/verify.js';
+import { consumeBudget, withBudget, BudgetExceededError } from '../harness/budget.js';
 
 // Default model follows AI_PROVIDER (e.g. deepseek) when set
 const DEFAULT_MODEL = process.env.SYNTHESIZER_MODEL
@@ -206,13 +211,30 @@ export class AgentBase {
     const db = getSupabase();
     if (!db) return '';
 
+    // ── HARNESS: Context perimeter — filter domains this agent may read ──
+    // The perimeter IS the decorrelation device. An agent that is denied
+    // access to a domain simply doesn't see those KB entries.
+    let allowedDomains = this.domains;
+    try {
+      const { allowed } = await filterNamespaces({
+        agentId:    this.id,
+        namespaces: this.domains.map(d => `knowledge_base.${d}`),
+      });
+      // Convert back from 'knowledge_base.xxx' to 'xxx'
+      allowedDomains = allowed.map(ns => ns.replace('knowledge_base.', ''));
+      // Always allow 'general' domain as fallback
+      if (!allowedDomains.includes('general')) allowedDomains.push('general');
+    } catch {
+      // Perimeter check failed — fall back to this.domains (existing behavior)
+    }
+
     // Domain filter - only fetch knowledge relevant to this agent's domains
     let q = db.from('knowledge_base')
       .select('title, domain, content, frameworks, concepts, statistics, source_name')
       .order('relevance_score', { ascending: false })
       .limit(limit);
 
-    if (this.domains.length > 0) q = q.in('domain', [...this.domains, 'general']);
+    if (allowedDomains.length > 0) q = q.in('domain', [...allowedDomains, 'general']);
 
     const { data, error } = await q;
     if (error || !data?.length) return '';

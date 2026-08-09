@@ -23,6 +23,12 @@ import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
+
+// ── HARNESS: Phase 1 instrumentation ────────────────────────────────────────
+import { generateRunId, writeTrace, hashContent } from '../harness/trace.js';
+import { verifyStep, assertChainLength, MAX_UNVERIFIED_STEPS } from '../harness/verify.js';
+import { createBudget, consumeBudget, BudgetExceededError } from '../harness/budget.js';
+import { checkPermission } from '../harness/perimeter.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';
 import { scoreResearchBrief, formatQualityBadge } from '../skills/researchQualityGate.js';
 import { buildNexusCeoPromptBlock, resolveCeoModule, BLOG_CADENCE_DAYS } from '../skills/nexusCeoDoctrine.js';
@@ -889,6 +895,10 @@ No full article. Brief only.`;
       const db2 = getSupabase();
       let taskId = null;
 
+      // ── HARNESS: Trace research dispatch ──────────────────────────────────
+      const runId = generateRunId();
+      createBudget({ runId, tokenLimit: 100000, costLimitUsdMills: 5000 }).catch(() => {});
+
       if (db2) {
         const { data: taskRow, error: taskErr } = await db2.from('tasks').insert({
           title:       `[Orion] Research: ${instruction.slice(0, 80)}`,
@@ -903,6 +913,14 @@ No full article. Brief only.`;
         taskId = taskRow?.id || null;
       }
 
+      // ── HARNESS: Trace the research dispatch step ─────────────────────────
+      writeTrace({
+        runId, agentId: 'nexus', stepIndex: 0, chainLength: 2, verified: false,
+        input: instruction, output: { taskId, agent: 'researcher' },
+        providerName: resolveProvider()?.name, modelName: resolveProvider()?.model,
+        verdict: 'passed', verificationCheck: 'research_intent_detected',
+      }).catch(() => {});
+
       if (taskId) {
         this._runOrionResearchJob(taskId, instruction, priority).catch(e => {
           console.error('[Nexus] Background Orion job failed:', e.message);
@@ -913,11 +931,21 @@ No full article. Brief only.`;
         type:    'research_started',
         taskId,
         agent:   'orion',
+        runId,
         message: 'Orion research started. This may take 1–3 minutes — polling for results.',
       };
     }
 
     // ── PHASE 1B: Multi-step instruction — decompose and queue ───────────────
+    // ── HARNESS: Generate run ID and create budget for this chain ───────────
+    const runId = generateRunId();
+    const budget = await createBudget({
+      runId,
+      tokenLimit: 200000,
+      costLimitUsdMills: 10000,
+      stepLimit: 12,
+    }).catch(() => null);
+
     const decompositionPrompt = `You are Nexus — the strategic coordinator of the DigiFusion agent network. Decompose this instruction into discrete tasks and assign each to the right specialist.
 
 INSTRUCTION: "${instruction}"
