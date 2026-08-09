@@ -38,6 +38,15 @@ import { aether }      from './agents/aether.js';
 import { pulse }       from './agents/pulse.js';
 import { assistant }   from './agents/assistant.js';
 
+// ── Phase 2: Godmode — Delivery Leverage harness modules ────────────────────
+import {
+  runExceptionHarvest,
+  runFrictionTaxAssembly,
+  runThreeInkFirstPass,
+  recordReclassification,
+  getAggregateReclassificationRate,
+} from './harness/godmode/index.js';
+
 const AGENTS = { synthesizer, nexus, researcher, atlas, nova, aether, pulse, assistant };
 import {
   isR2Enabled,
@@ -1782,6 +1791,87 @@ const server = createServer(async (req, res) => {
     } catch (e) { err(res, e.message, 500); }
     return;
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── PHASE 2 GODMODE — Delivery Leverage API Routes ─────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /api/agents/nova/exception-harvest ──────────────────────────────
+  // Ingest raw ticket/correction logs, produce a 4-field deviation catalog.
+  // Body: { rawInput, industry?, tokenLimit?, costLimitUsdMills? }
+  if (req.method === 'POST' && path === '/api/agents/nova/exception-harvest') {
+    try {
+      const body = await readBody(req);
+      if (!body.rawInput) { err(res, 'rawInput is required', 400); return; }
+      const result = await runExceptionHarvest({
+        agentId: 'nova',
+        rawInput: body.rawInput,
+        industry: body.industry,
+        tokenLimit: body.tokenLimit,
+        costLimitUsdMills: body.costLimitUsdMills,
+      });
+      json(res, { ok: true, catalog: result.catalog, summary: result.summary, runId: result.runId });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/friction-tax ───────────────────────────────────
+  // Extract Friction Tax inputs from raw client data and compute the figure.
+  // Body: { rawData, industry?, currency?, revenue?, wedgeShare?, buildCost? }
+  if (req.method === 'POST' && path === '/api/agents/nova/friction-tax') {
+    try {
+      const body = await readBody(req);
+      if (!body.rawData) { err(res, 'rawData is required', 400); return; }
+      const result = await runFrictionTaxAssembly({
+        agentId: 'nova', rawData: body.rawData, industry: body.industry,
+        currency: body.currency, revenue: body.revenue,
+        wedgeShare: body.wedgeShare, buildCost: body.buildCost,
+        tokenLimit: body.tokenLimit, costLimitUsdMills: body.costLimitUsdMills,
+      });
+      json(res, { ok: true, result: result.result, inputs: result.inputs, runId: result.runId });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/three-ink ──────────────────────────────────────
+  // Classify operational flows green/blue/red. Agent proposes; human disposes.
+  // Body: { processDescription, tokenLimit?, costLimitUsdMills? }
+  if (req.method === 'POST' && path === '/api/agents/nova/three-ink') {
+    try {
+      const body = await readBody(req);
+      if (!body.processDescription) { err(res, 'processDescription is required', 400); return; }
+      const result = await runThreeInkFirstPass({
+        agentId: 'nova', processDescription: body.processDescription,
+        tokenLimit: body.tokenLimit, costLimitUsdMills: body.costLimitUsdMills,
+      });
+      json(res, { ok: true, flows: result.flows, classifications: result.classifications, inkDistribution: result.inkDistribution, runId: result.runId });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/three-ink/reclassify ────────────────────────────
+  // Record the consultant's reclassification after human review.
+  // Body: { runId, reclassified: [{ name, original_ink, final_ink, reason }] }
+  if (req.method === 'POST' && path === '/api/agents/nova/three-ink/reclassify') {
+    try {
+      const body = await readBody(req);
+      if (!body.runId || !Array.isArray(body.reclassified)) { err(res, 'runId and reclassified array are required', 400); return; }
+      const rate = await recordReclassification({ runId: body.runId, agentId: 'nova', reclassified: body.reclassified });
+      json(res, { ok: true, ...rate });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/three-ink/rate ───────────────────────────────────
+  // Aggregate reclassification rate across all runs — the honest metric.
+  if (req.method === 'GET' && path === '/api/agents/nova/three-ink/rate') {
+    try {
+      const rate = await getAggregateReclassificationRate();
+      json(res, { ok: true, ...(rate || { rate: null, note: 'not enough data — need human-reviewed classifications' }) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
 
   // ── GET /api/agents/agency-ip ────────────────────────────────────────────
   // List all generated agency playbooks/frameworks (metadata only).
