@@ -97,6 +97,10 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Intelligent retry logic** | Nexus checks `tavilyDown` flag before re-running Orion — skips retry (escalates) when API is dead, re-runs deeper when content is thin |
 | **Infrastructure escalation** | Critical-severity WhatsApp + Notion alerts when Tavily API is down (quota, expired key, rate-limit) — Boss knows what to fix |
 | **Boss-facing research output** | Quality scorecard + raw brief shown together (not scorecard-only) — Boss can assess partial output usefulness |
+| **Godmode Phase 1** | Agent harness: trace (SHA-256 audit), verify (chain gates), budget (ceilings), perimeter (namespace decorrelation) |
+| **Godmode Phase 2** | Delivery leverage: exception harvest (4-field catalog), friction tax assembly (deterministic), three-ink classifier (reclassification rate) |
+| **Godmode Phase 3** | Calibration at scale: engagement outcomes register, prior→calibrated flip at 10 pairs, divergence loop |
+| **Godmode Phase 4** | Productised service: harness health diagnostic (0–100), governance charter generator (living document) |
 
 ### Pending / known gaps
 
@@ -131,6 +135,22 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `POST` | `/api/agents/assistant/chat` | Single chat turn (used by DigiFusion chat widget) |
 | `POST` | `/api/agents/assistant/lead` | Save or update a lead |
 | `GET` | `/api/agents/leads` | Lead pipeline (`?status=qualified&limit=50`) |
+| `POST` | `/api/agents/nova/exception-harvest` | Ingest tickets → 4-field deviation catalog (Phase 2) |
+| `POST` | `/api/agents/nova/friction-tax` | Extract inputs → compute deterministic Friction Tax (Phase 2) |
+| `POST` | `/api/agents/nova/three-ink` | Analyze flows → green/blue/red ink classification (Phase 2) |
+| `POST` | `/api/agents/nova/three-ink/reclassify` | Record human reclassification → rate (Phase 2) |
+| `GET` | `/api/agents/nova/three-ink/rate` | Aggregate reclassification rate (Phase 2) |
+| `POST` | `/api/agents/nova/calibration/outcome` | Record a closed engagement's structured outcome (Phase 3) |
+| `GET` | `/api/agents/nova/calibration/status` | Calibration state: basis, counts, by-band (Phase 3) |
+| `POST` | `/api/agents/nova/calibration/compute` | Compute measured priors → flip basis (Phase 3) |
+| `GET` | `/api/agents/nova/calibration/priors` | Active priors — measured or declared (Phase 3) |
+| `GET` | `/api/agents/nova/calibration/divergence` | Self vs assessor score divergence (Phase 3) |
+| `POST` | `/api/agents/nova/calibration/extract` | Agent-assisted outcome extraction (Phase 3) |
+| `GET` | `/api/agents/nova/harness/health` | Score agent estate 0–100 (Phase 4) |
+| `POST` | `/api/agents/nova/harness/charter` | Generate governance charter for a client (Phase 4) |
+| `GET` | `/api/agents/nova/harness/charter/:id` | Retrieve a client's charter (Phase 4) |
+| `GET` | `/api/agents/nova/harness/charter/:id/full` | Full charter as markdown (Phase 4) |
+| `GET` | `/api/agents/nova/harness/charters` | List all active client charters (Phase 4) |
 
 ---
 
@@ -154,6 +174,74 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
 ```
 
 ---
+
+## Godmode — Agent Harness Infrastructure
+
+The four-phase build of DigiFusion's agentic consulting infrastructure — the operating layer that makes an agent estate auditable. **Agents draft; humans dispose. The harness is the product.**
+
+### Architecture
+
+```
+backend/harness/
+├── trace.js          Phase 1 — Per-run cryptographic audit trail
+├── verify.js         Phase 1 — Verification gates between chain steps (max 3 unverified)
+├── budget.js         Phase 1 — Token/cost/step ceilings per run
+├── perimeter.js      Phase 1 — Agent namespace access control (decorrelation device)
+└── godmode/
+    ├── exceptionHarvest.js   Phase 2 — 2-step: tickets → 4-field deviation catalog
+    ├── frictionTaxAgent.js   Phase 2 — 2-step: extract inputs → deterministic compute
+    ├── threeInkClassifier.js Phase 2 — 3-step: flows → green/blue/red + reclassification rate
+    ├── calibration.js        Phase 3 — Engagement outcomes → measured priors → divergence
+    ├── harnessHealth.js      Phase 4 — Agent estate health diagnostic (0–100)
+    └── harnessCharter.js     Phase 4 — Governance charter generator (living document)
+```
+
+### Phase 1 — The Harness (built)
+
+| Piece | Module | What it does |
+|---|---|---|
+| Trace | `trace.js` | Every agent invocation writes one row: run id, agent, step index, input hash (SHA-256), output hash, tokens, cost, duration, verdict |
+| Verify | `verify.js` | Chains longer than 3 steps without a verification gate are rejected at the orchestration layer. Check types: schema, range, citation, non_empty, custom |
+| Budget | `budget.js` | Token, cost ($), and step ceilings per run. Breach = abort, not degrade |
+| Perimeter | `perimeter.js` | Which agent may read which knowledge namespace. Success test: a poisoned KB entry damages exactly one agent, not all seven |
+
+### Phase 2 — Delivery Leverage (built)
+
+| Agent Chain | Steps | Verification |
+|---|---|---|
+| **Exception Harvest** | 2 | schema + non_empty gates between steps |
+| **Friction Tax Assembly** | 2 | schema gate on inputs; compute is deterministic (no LLM) |
+| **Three-Ink First Pass** | 3 | schema + non_empty gates; reclassification rate tracked forever |
+
+Key metric: `reclassification_rate` — the share of agent ink proposals the consultant changed. Written to the trace table from day one.
+
+### Phase 3 — Calibration at Scale (built)
+
+| Capability | What it does |
+|---|---|
+| **Outcomes Register** | `engagement_outcomes` table — self-score, assessor score, Friction Tax result, ink distribution, realised payback per closed engagement |
+| **Prior → Calibrated Flip** | At ≥10 delivered outcomes, replaces declared `BAND_PRIORS` in `commitment.ts` with measured rates. `basis` flips from `'prior'` to `'calibrated'` |
+| **Divergence Loop** | Self-score vs assessor score per band, per sector. Ten pairs gives a defensible correction factor |
+
+### Phase 4 — The Productised Service (built)
+
+| Product | What it is |
+|---|---|
+| **Harness Health Diagnostic** | Scores an agent estate 0–100 across trace completeness, verification coverage, budget discipline, and perimeter integrity. Same band scale as FrictionIQ (opaque → engineered) |
+| **Governance Charter** | Generated markdown document: named governor, error budget, verification policy, perimeter map, trace retention. Living artifact — regenerates from live estate state |
+
+Every firm deploying automation eventually needs these four instruments. Almost nobody sells them — retainer line, not project line.
+
+### DB Migrations
+
+| # | Tables | Phase |
+|---|---|---|
+| `0019_agent_harness` | `agent_traces`, `agent_budgets`, `agent_permissions`, `verification_log` | 1 |
+| `0020_phase2_delivery` | `exception_catalog`, `friction_tax_runs`, `ink_classifications` | 2 |
+| `0021_phase3_calibration` | `engagement_outcomes`, `calibration_state` | 3 |
+| `0022_phase4_harness_product` | `client_charters` | 4 |
+
+
 
 ## Research pipeline — how Atlas works
 
