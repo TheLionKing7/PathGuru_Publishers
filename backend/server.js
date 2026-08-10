@@ -45,6 +45,13 @@ import {
   runThreeInkFirstPass,
   recordReclassification,
   getAggregateReclassificationRate,
+  recordEngagementOutcome,
+  getCalibrationStatus,
+  computeMeasuredPriors,
+  getActivePriors,
+  isCalibrated,
+  computeDivergence,
+  extractEngagementOutcome,
 } from './harness/godmode/index.js';
 
 const AGENTS = { synthesizer, nexus, researcher, atlas, nova, aether, pulse, assistant };
@@ -1871,6 +1878,79 @@ const server = createServer(async (req, res) => {
     } catch (e) { err(res, e.message, 500); }
     return;
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── PHASE 3 GODMODE — Calibration at Scale ─────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── POST /api/agents/nova/calibration/outcome ────────────────────────────
+  // Record a completed engagement's structured outcome.
+  // Body: { engagementId, outcome, selfScore, assessorScore, frictionTax?, ... }
+  if (req.method === 'POST' && path === '/api/agents/nova/calibration/outcome') {
+    try {
+      const body = await readBody(req);
+      if (!body.engagementId || !body.outcome) { err(res, 'engagementId and outcome required', 400); return; }
+      const result = await recordEngagementOutcome(body);
+      json(res, { ok: true, outcome: result });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/calibration/status ──────────────────────────────
+  // Current calibration state: basis, outcome counts, by-band breakdown.
+  if (req.method === 'GET' && path === '/api/agents/nova/calibration/status') {
+    try {
+      const status = await getCalibrationStatus();
+      json(res, { ok: true, ...status });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/calibration/compute ────────────────────────────
+  // Compute measured priors from engagement outcomes and persist.
+  if (req.method === 'POST' && path === '/api/agents/nova/calibration/compute') {
+    try {
+      const result = await computeMeasuredPriors();
+      json(res, { ok: true, ...(result || { note: 'no outcomes to calibrate against' }) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/calibration/priors ──────────────────────────────
+  // Get the currently active priors — measured if calibrated, declared otherwise.
+  if (req.method === 'GET' && path === '/api/agents/nova/calibration/priors') {
+    try {
+      const priors = await getActivePriors();
+      json(res, { ok: true, ...priors });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/calibration/divergence ───────────────────────────
+  // Self-score vs assessor-score divergence per band and sector.
+  if (req.method === 'GET' && path === '/api/agents/nova/calibration/divergence') {
+    try {
+      const div = await computeDivergence();
+      json(res, { ok: true, ...(div || { note: 'not enough paired scores' }) });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/calibration/extract ────────────────────────────
+  // Agent-assisted extraction: pull structured outcomes from engagement artifacts.
+  // Body: { engagementId, rawArtifacts }
+  if (req.method === 'POST' && path === '/api/agents/nova/calibration/extract') {
+    try {
+      const body = await readBody(req);
+      if (!body.rawArtifacts) { err(res, 'rawArtifacts is required', 400); return; }
+      const result = await extractEngagementOutcome({
+        agentId: 'nova', engagementId: body.engagementId, rawArtifacts: body.rawArtifacts,
+      });
+      json(res, { ok: true, runId: result.runId });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
 
 
   // ── GET /api/agents/agency-ip ────────────────────────────────────────────
