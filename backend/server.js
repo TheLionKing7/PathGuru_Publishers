@@ -52,6 +52,12 @@ import {
   isCalibrated,
   computeDivergence,
   extractEngagementOutcome,
+  scoreHarnessHealth,
+  getHarnessHealthBand,
+  generateCharter,
+  saveCharter,
+  getCharter,
+  listCharters,
 } from './harness/godmode/index.js';
 
 const AGENTS = { synthesizer, nexus, researcher, atlas, nova, aether, pulse, assistant };
@@ -1947,6 +1953,79 @@ const server = createServer(async (req, res) => {
         agentId: 'nova', engagementId: body.engagementId, rawArtifacts: body.rawArtifacts,
       });
       json(res, { ok: true, runId: result.runId });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── PHASE 4 GODMODE — The Productised Service ──────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── GET /api/agents/nova/harness/health ──────────────────────────────────
+  // Score the agent estate across 4 dimensions (0–100). The product pitch.
+  if (req.method === 'GET' && path === '/api/agents/nova/harness/health') {
+    try {
+      const health = await scoreHarnessHealth();
+      json(res, { ok: true, ...health });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/harness/health/band ──────────────────────────────
+  // Quick check — just band and total.
+  if (req.method === 'GET' && path === '/api/agents/nova/harness/health/band') {
+    try {
+      const band = await getHarnessHealthBand();
+      json(res, { ok: true, ...band });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/nova/harness/charter ────────────────────────────────
+  // Generate and persist a governance charter for a client.
+  // Body: { clientId, governor, tokenCeiling?, costCeilingUsdMills?, ... }
+  if (req.method === 'POST' && path === '/api/agents/nova/harness/charter') {
+    try {
+      const body = await readBody(req);
+      if (!body.clientId || !body.governor) { err(res, 'clientId and governor required', 400); return; }
+      const result = await saveCharter(body);
+      json(res, { ok: true, health: result.health, charter: result.charter.slice(0, 500) + '...' });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/harness/charter/:clientId ───────────────────────
+  // Retrieve the latest charter for a client.
+  if (req.method === 'GET' && /^\/api\/agents\/nova\/harness\/charter\/([^/]+)$/.test(path)) {
+    try {
+      const clientId = path.split('/').pop();
+      const charter = await getCharter(clientId);
+      if (!charter) { err(res, 'Charter not found', 404); return; }
+      json(res, { ok: true, charter });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/harness/charters ────────────────────────────────
+  // List all active client charters.
+  if (req.method === 'GET' && path === '/api/agents/nova/harness/charters') {
+    try {
+      const charters = await listCharters();
+      json(res, { ok: true, charters });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/nova/harness/charter/:clientId/full ───────────────────
+  // Get the full charter document as markdown (for rendering).
+  if (req.method === 'GET' && /^\/api\/agents\/nova\/harness\/charter\/([^/]+)\/full$/.test(path)) {
+    try {
+      const clientId = path.split('/harness/charter/')[1]?.replace('/full', '');
+      const charter = await getCharter(clientId);
+      if (!charter?.charter) { err(res, 'Charter not found', 404); return; }
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
+      res.end(charter.charter);
     } catch (e) { err(res, e.message, 500); }
     return;
   }

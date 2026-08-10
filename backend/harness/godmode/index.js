@@ -50,3 +50,18 @@ export {
   MIN_CALIBRATION_PAIRS,
 } from './calibration.js';
 
+// ── Phase 4: The Productised Service ──────────────────────────────────────
+
+export {
+  scoreHarnessHealth,
+  getHarnessHealthBand,
+} from './harnessHealth.js';
+
+export {
+  generateCharter,
+  saveCharter,
+  getCharter,
+  listCharters,
+} from './harnessCharter.js';
+
+
