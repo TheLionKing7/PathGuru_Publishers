@@ -3607,7 +3607,7 @@ Write the full article now.`;
          "report it beside the score or a partial assessment reads as a poor one." */
       const { data: rows, error: dbErr } = await db
         .from('frictioniq_session')
-        .select('token,created_at,total,depth,depth_ceiling,full_total,full_band,full_capped,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority')
+        .select('token,created_at,total,depth,depth_ceiling,full_total,full_band,full_capped,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority,outcome,outcome_value,outcome_at')
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -3640,6 +3640,13 @@ Write the full article now.`;
         stage: r.stage || 'captured',
         organization: r.organization,
         replied: Boolean(r.replied_at),
+        /* The outcome fields travel with the row so the console can show what
+           was already recorded rather than presenting an empty control over a
+           row that has an answer. null is the honest default: it renders as
+           "not yet known", which is different from "did not convert". */
+        outcome: r.outcome ?? null,
+        outcome_value: r.outcome_value ?? null,
+        outcome_at: r.outcome_at ?? null,
         lead_score: r.lead_score,
         priority: r.priority,
       }));
@@ -3765,6 +3772,31 @@ Write the full article now.`;
         // over a real conversation. Untick sets it back to null rather than to
         // a date, so the register never claims a reply that did not happen.
         patch.replied_at = body.replied ? new Date().toISOString() : null;
+      }
+
+      /* The outcome is the field this console exists to collect. It stays on
+         the same allowlist discipline as the rest: a closed vocabulary, a
+         number that must actually parse, and an explicit null for "clear it"
+         rather than a silent no-op. Recording a wrong outcome is worse than
+         recording none, because the priors it feeds are quoted to clients. */
+      const OUTCOMES = new Set(['won', 'lost', 'pending']);
+      if (body.outcome !== undefined) {
+        const o = body.outcome === null || body.outcome === '' ? null : String(body.outcome);
+        if (o !== null && !OUTCOMES.has(o)) { err(res, `unknown outcome: ${body.outcome}`, 400); return; }
+        patch.outcome = o;
+        patch.outcome_at = o === null ? null : new Date().toISOString();
+      }
+
+      if (body.outcome_value !== undefined) {
+        if (body.outcome_value === null || body.outcome_value === '') {
+          patch.outcome_value = null;
+        } else {
+          const v = Number(body.outcome_value);
+          // Not Number.isFinite alone: a negative or zero engagement value is a
+          // typo, and one typo in a sample of ten moves the mean it feeds.
+          if (!Number.isFinite(v) || v <= 0) { err(res, 'outcome_value must be a positive number', 400); return; }
+          patch.outcome_value = v;
+        }
       }
 
       if (!Object.keys(patch).length) { err(res, 'nothing to update', 400); return; }

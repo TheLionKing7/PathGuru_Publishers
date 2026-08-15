@@ -16,6 +16,9 @@
        style.css never defined (its classes are --high/--medium/--low, the
        bands are Opaque/Approaching/Legible/Engineered). -->
   <link rel="stylesheet" href="css/operator-console.css">
+  <!-- The rebuilt Analytics / FrictionIQ console. Loaded after
+       operator-console.css so its grid, panel and band rules win. -->
+  <link rel="stylesheet" href="css/console.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -1154,45 +1157,72 @@
 
       <div class="module-body">
         <section class="tab-panel active" id="tab-analytics" aria-label="Site Analytics">
-          <div class="analytics-shell">
-            <div class="analytics-body">
-              <div class="analytics-kpi-row">
-                <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiViews">-</div>
-                  <div class="analytics-kpi-label">Total Views</div>
-                </div>
-                <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiSessions">-</div>
-                  <div class="analytics-kpi-label">Sessions</div>
-                </div>
-                <div class="analytics-kpi">
-                  <div class="analytics-kpi-val" id="akpiAvgPerDay">-</div>
-                  <div class="analytics-kpi-label">Avg / Day</div>
-                </div>
-              </div><!-- /.analytics-kpi-row -->
+          <!-- The range select and Refresh button stay in the panel header
+               above; they are NOT repeated here. Two elements sharing an id is
+               why the old page appeared to ignore the range picker —
+               getElementById returns the first, and the module wired the
+               second. -->
+          <div class="cx-filters">
+            <span class="cx-chip" id="anUpdated"></span>
+          </div>
 
-              <div class="analytics-section">
-                <div class="analytics-section-title">Daily Views</div>
-                <div class="analytics-chart-bars" id="analyticsDailyChart">
-                  <div class="analytics-empty">Loading...</div>
-                </div>
-              </div>
+          <!-- Four tiles, each with its prior period. Filled by analytics.js. -->
+          <div class="cx-grid" style="margin-bottom:14px">
+            <div class="cx-col-12">
+              <div class="cx-grid" id="anTiles" style="gap:12px"></div>
+            </div>
+          </div>
 
-              <div class="analytics-section">
-                <div class="analytics-section-title">Top Pages</div>
-                <div id="analyticsTopPages">
-                  <div class="analytics-empty">Loading...</div>
+          <div class="cx-grid">
+            <!-- The funnel gets the widest column: it is the only panel here
+                 that answers the question the page exists to answer. -->
+            <div class="cx-col-8">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Views to completed assessments</h3>
+                  <span class="cx-panel-sub">the scorecard — everything above it is traffic</span>
                 </div>
+                <div class="cx-panel-body" id="anFunnel"></div>
               </div>
+            </div>
 
-              <div class="analytics-section">
-                <div class="analytics-section-title">Top Referrers</div>
-                <div id="analyticsTopReferrers">
-                  <div class="analytics-empty">Loading...</div>
+            <div class="cx-col-4">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Traffic by source</h3>
                 </div>
+                <div class="cx-panel-body" id="anSources"></div>
               </div>
-            </div><!-- /.analytics-body -->
-          </div><!-- /.analytics-shell -->
+            </div>
+
+            <div class="cx-col-12">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Daily views</h3>
+                  <span class="cx-panel-sub">hover for any day</span>
+                </div>
+                <div class="cx-panel-body" id="anDaily"></div>
+              </div>
+            </div>
+
+            <div class="cx-col-6">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Top pages</h3>
+                </div>
+                <div class="cx-panel-body cx-tight" id="anPages"></div>
+              </div>
+            </div>
+
+            <div class="cx-col-6">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Top referrers</h3>
+                </div>
+                <div class="cx-panel-body cx-tight" id="anReferrers"></div>
+              </div>
+            </div>
+          </div>
         </section><!-- /#tab-analytics -->
             </div><!-- /.module-body -->
     </div><!-- /#module-analytics -->
@@ -1211,7 +1241,11 @@
             <h1 class="panel-title">Operator Console</h1>
           </div>
           <div class="header-actions">
-            <button type="button" class="btn-secondary btn-sm" id="fiqOpenExternal" title="Open in a new tab on digitafusion.com">Open in new tab</button>
+            <!-- Was a button wired by the old webapp/frictioniq.js, which no
+                 longer loads — it would have been a control that does nothing.
+                 A plain anchor needs no JS and cannot silently stop working. -->
+            <a class="btn-secondary btn-sm" href="https://www.digitafusion.com/fiq"
+               target="_blank" rel="noopener" title="Open the storefront console on digitafusion.com">Open in new tab</a>
           </div>
         </header>
       </div>
@@ -1224,27 +1258,80 @@
 
       <div class="module-body">
         <section class="tab-panel active" id="tab-frictioniq" aria-label="FrictionIQ Operator Console">
-          <div class="fiq-embed-loading" id="fiqEmbedLoading">Loading FrictionIQ console…</div>
-          <div id="fiqNative" style="display:none">
-            <div class="fiq-summary" id="fiqSummary"></div>
-            <p class="fiq-page-note" id="fiqPageNote" hidden></p>
-            <div class="fiq-bands" id="fiqBands"></div>
-            <div class="fiq-table-wrap">
-              <table class="fiq-table">
-                <thead>
-                  <tr>
-                    <th>Date</th><th>Score</th><th>Band</th><th>Organisation</th>
-                    <th>Sector</th><th>Role</th><th>Country</th><th>Email</th>
-                    <th>Replied</th><th>Stage</th>
-                  </tr>
-                </thead>
-                <tbody id="fiqSessionsBody">
-                  <tr><td colspan="10" class="fiq-empty">Loading…</td></tr>
-                </tbody>
-              </table>
+          <div class="cx-filters">
+            <input id="fiqSearch" class="cx-input cx-search" type="search"
+                   placeholder="Search organisation, sector, role, country, email…">
+            <select id="fiqBand" class="cx-select">
+              <option value="">All bands</option>
+              <option value="opaque">Opaque</option>
+              <option value="approaching">Approaching</option>
+              <option value="legible">Legible</option>
+              <option value="engineered">Engineered</option>
+            </select>
+            <select id="fiqStage" class="cx-select">
+              <option value="">All stages</option>
+              <option value="captured">Captured</option>
+              <option value="working">Working</option>
+              <option value="conversation">In conversation</option>
+              <option value="proposal">Proposal out</option>
+              <option value="engaged">Engaged</option>
+              <option value="declined">Declined</option>
+              <option value="dormant">Dormant</option>
+            </select>
+            <select id="fiqSector" class="cx-select"><option value="">All sectors</option></select>
+            <select id="fiqSince" class="cx-select">
+              <option value="">Any time</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+            <button id="fiqClear" class="cx-btn">Clear</button>
+            <button id="fiqRefresh" class="cx-btn">Refresh</button>
+            <button id="fiqExport" class="cx-btn cx-btn-primary">Export CSV</button>
+            <span class="cx-chip" id="fiqStatus"></span>
+          </div>
+
+          <div class="cx-grid" style="margin-bottom:14px">
+            <div class="cx-col-12">
+              <div class="cx-grid" id="fiqTiles" style="gap:12px"></div>
             </div>
-            <div class="fiq-external">
-              <a href="https://www.digitafusion.com/fiq" target="_blank" rel="noopener">Open the storefront console →</a>
+          </div>
+
+          <div class="cx-grid">
+            <div class="cx-col-12">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Band mix</h3>
+                  <span class="cx-panel-sub" id="fiqBandNote"></span>
+                </div>
+                <div class="cx-panel-body" id="fiqBandMix"></div>
+              </div>
+            </div>
+
+            <div class="cx-col-12">
+              <div class="cx-panel">
+                <div class="cx-panel-head">
+                  <h3 class="cx-panel-title">Register</h3>
+                  <span class="cx-panel-sub">click a row to open it · set the stage inline · record the outcome inside</span>
+                </div>
+                <div class="cx-scroll">
+                  <table class="cx-table">
+                    <thead>
+                      <tr>
+                        <th data-sort="created_at">Date</th>
+                        <th data-sort="total">Score</th>
+                        <th data-sort="band">Band</th>
+                        <th data-sort="organisation">Organisation</th>
+                        <th data-sort="sector">Sector</th>
+                        <th data-sort="country">Country</th>
+                        <th data-sort="email">Email</th>
+                        <th>Stage</th>
+                      </tr>
+                    </thead>
+                    <tbody id="fiqTableBody"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </section><!-- /#tab-frictioniq -->
@@ -2029,11 +2116,17 @@
   <script src="app.js"></script>
   <script src="blog.js?v=20260806"></script>
   <script src="shop.js"></script>
+  <!-- Shared chart primitives. Must load BEFORE analytics.js and the FrictionIQ
+       console — both call window.ConsoleCharts on first render. -->
+  <script src="js/console-charts.js"></script>
   <script src="analytics.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script>mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });</script>
     <script src="agents.js"></script>
-  <script src="frictioniq.js"></script>
+  <!-- The rebuilt operator console. It replaces webapp/frictioniq.js, which has
+       been moved to _to_delete/frictioniq.old.js; the register is now native
+       here rather than an embed, so nothing loads the old file. -->
+  <script src="js/frictioniq-console.js"></script>
 
   <!-- Create Task Modal -->
   <div class="modal-overlay" id="newTaskOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;">

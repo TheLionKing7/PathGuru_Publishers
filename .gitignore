@@ -47,3 +47,6 @@ tmp-*
 *.probe
 .probe*
 .buildprobe
+
+# Patch script backups
+*.bak
