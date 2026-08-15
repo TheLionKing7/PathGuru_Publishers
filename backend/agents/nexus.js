@@ -370,6 +370,45 @@ export class Nexus extends AgentBase {
   // TASK ROUTING & ORCHESTRATION
   // ══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Call the configured LLM with automatic provider fallback.
+   * Thin wrapper over callAiProvider so call sites don't repeat the
+   * resolveProvider() + fallback boilerplate.
+   */
+  async _callWithFallback(prompt) {
+    return callAiProvider(resolveProvider(), prompt, this.systemPrompt, { fallback: true });
+  }
+
+  /**
+   * Parse a model response that should be a JSON array, tolerating the common
+   * failure modes: a top-level array, an object wrapping the array
+   * (e.g. {"tasks":[...]}), or markdown/commentary around the array.
+   */
+  _parseJsonArray(text) {
+    const toArray = (val) => {
+      if (Array.isArray(val)) return val;
+      // Some models wrap the array in an object: {"units":[...]}
+      if (val && typeof val === 'object') {
+        const found = Object.values(val).find((v) => Array.isArray(v));
+        if (found) return found;
+      }
+      return null;
+    };
+    // Try direct parse first
+    try {
+      const val = JSON.parse(text);
+      const arr = toArray(val);
+      if (arr) return arr;
+    } catch { /* fall through to bracket extraction */ }
+    // Find the first [...] block in the response
+    const match = String(text ?? '').match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    try {
+      const val = JSON.parse(match[0]);
+      return toArray(val) || [];
+    } catch { return []; }
+  }
+
   _isResearchIntent(instruction) {
     const lower = instruction.toLowerCase();
     const researchSignals = [

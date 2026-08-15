@@ -11,6 +11,17 @@ services:
       - key: NODE_ENV
         value: production
 
+      # ── Operator auth (console login; gate for every /api/* route) ──
+      # Without PATHGURU_OPERATOR_PASSWORD the server fails closed and all
+      # protected routes (agent orchestration, tasks, leads, posts, …) return 503.
+      # Set in the Render dashboard; sync:false means deploys never overwrite it.
+      - key: PATHGURU_OPERATOR_PASSWORD
+        sync: false
+      - key: PATHGURU_OPERATOR_TOKEN
+        sync: false
+      - key: PATHGURU_OPERATOR_SECRET
+        sync: false
+
       # ── AI Provider ──────────────────────────────
       - key: AI_PROVIDER
         value: deepseek          # gemini | claude | deepseek | cerebras | perplexity
