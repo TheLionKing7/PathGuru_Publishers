@@ -1,201 +1,306 @@
-/* ─────────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════════
    PathGuru — operator console styling
 
-   Two screens, one system. The rules below are the ones that were missing and
-   caused the old Analytics page to render as a row of labels with nothing
-   under them:
+   ── WHAT THIS FILE GOT WRONG THE FIRST TIME ────────────────────────────────
 
-     · Every panel body declares its own min-height, so an empty state occupies
-       space and announces itself rather than collapsing to a hairline.
-     · The chart host establishes a baseline. The previous bar chart set only
-       `height` on its bars, inside a container with no layout, so they had
-       nothing to sit on.
-     · Panels are a grid, not a vertical stack of full-width strips. The old
-       page put three small numbers across the top and then wasted the entire
-       width on two-row lists.
-──────────────────────────────────────────────────────────────────────────── */
+   It declared its own design system. A private --cx-bg, --cx-surface, --cx-ink,
+   a 12px radius, Georgia for numerals, and a categorical red/gold/blue/teal
+   band set — all invented, all sitting inside an application that already has
+   surfaces, borders, inks, a radius scale, two typefaces and, in
+   operator-console.css, a VALIDATED ORDINAL RAMP for the four FrictionIQ
+   bands. The result read as a foreign panel bolted onto the app, because that
+   is exactly what it was.
+
+   It also broke visibly. style.css:302 sets `select, input, textarea { width:
+   100% }` on the bare element selectors. This file set min-width on .cx-select
+   and never set width, so the host rule survived and every control in the
+   filter bar stretched to full width and wrapped onto its own line. The bug was
+   not subtle; it was invisible to me because the render harness loaded
+   console.css ALONE. Testing a stylesheet outside the cascade it ships into
+   tests nothing.
+
+   ── THE RULE THIS FILE NOW FOLLOWS ─────────────────────────────────────────
+
+   Consume the system, do not restate it. Every colour, radius, font and spacing
+   value below is a var() onto a token style.css or operator-console.css already
+   defines. The only new tokens are the five categorical chart hues, which did
+   not exist because the app had no charts — and those are derived from the
+   app's own accents and validated, not invented.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --cx-bg:        #0B1420;
-  --cx-surface:   #131E2E;
-  --cx-surface-2: #182640;
-  --cx-border:    rgba(138,155,176,0.18);
-  --cx-ink:       #E6EDF6;
-  --cx-muted:     #8A9BB0;
-  --cx-dim:       #61748C;
-  --cx-accent:    #C9A84C;
-  --cx-s1:#3D8FD9; --cx-s2:#B08A2E; --cx-s3:#1F9077; --cx-s4:#9463BE; --cx-s5:#C4703F;
-  --cx-good:#1F9077; --cx-warn:#B08A2E; --cx-bad:#C4573F;
+  /* ── The chart series ──────────────────────────────────────────────────
+     The one genuinely new thing here. Derived from the app's own accents
+     (--blue #4d9fff, --gold #c9a84c, --green #3ecf8e) stepped down into the
+     0.48–0.67 lightness band so they read as one set rather than five
+     brightness levels, then validated against the --surface panel:
+
+       validate_palette.js "#1F9E70,#2E86D9,#A2842C,#8A6BD6,#C4573F" \
+          --mode dark --surface "#111827"
+       → lightness band PASS · chroma floor PASS · CVD separation PASS
+         (worst adjacent ΔE 18.3 deutan) · normal-vision floor PASS (19.4)
+         · contrast vs surface PASS — ALL CHECKS PASS
+
+     The order is load-bearing: it is the order that passed. Green sits first
+     because moving it changes which pairs are adjacent, and the two orderings
+     with gold beside green failed the normal-vision floor at ΔE 14.2. Do not
+     reshuffle these without re-running the validator. */
+  --cx-s1: #1F9E70;
+  --cx-s2: #2E86D9;
+  --cx-s3: #A2842C;
+  --cx-s4: #8A6BD6;
+  --cx-s5: #C4573F;
+
+  /* Two states that are not series. Kept separate so a status colour can
+     never be spent as "series 6". */
+  --cx-up:   var(--green, #3ecf8e);
+  --cx-down: var(--red,   #ef4444);
+  --cx-note: #fab219;   /* the same amber operator-console.css uses for caps
+                           and page notes — honesty affordances share an ink */
 }
 
-/* ── Layout ──────────────────────────────────────────────────────────── */
-.cx-grid       { display:grid; gap:14px; grid-template-columns:repeat(12,1fr); align-items:start; }
-.cx-col-3      { grid-column:span 3; }
-.cx-col-4      { grid-column:span 4; }
-.cx-col-6      { grid-column:span 6; }
-.cx-col-8      { grid-column:span 8; }
-.cx-col-12     { grid-column:span 12; }
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.cx-grid   { display:grid; gap:var(--spacing-md,16px); grid-template-columns:repeat(12,1fr); align-items:start; }
+.cx-col-3  { grid-column:span 3; }
+.cx-col-4  { grid-column:span 4; }
+.cx-col-6  { grid-column:span 6; }
+.cx-col-8  { grid-column:span 8; }
+.cx-col-12 { grid-column:span 12; }
 @media (max-width:1100px){ .cx-col-3,.cx-col-4{grid-column:span 6;} .cx-col-6,.cx-col-8{grid-column:span 12;} }
-@media (max-width:640px){ .cx-col-3,.cx-col-4,.cx-col-6,.cx-col-8{grid-column:span 12;} }
+@media (max-width:640px) { .cx-col-3,.cx-col-4,.cx-col-6,.cx-col-8{grid-column:span 12;} }
 
 .cx-panel {
-  background:var(--cx-surface); border:1px solid var(--cx-border);
-  border-radius:12px; overflow:hidden;
+  background:var(--surface,#111827);
+  border:1px solid var(--border,#263047);
+  border-radius:var(--radius,10px);
+  overflow:hidden;
 }
 .cx-panel-head {
   display:flex; align-items:baseline; justify-content:space-between; gap:12px;
-  padding:13px 16px 11px; border-bottom:1px solid var(--cx-border);
+  padding:13px 16px 11px; border-bottom:1px solid var(--border,#263047);
 }
 .cx-panel-title {
+  font-family:var(--font-ui,'DM Sans',system-ui,sans-serif);
   font-size:11px; letter-spacing:.14em; text-transform:uppercase;
-  color:var(--cx-muted); font-weight:600; margin:0;
+  color:var(--text-secondary,#8fa3c0); font-weight:600; margin:0;
 }
-.cx-panel-sub  { font-size:11.5px; color:var(--cx-dim); }
-/* The floor is 56px, not 96px. 96 was set to stop an empty panel collapsing to
-   a hairline, but .cx-empty already carries its own 72px min-height, so the
-   panel floor was doing that job twice — and on a panel with short real content
-   (the band mix bar and its legend) the surplus rendered as a band of dead
-   space under the data, which reads as something failing to load. */
+.cx-panel-sub  { font-size:11.5px; color:var(--text-muted,#4d6280); }
+/* 56px, not 96: .cx-empty carries its own 72px floor, so a larger panel floor
+   only added dead space under short real content, which reads as a load
+   failure. */
 .cx-panel-body { padding:14px 16px 16px; min-height:56px; }
 .cx-panel-body.cx-tight { padding:10px 12px 12px; }
 
-/* ── Stat tiles ──────────────────────────────────────────────────────── */
-.cx-stat { background:var(--cx-surface); border:1px solid var(--cx-border);
-           border-radius:12px; padding:15px 17px 14px; min-height:104px; }
-.cx-stat-value { font-family:Georgia,'Times New Roman',serif; font-size:31px;
-                 line-height:1.05; color:var(--cx-s1); letter-spacing:-.01em; }
-.cx-stat-unit  { font-size:13px; color:var(--cx-muted); margin-left:5px; font-family:inherit; }
+/* ── Stat tiles ──────────────────────────────────────────────────────────── */
+.cx-stat {
+  background:var(--surface,#111827);
+  border:1px solid var(--border,#263047);
+  border-radius:var(--radius,10px);
+  padding:15px 17px 14px; min-height:104px;
+}
+/* Playfair, because that is the app's display face. The first version reached
+   for Georgia, which no other number in this application uses. */
+.cx-stat-value {
+  font-family:var(--font-display,'Playfair Display',Georgia,serif);
+  font-size:31px; line-height:1.05; color:var(--blue,#4d9fff); letter-spacing:-.01em;
+}
+.cx-stat-unit  { font-size:13px; color:var(--text-secondary,#8fa3c0); margin-left:5px; font-family:inherit; }
 .cx-stat-label { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
-                 color:var(--cx-muted); margin-top:5px; }
-.cx-stat-hint  { font-size:11px; color:var(--cx-dim); margin-top:7px; line-height:1.4; }
+                 color:var(--text-secondary,#8fa3c0); margin-top:5px; }
+.cx-stat-hint  { font-size:11px; color:var(--text-muted,#4d6280); margin-top:7px; line-height:1.4; }
 .cx-delta      { display:inline-flex; align-items:center; gap:5px; margin-top:9px;
                  font-size:11.5px; font-weight:600; }
-.cx-delta-prev { font-weight:400; color:var(--cx-dim); }
-.cx-up   { color:var(--cx-good); }
-.cx-down { color:var(--cx-bad); }
-.cx-flat { color:var(--cx-muted); font-weight:400; }
+.cx-delta-prev { font-weight:400; color:var(--text-muted,#4d6280); }
+.cx-up   { color:var(--cx-up); }
+.cx-down { color:var(--cx-down); }
+.cx-flat { color:var(--text-secondary,#8fa3c0); font-weight:400; }
 
-/* ── Empty states: visible, sized, and honest ────────────────────────── */
+/* ── Empty states: visible, sized, and honest ────────────────────────────── */
 .cx-empty {
   display:flex; align-items:center; gap:9px; min-height:72px;
-  color:var(--cx-dim); font-size:12.5px; line-height:1.5;
+  color:var(--text-muted,#4d6280); font-size:12.5px; line-height:1.5;
 }
-.cx-empty-mark { width:14px; height:2px; background:var(--cx-dim); opacity:.6; flex:0 0 auto; }
+.cx-empty-mark { width:14px; height:2px; background:currentColor; opacity:.6; flex:0 0 auto; }
 
-/* ── Bar list ────────────────────────────────────────────────────────── */
+/* ── Bar list ────────────────────────────────────────────────────────────── */
 .cx-row { display:grid; grid-template-columns:minmax(0,1fr) 108px 56px 44px;
           align-items:center; gap:11px; padding:7px 0;
-          border-bottom:1px solid rgba(138,155,176,0.08); }
+          border-bottom:1px solid var(--border,#263047); }
 .cx-row:last-child { border-bottom:0; }
-.cx-row-label { color:var(--cx-ink); font-size:13px; overflow:hidden;
+.cx-row-label { color:var(--text-primary,#f0f4ff); font-size:13px; overflow:hidden;
                 text-overflow:ellipsis; white-space:nowrap; }
-.cx-row-track { height:6px; background:rgba(138,155,176,0.14); border-radius:3px; overflow:hidden; }
-.cx-row-fill  { display:block; height:100%; border-radius:3px; }
-.cx-row-value { text-align:right; font-size:12.5px; color:var(--cx-ink); font-variant-numeric:tabular-nums; }
-.cx-row-share { text-align:right; font-size:11.5px; color:var(--cx-dim); font-variant-numeric:tabular-nums; }
-@media (max-width:640px){ .cx-row{grid-template-columns:minmax(0,1fr) 60px 40px; } .cx-row-share{display:none;} }
+.cx-row-track { height:6px; background:var(--surface-2,#1a2236); border-radius:3px; overflow:hidden; }
+.cx-row-fill  { display:block; height:100%; border-radius:0 3px 3px 0; }
+.cx-row-value { text-align:right; font-size:12.5px; color:var(--text-primary,#f0f4ff); font-variant-numeric:tabular-nums; }
+.cx-row-share { text-align:right; font-size:11.5px; color:var(--text-muted,#4d6280); font-variant-numeric:tabular-nums; }
+@media (max-width:640px){ .cx-row{grid-template-columns:minmax(0,1fr) 60px 40px;} .cx-row-share{display:none;} }
 
-/* ── Funnel ──────────────────────────────────────────────────────────── */
-.cx-funnel-step { padding:9px 0; border-bottom:1px solid rgba(138,155,176,0.08); }
+/* ── Funnel ──────────────────────────────────────────────────────────────── */
+.cx-funnel-step  { padding:9px 0; border-bottom:1px solid var(--border,#263047); }
 .cx-funnel-step:last-child { border-bottom:0; }
-.cx-funnel-head { display:flex; justify-content:space-between; align-items:baseline;
-                  font-size:13px; color:var(--cx-ink); margin-bottom:6px; }
+.cx-funnel-head  { display:flex; justify-content:space-between; align-items:baseline;
+                   font-size:13px; color:var(--text-primary,#f0f4ff); margin-bottom:6px; }
 .cx-funnel-head b { font-variant-numeric:tabular-nums; }
-.cx-funnel-na   { font-size:11px; color:var(--cx-warn); }
-.cx-funnel-track{ height:9px; background:rgba(138,155,176,0.12); border-radius:4px; overflow:hidden; }
-.cx-funnel-fill { height:100%; border-radius:4px; }
-.cx-fill-na     { background:repeating-linear-gradient(135deg,
-                    rgba(138,155,176,.22) 0 6px, transparent 6px 12px); }
-.cx-funnel-note { font-size:11px; color:var(--cx-dim); margin-top:5px; }
-.cx-unknown .cx-funnel-head span:first-child { color:var(--cx-muted); }
+.cx-funnel-na    { font-size:11px; color:var(--cx-note); }
+.cx-funnel-track { height:9px; background:var(--surface-2,#1a2236); border-radius:4px; overflow:hidden; }
+.cx-funnel-fill  { height:100%; border-radius:0 4px 4px 0; }
+.cx-fill-na      { background:repeating-linear-gradient(135deg,
+                     var(--border-light,#2e3d57) 0 6px, transparent 6px 12px); }
+.cx-funnel-note  { font-size:11px; color:var(--text-muted,#4d6280); margin-top:5px; }
+.cx-unknown .cx-funnel-head span:first-child { color:var(--text-secondary,#8fa3c0); }
 
-/* ── Distribution ────────────────────────────────────────────────────── */
+/* ── Distribution ────────────────────────────────────────────────────────── */
 .cx-stack { display:flex; height:11px; border-radius:5px; overflow:hidden; gap:2px; background:transparent; }
 .cx-seg   { display:block; height:100%; }
 .cx-legend{ display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:11px; }
-.cx-key   { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--cx-muted); }
+.cx-key   { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary,#8fa3c0); }
 .cx-key i { width:9px; height:9px; border-radius:2px; display:inline-block; }
-.cx-key b { color:var(--cx-ink); font-variant-numeric:tabular-nums; }
+.cx-key b { color:var(--text-primary,#f0f4ff); font-variant-numeric:tabular-nums; }
 
-/* ── Tooltip ─────────────────────────────────────────────────────────── */
+/* ── Tooltip ─────────────────────────────────────────────────────────────── */
 .cx-tip {
   position:fixed; z-index:9999; display:none; pointer-events:none;
-  background:#0A1220; border:1px solid var(--cx-border); border-radius:8px;
-  padding:8px 11px; font-size:12px; color:var(--cx-ink);
+  background:var(--bg,#0a0e17); border:1px solid var(--border-light,#2e3d57);
+  border-radius:var(--radius-sm,6px);
+  padding:8px 11px; font-size:12px; color:var(--text-primary,#f0f4ff);
   box-shadow:0 8px 26px rgba(0,0,0,.5); max-width:250px;
 }
-.cx-tip span { display:block; color:var(--cx-dim); font-size:11px; margin-top:3px; }
+.cx-tip span { display:block; color:var(--text-muted,#4d6280); font-size:11px; margin-top:3px; }
 
-/* ── Filter bar ──────────────────────────────────────────────────────── */
+/* ── Filter bar ──────────────────────────────────────────────────────────────
+   THE WIDTH DECLARATION IS THE POINT OF THIS BLOCK. style.css:302 sets
+   `input, select, textarea { width:100% }` on bare element selectors. A class
+   selector outranks that, but only for properties it actually declares — the
+   first version set min-width and stayed silent about width, so every control
+   inherited 100% and the filter bar rendered as six full-width stacked rows.
+   `width:auto` with an explicit flex basis is what makes this a toolbar. */
 .cx-filters { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-bottom:14px; }
 .cx-input, .cx-select {
-  background:var(--cx-surface-2); border:1px solid var(--cx-border); color:var(--cx-ink);
-  border-radius:8px; padding:8px 11px; font-size:12.5px; font-family:inherit; min-width:120px;
+  width:auto;
+  flex:0 0 auto;
+  background:var(--surface-2,#1a2236);
+  border:1px solid var(--border,#263047);
+  color:var(--text-primary,#f0f4ff);
+  border-radius:var(--radius-sm,6px);
+  padding:8px 11px; font-size:12.5px;
+  font-family:var(--font-ui,'DM Sans',system-ui,sans-serif);
+  min-width:118px; max-width:100%;
 }
-.cx-input:focus, .cx-select:focus { outline:2px solid var(--cx-s1); outline-offset:1px; }
-.cx-input::placeholder { color:var(--cx-dim); }
-.cx-search { flex:1 1 220px; min-width:180px; }
+/* The native chevron style.css paints on <select> is kept — it is the app's,
+   and dropping it would make these five selects the only ones without it. */
+.cx-select { padding-right:30px; }
+.cx-input:focus, .cx-select:focus {
+  outline:none;
+  border-color:var(--gold,#c9a84c);
+  box-shadow:0 0 0 3px var(--gold-glow,rgba(201,168,76,.18));
+}
+.cx-input::placeholder { color:var(--text-muted,#4d6280); }
+/* The search box is the one control that should take the slack. */
+.cx-search { flex:1 1 240px; min-width:180px; }
 .cx-btn {
-  background:var(--cx-surface-2); border:1px solid var(--cx-border); color:var(--cx-ink);
-  border-radius:8px; padding:8px 13px; font-size:12.5px; cursor:pointer; font-family:inherit;
+  width:auto; flex:0 0 auto;
+  background:var(--surface-2,#1a2236);
+  border:1px solid var(--border,#263047);
+  color:var(--text-primary,#f0f4ff);
+  border-radius:var(--radius-sm,6px);
+  padding:8px 13px; font-size:12.5px; cursor:pointer; white-space:nowrap;
+  font-family:var(--font-ui,'DM Sans',system-ui,sans-serif);
+  transition:border-color .2s ease;
 }
-.cx-btn:hover { border-color:var(--cx-s1); }
-.cx-btn-primary { background:var(--cx-accent); border-color:var(--cx-accent); color:#0B1420; font-weight:600; }
-.cx-chip { font-size:11px; color:var(--cx-dim); padding:4px 0; }
+.cx-btn:hover { border-color:var(--gold,#c9a84c); }
+.cx-btn-primary { background:var(--gold,#c9a84c); border-color:var(--gold,#c9a84c);
+                  color:var(--bg,#0a0e17); font-weight:600; }
+.cx-btn-primary:hover { background:var(--gold-dim,#a88932); border-color:var(--gold-dim,#a88932); }
+.cx-chip { font-size:11px; color:var(--text-muted,#4d6280); padding:4px 0; }
 
-/* ── Register table ──────────────────────────────────────────────────── */
+/* ── Register table ──────────────────────────────────────────────────────── */
 .cx-table { width:100%; border-collapse:collapse; font-size:12.5px; }
 .cx-table th {
   text-align:left; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--cx-muted); font-weight:600; padding:10px 11px; border-bottom:1px solid var(--cx-border);
-  position:sticky; top:0; background:var(--cx-surface); z-index:1; white-space:nowrap;
+  color:var(--text-secondary,#8fa3c0); font-weight:600; padding:10px 11px;
+  border-bottom:1px solid var(--border,#263047);
+  position:sticky; top:0; background:var(--surface,#111827); z-index:1; white-space:nowrap;
 }
 .cx-table th[data-sort] { cursor:pointer; user-select:none; }
-.cx-table th[data-sort]:hover { color:var(--cx-ink); }
-.cx-table td { padding:10px 11px; border-bottom:1px solid rgba(138,155,176,0.08); color:var(--cx-ink); vertical-align:middle; }
-.cx-table tbody tr { cursor:pointer; }
-.cx-table tbody tr:hover { background:rgba(61,143,217,0.06); }
-.cx-table tbody tr.cx-open { background:rgba(61,143,217,0.09); }
+.cx-table th[data-sort]:hover { color:var(--text-primary,#f0f4ff); }
+.cx-table th[aria-sort] { color:var(--gold,#c9a84c); }
+.cx-table td { padding:10px 11px; border-bottom:1px solid var(--border,#263047);
+               color:var(--text-primary,#f0f4ff); vertical-align:middle; }
+.cx-table tbody tr[data-token] { cursor:pointer; }
+.cx-table tbody tr[data-token]:hover { background:var(--surface-2,#1a2236); }
+.cx-table tbody tr.cx-open { background:var(--surface-2,#1a2236); }
 .cx-num { font-variant-numeric:tabular-nums; }
 .cx-scroll { max-height:560px; overflow:auto; }
 
-.cx-band { display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px;
-           font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:600;
-           border:1px solid currentColor; }
-.cx-band i { width:6px; height:6px; border-radius:50%; background:currentColor; }
-/* These four must stay identical to BAND_COLOUR in frictioniq.js — the chip in
-   a table row and the segment in the mix bar are the same entity, and a band
-   that is orange in one place and teal in the other teaches the operator that
-   the colours mean nothing. The pair was re-stepped from #C4703F/#B08A2E,
-   which separated by only ΔE 7.8 to NORMAL vision — a hard fail, not a
-   colour-blindness edge case. See the note beside BAND_COLOUR. */
-.cx-band-opaque      { color:#C4573F; }
-.cx-band-approaching { color:#A89434; }
-.cx-band-legible     { color:#3D8FD9; }
-.cx-band-engineered  { color:#1F9077; }
+/* Bands wear the ORDINAL RAMP that operator-console.css already validated —
+   --fiq-band-1..4, single hue, monotone lightness, Opaque to Engineered. The
+   first version of this file replaced it with four categorical hues, which
+   both broke the ranked reading and contradicted a decision the estate had
+   already made and documented. The badge inks come from the same file. */
+.cx-band { display:inline-flex; align-items:center; gap:5px; padding:3px 9px;
+           border-radius:999px; font-size:10.5px; letter-spacing:.06em;
+           text-transform:uppercase; font-weight:600; color:#cfe9e4; }
+.cx-band i { width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.9; }
+.cx-band-opaque      { background:rgba(29,111,102,.30); }
+.cx-band-approaching { background:rgba(37,144,127,.28); }
+.cx-band-legible     { background:rgba(43,179,163,.24); }
+.cx-band-engineered  { background:rgba(95,211,196,.22); }
+.cx-band-unknown     { background:rgba(107,114,128,.25); color:#b6bfce; }
 
-.cx-stage { background:var(--cx-surface-2); border:1px solid var(--cx-border); color:var(--cx-ink);
-            border-radius:6px; padding:4px 7px; font-size:11.5px; font-family:inherit; }
+/* Reuses operator-console.css's affordances rather than restating them. */
+.cx-cap   { display:inline-block; margin-left:5px; padding:1px 6px; border-radius:5px;
+            border:1px solid rgba(250,178,25,.45); font-size:10px; letter-spacing:.05em;
+            color:var(--cx-note); }
+.cx-depth { display:inline-block; margin-left:5px; font-size:10px; letter-spacing:.05em;
+            color:var(--text-muted,#4d6280); }
 
-/* ── Row detail ──────────────────────────────────────────────────────── */
-.cx-detail td { background:#0F1826; padding:0; }
-.cx-detail-inner { padding:16px 18px; display:grid; gap:16px; grid-template-columns:1.15fr .85fr; }
+.cx-stage { width:auto; padding:4px 24px 4px 7px; border-radius:7px;
+            border:1px solid var(--border-light,#2e3d57);
+            background:var(--surface-2,#1a2236); color:var(--text-primary,#f0f4ff);
+            font-size:11.5px; font-family:var(--font-ui,'DM Sans',system-ui,sans-serif);
+            cursor:pointer; }
+.cx-stage:focus { outline:none; border-color:var(--fiq-band-3,#2bb3a3); }
+
+.cx-flag { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:5px;
+           font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:600; }
+.cx-flag-replied { background:rgba(43,179,163,.20); color:#9fded4; }
+.cx-flag-hot     { background:rgba(250,178,25,.16); color:var(--cx-note); }
+
+/* ── Row detail ──────────────────────────────────────────────────────────── */
+.cx-detail td { background:var(--bg,#0a0e17); padding:0; }
+.cx-detail-inner { padding:16px 18px; display:grid; gap:18px; grid-template-columns:1.15fr .85fr; }
 @media (max-width:900px){ .cx-detail-inner{grid-template-columns:1fr;} }
 .cx-detail h4 { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
-                color:var(--cx-muted); margin:0 0 9px; font-weight:600; }
+                color:var(--text-secondary,#8fa3c0); margin:0 0 9px; font-weight:600; }
+.cx-detail h4 + h4, .cx-detail-block + .cx-detail-block { margin-top:16px; }
 .cx-domain { display:grid; grid-template-columns:minmax(0,1fr) 92px 34px; align-items:center;
              gap:10px; padding:4px 0; font-size:12px; }
-.cx-domain-track { height:5px; background:rgba(138,155,176,0.14); border-radius:3px; overflow:hidden; }
-.cx-domain-fill  { display:block; height:100%; border-radius:3px; }
-.cx-blocked { color:var(--cx-bad); font-weight:600; }
+.cx-domain-track { height:5px; background:var(--surface-2,#1a2236); border-radius:3px; overflow:hidden; }
+.cx-domain-fill  { display:block; height:100%; border-radius:0 3px 3px 0; }
+.cx-blocked { color:var(--cx-down); font-weight:600; }
 .cx-outcome { display:grid; gap:9px; }
-.cx-outcome-note { font-size:11.5px; color:var(--cx-dim); line-height:1.5; }
+.cx-outcome .cx-input, .cx-outcome .cx-select, .cx-outcome .cx-btn { width:100%; flex:none; }
+.cx-outcome-note { font-size:11.5px; color:var(--text-muted,#4d6280); line-height:1.5; }
 .cx-kv { display:flex; justify-content:space-between; gap:12px; font-size:12px;
-         padding:5px 0; border-bottom:1px solid rgba(138,155,176,0.08); }
+         padding:5px 0; border-bottom:1px solid var(--border,#263047); }
 .cx-kv:last-child { border-bottom:0; }
-.cx-kv span { color:var(--cx-muted); }
-.cx-kv b { color:var(--cx-ink); font-weight:500; }
+.cx-kv span { color:var(--text-secondary,#8fa3c0); }
+.cx-kv b { color:var(--text-primary,#f0f4ff); font-weight:500; }
 
-/* ── Honesty note: sample size, always visible where a benchmark shows ─ */
-.cx-sample { font-size:11px; color:var(--cx-warn); display:flex; align-items:center; gap:6px; margin-top:10px; }
-.cx-sample::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; }
+/* ── The outbox — scheduled and sent touches for one prospect ────────────── */
+.cx-touch { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:9px;
+            align-items:baseline; padding:6px 0; font-size:12px;
+            border-bottom:1px solid var(--border,#263047); }
+.cx-touch:last-child { border-bottom:0; }
+.cx-touch-dot { width:7px; height:7px; border-radius:50%; align-self:center; }
+.cx-touch-sent      { background:var(--fiq-band-3,#2bb3a3); }
+.cx-touch-scheduled { background:var(--text-muted,#4d6280); }
+.cx-touch-cancelled { background:transparent; border:1px solid var(--text-muted,#4d6280); }
+.cx-touch-failed    { background:var(--cx-down); }
+.cx-touch-when { color:var(--text-muted,#4d6280); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.cx-touch-what { color:var(--text-primary,#f0f4ff); overflow:hidden; text-overflow:ellipsis; }
+.cx-touch-why  { font-size:11px; color:var(--text-muted,#4d6280); grid-column:2 / -1; margin-top:-2px; }
+
+/* ── Honesty note: sample size, always visible where a benchmark shows ───── */
+.cx-sample { font-size:11px; color:var(--cx-note); display:flex; align-items:center; gap:6px; margin-top:10px; }
+.cx-sample::before { content:''; width:5px; height:5px; border-radius:50%; background:currentColor; flex:0 0 auto; }

@@ -15,15 +15,35 @@
 
    Neither can be measured until somebody records, against a row, whether it
    became a paid engagement and what it was worth. That is what the outcome
-   panel in the row detail is for, and it is the reason this console exists at
-   all. Ten paired outcomes and both priors become measurements.
+   panel in the row detail is for. Ten paired outcomes and both priors become
+   measurements.
 
-   ── WHAT WAS MISSING BEFORE ────────────────────────────────────────────────
+   ── WHAT THE FIRST REWRITE STILL LEFT OUT ──────────────────────────────────
 
-   The previous console rendered a table and four counters. It had no search,
-   no filters, no way to open a row, no way to move a row through the pipeline
-   the schema already defines, no export, and no outcome capture. It could
-   show you the register; it could not be used to operate it.
+   It rendered a filtered, sortable table with outcome capture, and stopped
+   there. Five things the system already produces never reached the screen:
+
+     THE REPLY SWITCH. `replied` is the one control that stops a scheduled
+     sequence talking over a live conversation. The server has allowlisted it
+     since the route was written. Leaving it out meant the only way to prevent
+     an embarrassment was the SQL console.
+
+     THE OUTBOX. frictioniq_touch holds what is scheduled, what was sent, what
+     was cancelled and why, per prospect — and GET /api/frictioniq/session
+     already returns it. An operator deciding whether to call someone needs to
+     know what was emailed to them yesterday.
+
+     THE CAP. `capped` means the total said ready and a blocked domain said
+     otherwise. The field guide calls it the most productive opening line an
+     operator has. It was in the payload and thrown away.
+
+     THE INSTRUMENT DEPTH. A screening score out of 24 and a deep score out of
+     its own ceiling are different measurements; showing them in one column
+     without saying which is which invites a comparison that is not valid.
+
+     LEAD SCORE AND PRIORITY. Both are computed server-side and both were
+     dropped, so the console could not answer "who first?" — which is the
+     question an operator opens it to ask.
 
    ── ONE BEHAVIOUR THAT IS DELIBERATE, CARRIED FORWARD ─────────────────────
 
@@ -42,38 +62,34 @@
   const STAGES = ['captured', 'working', 'conversation', 'proposal', 'engaged', 'declined', 'dormant'];
   const BANDS = ['opaque', 'approaching', 'legible', 'engineered'];
 
-  /* Colour follows the entity, never its position in a list. These are the same
-     four values the band chips use in console.css, so a band reads as the same
-     colour in the mix bar, in its legend and in every row of the table. Letting
-     the distribution fall back to the categorical series order gave "legible"
-     a blue chip and a teal legend swatch on the same screen — which quietly
-     teaches the operator that the colours mean nothing. */
-  const BAND_COLOUR = {
-    opaque:      '#C4573F',
-    approaching: '#A89434',
-    legible:     '#3D8FD9',
-    engineered:  '#1F9077',
-  };
-  /* Validated as a categorical set against the #131E2E panel surface:
-     lightness band PASS, chroma floor PASS, normal-vision separation PASS
-     (worst adjacent pair ΔE 15.7), contrast PASS. One WARN stands and is
-     accepted deliberately: opaque↔approaching separate by only ΔE 7.6 under
-     deuteranopia, because red and gold collapse toward each other there and
-     the band scale is ordinal — the two warm steps cannot simply be moved
-     apart without breaking the reading order. A warning in the 6–8 band is
-     permitted only where a second, non-colour encoding carries the same
-     information, so every place these appear carries the band NAME in text:
-     the legend beneath the mix bar, and the chip in each table row. Nothing
-     on either screen is distinguished by colour alone. */
-
   const CX = () => window.ConsoleCharts;
   const api = () => window.PathGuruBackend;
   const $ = (id) => document.getElementById(id);
+
+  /* The ORDINAL band ramp, read from the tokens operator-console.css defines
+     and validated in that file: single hue, monotone lightness, Opaque through
+     Engineered. The bands are a ranked scale, not four unrelated categories,
+     and an earlier version of this console replaced the ramp with a
+     categorical red/gold/blue/teal set — which both broke the ranked reading
+     and overrode a decision the estate had already made and documented. */
+  const cssVar = (name, fallback) => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch { return fallback; }
+  };
+  const BAND_COLOUR = {
+    opaque:      cssVar('--fiq-band-1', '#1d6f66'),
+    approaching: cssVar('--fiq-band-2', '#25907f'),
+    legible:     cssVar('--fiq-band-3', '#2bb3a3'),
+    engineered:  cssVar('--fiq-band-4', '#5fd3c4'),
+  };
 
   let _rows = [];
   let _stats = null;   // whole-table counts from the server, or null if it timed out
   let _page = null;    // { returned, limit, truncated }
   let _open = null;
+  let _detail = {};    // token -> { loading | error | session, touches }
   let _sort = { key: 'created_at', dir: -1 };
   let _timer = null;
 
@@ -86,6 +102,12 @@
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? '—'
       : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const fmtDateTime = (iso) => {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '—'
+      : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   /* No denominator is invented. If the server did not tell us the scale, the
@@ -122,6 +144,8 @@
       let x = a[k], y = b[k];
       if (k === 'created_at') { x = Date.parse(x || '') || 0; y = Date.parse(y || '') || 0; }
       else if (k === 'total') { x = pctScore(a) ?? -1; y = pctScore(b) ?? -1; }
+      else if (k === 'lead_score') { x = Number(x) || -1; y = Number(y) || -1; }
+      else if (k === 'band') { x = BANDS.indexOf(String(x || '').toLowerCase()); y = BANDS.indexOf(String(y || '').toLowerCase()); }
       else { x = String(x ?? '').toLowerCase(); y = String(y ?? '').toLowerCase(); }
       return x < y ? -dir : x > y ? dir : 0;
     });
@@ -132,33 +156,30 @@
   function renderSummary(view) {
     const host = $('fiqTiles');
     if (host) {
-      // Three columns each, inside the twelve-column grid — see the note in
-      // analytics.js: an unwrapped tile is a one-column sliver.
+      // Three columns each, inside the twelve-column grid — an unwrapped tile
+      // is a one-column sliver.
       host.innerHTML = ['fiqT1', 'fiqT2', 'fiqT3', 'fiqT4']
         .map((id) => `<div class="cx-col-3"><div class="cx-stat" id="${id}"></div></div>`).join('');
       const wk = Date.now() - 7 * 86400000, prevWk = Date.now() - 14 * 86400000;
       const inRange = (r, from, to) => {
         const t = Date.parse(r.created_at || ''); return Number.isFinite(t) && t >= from && (!to || t < to);
       };
-      /* The server computes these three against the WHOLE table with count
-         queries, for the stated reason that `sessions.length` means "the most
-         recent page" and was once labelled "total". Preferring the page length
-         here would reintroduce exactly that bug on the screen, so the page
-         length is used only when the counts missed their deadline — and then
-         it is labelled as a page. */
+
+      /* The server computes these against the WHOLE table with count queries,
+         for the stated reason that `sessions.length` means "the most recent
+         page" and was once labelled "total". The page length is used only when
+         the counts missed their deadline, and then it is labelled as a page. */
       const capped = Boolean(_page?.truncated);
-      const pageNote = capped ? ` (this page of ${_rows.length}; whole-table count unavailable)` : '';
 
       CX().stat($('fiqT1'), {
         value: _stats?.total ?? _rows.length,
         label: _stats ? 'Whole register' : `Register${capped ? ' — page only' : ''}`,
-        hint: view.length !== _rows.length ? `${view.length} match the current filter` : (_stats ? null : pageNote.trim() || null),
+        hint: view.length !== _rows.length ? `${view.length} match the current filter` : null,
       });
 
       /* The delta is derived from rows, so it is only honest while the page
          reaches back a fortnight. When it does not, the count shows without a
-         comparison rather than against a truncated prior week that would read
-         as growth. */
+         comparison rather than against a truncated prior week. */
       const reachesBack = !capped || _rows.some((r) => {
         const t = Date.parse(r.created_at || ''); return Number.isFinite(t) && t < prevWk;
       });
@@ -173,12 +194,10 @@
       const emailDenom = _stats?.total ?? _rows.length;
       CX().stat($('fiqT3'), { value: withEmail, label: 'Reached capture',
         hint: emailDenom ? `${((withEmail / emailDenom) * 100).toFixed(0)}% gave an email` : null });
+
       /* This tile is the point of the console. It counts rows with a RECORDED
          outcome — not rows at stage "engaged" — because a stage is where the
-         operator thinks a prospect is and an outcome is what actually happened.
-         The band priors and the value-per-assessment stay guesses until this
-         number reaches ten, so the tile counts down to that rather than
-         reporting a pipeline figure nobody acts on. */
+         operator thinks a prospect is and an outcome is what happened. */
       const decided = _rows.filter((r) => r.outcome).length;
       const won = _rows.filter((r) => r.outcome === 'won').length;
       CX().stat($('fiqT4'), {
@@ -211,92 +230,203 @@
     const k = String(b || '').toLowerCase();
     return BANDS.includes(k)
       ? `<span class="cx-band cx-band-${k}"><i></i>${esc(k)}</span>`
-      : '<span class="cx-band" style="color:var(--cx-dim)"><i></i>—</span>';
+      : '<span class="cx-band cx-band-unknown"><i></i>unknown</span>';
+  };
+
+  /* The cap and the depth marker travel WITH the score, never in a column of
+     their own — the whole point of both is that they qualify the number they
+     sit beside. */
+  const scoreCell = (r) => {
+    const cap = r.capped
+      ? '<span class="cx-cap" title="The total read ready, but at least one domain was blocked. The band is held down deliberately.">capped</span>'
+      : '';
+    const deep = r.depth && r.depth !== 'short';
+    const depth = `<span class="cx-depth" title="${deep ? 'Deep instrument' : 'Screening instrument'}">${deep ? 'deep' : 'screen'}</span>`;
+    return `<b>${esc(fmtScore(r))}</b>${cap}${depth}`;
   };
 
   function renderTable(view) {
     const body = $('fiqTableBody');
     if (!body) return;
+    const COLS = 9;
     if (!view.length) {
-      body.innerHTML = `<tr><td colspan="8"><div class="cx-empty">
+      body.innerHTML = `<tr><td colspan="${COLS}"><div class="cx-empty">
         <span class="cx-empty-mark"></span>No rows match this filter.</div></td></tr>`;
       return;
     }
     body.innerHTML = view.map((r) => {
       const open = _open === r.token;
+      const hot = Number(r.lead_score) >= 70 || String(r.priority || '').toLowerCase() === 'high';
       return `<tr data-token="${esc(r.token)}" class="${open ? 'cx-open' : ''}">
         <td class="cx-num">${esc(fmtDate(r.created_at))}</td>
-        <td class="cx-num"><b>${esc(fmtScore(r))}</b></td>
+        <td class="cx-num">${scoreCell(r)}</td>
         <td>${bandChip(r.band)}</td>
         <td>${esc(r.organisation || '—')}</td>
         <td>${esc(r.sector || '—')}</td>
         <td>${esc(r.country || '—')}</td>
-        <td>${r.email ? esc(r.email) : '<span style="color:var(--cx-dim)">no email</span>'}</td>
+        <td>${r.email ? esc(r.email) : '<span style="color:var(--text-muted,#4d6280)">no email</span>'}
+            ${r.replied ? '<span class="cx-flag cx-flag-replied" title="This prospect has replied. Scheduled sends are held.">replied</span>' : ''}</td>
+        <td class="cx-num">${r.lead_score == null ? '—' : esc(String(r.lead_score))}
+            ${hot ? '<span class="cx-flag cx-flag-hot">priority</span>' : ''}</td>
         <td>${stageSelect(r)}</td>
       </tr>${open ? detailRow(r) : ''}`;
     }).join('');
+
+    // Sort indicator. A sortable header that never shows which way it sorted
+    // makes the operator click twice to find out.
+    document.querySelectorAll('#module-frictioniq .cx-table th[data-sort]').forEach((th) => {
+      if (th.dataset.sort === _sort.key) th.setAttribute('aria-sort', _sort.dir === 1 ? 'ascending' : 'descending');
+      else th.removeAttribute('aria-sort');
+    });
   }
 
   const stageSelect = (r) => `<select class="cx-stage" data-stage-for="${esc(r.token)}">
       ${STAGES.map((s) => `<option value="${s}"${String(r.stage || 'captured') === s ? ' selected' : ''}>${s}</option>`).join('')}
     </select>`;
 
-  /* ── Row detail — where the outcome is captured ────────────────────── */
+  /* ── Row detail ────────────────────────────────────────────────────────
+     Opening a row fetches GET /api/frictioniq/session?token=, which returns
+     the whole record plus its touch history. The list endpoint deliberately
+     projects a narrow set of columns; everything else about a prospect lives
+     behind this second call, and not making it was the reason the console
+     could show you the register but not tell you anything about a row in it. */
   function detailRow(r) {
-    const domains = Array.isArray(r.domains) ? r.domains
-      : Array.isArray(r.answers) ? r.answers.map((v, i) => ({ name: `Domain ${i + 1}`, score: v })) : [];
-    const maxD = domains.reduce((m, d) => Math.max(m, Number(d.max) || 10), 10);
+    const d = _detail[r.token];
+    const hot = Number(r.lead_score) >= 70 || String(r.priority || '').toLowerCase() === 'high';
 
-    const domainHtml = domains.length ? domains.map((d) => {
-      const v = Number(d.score);
-      const blocked = Number.isFinite(v) && v <= 3;
-      const w = Number.isFinite(v) ? Math.max(2, (v / maxD) * 100) : 0;
-      return `<div class="cx-domain">
-        <span class="${blocked ? 'cx-blocked' : ''}">${esc(d.name)}${blocked ? ' — blocked' : ''}</span>
-        <span class="cx-domain-track"><span class="cx-domain-fill"
-          style="width:${w}%;background:${blocked ? 'var(--cx-bad)' : 'var(--cx-s1)'}"></span></span>
-        <span class="cx-num">${Number.isFinite(v) ? v : '—'}</span>
-      </div>`;
-    }).join('') : `<div class="cx-empty"><span class="cx-empty-mark"></span>
-        Per-domain scores are not in this payload. The list endpoint returns totals only.</div>`;
-
-    return `<tr class="cx-detail"><td colspan="8"><div class="cx-detail-inner">
+    return `<tr class="cx-detail"><td colspan="9"><div class="cx-detail-inner">
       <div>
-        <h4>Domain scores</h4>${domainHtml}
+        <div class="cx-detail-block">
+          <h4>Outbox</h4>
+          ${outboxHtml(d)}
+        </div>
+        <div class="cx-detail-block">
+          <h4>Full record</h4>
+          ${recordHtml(r, d)}
+        </div>
       </div>
       <div>
-        <h4>Session</h4>
-        <div class="cx-kv"><span>Taken</span><b>${esc(fmtDate(r.created_at))}</b></div>
-        <div class="cx-kv"><span>Role</span><b>${esc(r.role || '—')}</b></div>
-        <div class="cx-kv"><span>Headcount</span><b>${esc(r.headcount_band || '—')}</b></div>
-        <div class="cx-kv"><span>Instrument</span><b>${r.max === 120 ? 'deep (60q)' : r.max === 24 ? 'standard (12q)' : esc(r.max ? `scale ${r.max}` : 'unknown')}</b></div>
-        <div class="cx-kv"><span>Result link</span><b><a href="https://www.digitafusion.com/diagnostic/r/${esc(r.token)}"
-          target="_blank" rel="noopener" style="color:var(--cx-s1)">open ↗</a></b></div>
+        <div class="cx-detail-block">
+          <h4>Session</h4>
+          <div class="cx-kv"><span>Taken</span><b>${esc(fmtDate(r.created_at))}</b></div>
+          <div class="cx-kv"><span>Role</span><b>${esc(r.role || '—')}</b></div>
+          <div class="cx-kv"><span>Headcount</span><b>${esc(r.headcount_band || '—')}</b></div>
+          <div class="cx-kv"><span>Instrument</span><b>${r.depth && r.depth !== 'short'
+            ? `deep${r.max ? ` — scored out of ${esc(String(r.max))}` : ''}`
+            : 'screening — scored out of 24'}</b></div>
+          <div class="cx-kv"><span>Band held down</span><b>${r.capped
+            ? 'yes — a domain was blocked'
+            : 'no'}</b></div>
+          <div class="cx-kv"><span>Lead score</span><b>${r.lead_score == null ? '—' : esc(String(r.lead_score))}${hot ? ' · priority' : ''}</b></div>
+          <div class="cx-kv"><span>Result link</span><b><a href="https://www.digitafusion.com/diagnostic/r/${esc(r.token)}"
+            target="_blank" rel="noopener" style="color:var(--blue,#4d9fff)">open ↗</a></b></div>
+        </div>
 
-        <h4 style="margin-top:16px">Outcome</h4>
-        <div class="cx-outcome">
-          <select class="cx-select" data-outcome-for="${esc(r.token)}">
-            <option value="">— not yet known —</option>
-            <option value="won"${r.outcome === 'won' ? ' selected' : ''}>Became a paid engagement</option>
-            <option value="lost"${r.outcome === 'lost' ? ' selected' : ''}>Did not convert</option>
-            <option value="pending"${r.outcome === 'pending' ? ' selected' : ''}>Still open</option>
-          </select>
-          <input class="cx-input" type="text" inputmode="numeric" placeholder="Engagement value, if won"
-                 data-value-for="${esc(r.token)}" value="${esc(r.outcome_value ?? '')}">
-          <button class="cx-btn cx-btn-primary" data-save-for="${esc(r.token)}">Save outcome</button>
-          <p class="cx-outcome-note">This is the field that replaces the guesses. The band priors in
-            the Commitment Sizer and the value-per-assessment in the advertising rule are both
-            declared priors until ${MIN_BENCHMARK_N} rows here carry a real outcome.</p>
+        <div class="cx-detail-block">
+          <h4>Sequence</h4>
+          <label class="cx-kv" style="cursor:pointer">
+            <span>Prospect has replied</span>
+            <b><input type="checkbox" data-replied-for="${esc(r.token)}"${r.replied ? ' checked' : ''}
+                      style="accent-color:var(--fiq-band-3,#2bb3a3);cursor:pointer"></b>
+          </label>
+          <p class="cx-outcome-note">Ticking this holds every scheduled send. It is the one
+            switch that stops an automated sequence talking over a live conversation.</p>
+        </div>
+
+        <div class="cx-detail-block">
+          <h4>Outcome</h4>
+          <div class="cx-outcome">
+            <select class="cx-select" data-outcome-for="${esc(r.token)}">
+              <option value="">— not yet known —</option>
+              <option value="won"${r.outcome === 'won' ? ' selected' : ''}>Became a paid engagement</option>
+              <option value="lost"${r.outcome === 'lost' ? ' selected' : ''}>Did not convert</option>
+              <option value="pending"${r.outcome === 'pending' ? ' selected' : ''}>Still open</option>
+            </select>
+            <input class="cx-input" type="text" inputmode="numeric" placeholder="Engagement value in naira, if won"
+                   data-value-for="${esc(r.token)}" value="${esc(r.outcome_value ?? '')}">
+            <button class="cx-btn cx-btn-primary" data-save-for="${esc(r.token)}">Save outcome</button>
+            <p class="cx-outcome-note">This is the field that replaces the guesses. The band priors in
+              the Commitment Sizer and the value-per-assessment in the advertising rule are both
+              declared priors until ${MIN_BENCHMARK_N} rows here carry a real outcome.</p>
+          </div>
         </div>
       </div>
     </div></td></tr>`;
   }
 
+  /* The outbox. Four states, each with its own dot, and a cancelled touch
+     prints its reason — a send that was called off silently is indistinguishable
+     from one that never existed. */
+  function outboxHtml(d) {
+    if (!d || d.loading) return '<div class="cx-empty"><span class="cx-empty-mark"></span>Loading the touch history…</div>';
+    if (d.error) return `<div class="cx-empty"><span class="cx-empty-mark"></span>Could not read the outbox — ${esc(d.error)}</div>`;
+    const t = Array.isArray(d.touches) ? d.touches : [];
+    if (!t.length) {
+      return `<div class="cx-empty"><span class="cx-empty-mark"></span>Nothing scheduled or sent.
+        Either the sequence has not started, or migration 0010 has not been applied.</div>`;
+    }
+    const state = (x) => x.cancelled_at ? 'cancelled'
+      : x.sent_at ? 'sent'
+      : x.last_error ? 'failed'
+      : 'scheduled';
+    const sorted = [...t].sort((a, b) =>
+      Date.parse(a.sent_at || a.scheduled_for || '') - Date.parse(b.sent_at || b.scheduled_for || ''));
+    return sorted.map((x) => {
+      const s = state(x);
+      const when = x.sent_at || x.scheduled_for;
+      const why = s === 'cancelled' ? (x.cancel_reason || 'cancelled — no reason recorded')
+        : s === 'failed' ? `failed after ${x.attempts ?? '?'} attempt(s) — ${x.last_error}`
+        : null;
+      return `<div class="cx-touch">
+        <span class="cx-touch-dot cx-touch-${s}" title="${s}"></span>
+        <span class="cx-touch-what">${esc(x.subject || x.kind || 'touch')}${
+          x.step != null ? ` <span class="cx-depth">step ${esc(String(x.step))}</span>` : ''}${
+          x.channel ? ` <span class="cx-depth">${esc(x.channel)}</span>` : ''}</span>
+        <span class="cx-touch-when">${esc(fmtDateTime(when))}</span>
+        ${why ? `<span class="cx-touch-why">${esc(why)}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  /* Everything on the record that is not already on screen. The list endpoint
+     projects a narrow column set by design; rather than guess which of the
+     remaining columns matter — the per-domain breakdown among them, whose
+     shape this client does not know — the whole rest of the row is shown as it
+     comes. Nothing about a prospect is hidden behind a projection I chose. */
+  function recordHtml(r, d) {
+    if (!d || d.loading) return '<div class="cx-empty"><span class="cx-empty-mark"></span>Loading…</div>';
+    if (d.error || !d.session) return '<div class="cx-empty"><span class="cx-empty-mark"></span>The full record could not be read.</div>';
+    const shown = new Set(['token', 'created_at', 'total', 'max', 'depth', 'band', 'capped', 'sector',
+      'role', 'headcount_band', 'country', 'email', 'stage', 'organization', 'organisation',
+      'replied', 'replied_at', 'lead_score', 'priority', 'outcome', 'outcome_value', 'outcome_at']);
+    const rest = Object.entries(d.session)
+      .filter(([k, v]) => !shown.has(k) && v !== null && v !== undefined && v !== '');
+    if (!rest.length) return '<div class="cx-empty"><span class="cx-empty-mark"></span>No further fields on this record.</div>';
+    return rest.map(([k, v]) => {
+      const val = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      return `<div class="cx-kv"><span>${esc(k.replace(/_/g, ' '))}</span><b>${esc(
+        val.length > 160 ? `${val.slice(0, 157)}…` : val)}</b></div>`;
+    }).join('');
+  }
+
+  async function loadDetail(token) {
+    _detail[token] = { loading: true };
+    render();
+    try {
+      const d = await api().apiFetch(`/api/frictioniq/session?token=${encodeURIComponent(token)}`, { timeoutMs: 15000 });
+      _detail[token] = { session: d?.session ?? null, touches: d?.touches ?? [] };
+    } catch (e) {
+      _detail[token] = { error: e.message };
+    }
+    render();
+  }
+
   /* ── Export ────────────────────────────────────────────────────────── */
   function exportCsv() {
     const view = filtered();
-    const cols = ['created_at', 'total', 'max', 'band', 'organisation', 'sector', 'role',
-      'country', 'email', 'stage', 'outcome', 'outcome_value', 'token'];
+    const cols = ['created_at', 'total', 'max', 'depth', 'capped', 'band', 'organisation', 'sector',
+      'role', 'headcount_band', 'country', 'email', 'replied', 'lead_score', 'priority',
+      'stage', 'outcome', 'outcome_value', 'token'];
     const cell = (v) => {
       const s = String(v ?? '');
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -318,24 +448,22 @@
       const data = await api().apiFetch('/api/frictioniq/sessions', { timeoutMs: 15000 });
       /* The route answers with { sessions, stats, band_distribution, page }.
          `sessions`, not `rows` — reading the wrong key yields undefined and
-         renders "no rows match this filter" over a register that is full. The
-         other two keys are accepted as a courtesy to any future shape, but
-         `sessions` is the one this server actually sends. */
+         renders "no rows match this filter" over a register that is full. */
       const raw = Array.isArray(data?.sessions) ? data.sessions
         : Array.isArray(data?.rows) ? data.rows
         : Array.isArray(data) ? data : [];
       _stats = data?.stats && typeof data.stats === 'object' ? data.stats : null;
       _page = data?.page && typeof data.page === 'object' ? data.page : null;
+
       /* The server spells it `organization`; this console reads `organisation`
-         throughout — in the cell, the search haystack, the sort key and the CSV
-         header. Reconciling it in four places invites the fifth to be missed,
-         so it is reconciled once, here, at the boundary. Both spellings stay on
-         the row: the console reads British, an export consumer reading the
-         server's own field name still finds it. */
+         in the cell, the search haystack, the sort key and the CSV header.
+         Reconciling it in four places invites the fifth to be missed, so it is
+         reconciled once, here, at the boundary. */
       _rows = raw.map((r) => {
         const org = r.organisation ?? r.organization ?? null;
         return { ...r, organisation: org, organization: org };
       });
+
       if (_page?.truncated) {
         if (status) status.textContent = `showing ${_rows.length} of ${_stats?.total ?? '?'} — server capped this page`;
       } else if (status) {
@@ -346,7 +474,7 @@
     } catch (e) {
       if (status) status.textContent = `error: ${e.message}`;
       const body = $('fiqTableBody');
-      if (body) body.innerHTML = `<tr><td colspan="8"><div class="cx-empty">
+      if (body) body.innerHTML = `<tr><td colspan="9"><div class="cx-empty">
         <span class="cx-empty-mark"></span>Could not read the register — ${esc(e.message)}</div></td></tr>`;
     }
   }
@@ -361,16 +489,19 @@
   }
 
   async function patch(token, body, btn) {
+    const label = btn?.textContent;
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
       await api().postJson('/api/frictioniq/session', { token, ...body });
       const r = _rows.find((x) => x.token === token);
       if (r) Object.assign(r, body);
       if (btn) btn.textContent = 'Saved';
-      setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = 'Save outcome'; } }, 1200);
+      setTimeout(() => { if (btn) { btn.disabled = false; btn.textContent = label || 'Save outcome'; } }, 1200);
       render();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = `Failed — ${e.message}`; }
+      else window.pgToast?.(`Could not save — ${e.message}`, 'error');
+      render();
     }
   }
 
@@ -395,7 +526,7 @@
     });
 
     document.addEventListener('click', (e) => {
-      const th = e.target.closest('th[data-sort]');
+      const th = e.target.closest('#module-frictioniq th[data-sort]');
       if (th) {
         const k = th.dataset.sort;
         _sort = { key: k, dir: _sort.key === k ? -_sort.dir : -1 };
@@ -410,21 +541,25 @@
         /* A value is only ever sent alongside a win. The table enforces the
            same rule, and letting the console post a value against "did not
            convert" would surface as a constraint error the operator cannot
-           read — and, if the constraint were ever dropped, would quietly
-           inflate the mean engagement value that the advertising rule uses. */
+           read — and, if the constraint were dropped, would quietly inflate
+           the mean engagement value the advertising rule uses. */
         const value = outcome === 'won' && Number.isFinite(num) && num > 0 ? num : null;
         return patch(token, { outcome, outcome_value: value }, save);
       }
-      const tr = e.target.closest('tr[data-token]');
-      if (tr && !e.target.closest('select,input,button,a')) {
-        _open = _open === tr.dataset.token ? null : tr.dataset.token;
+      const tr = e.target.closest('#module-frictioniq tr[data-token]');
+      if (tr && !e.target.closest('select,input,button,a,label')) {
+        const token = tr.dataset.token;
+        _open = _open === token ? null : token;
+        if (_open && !_detail[_open]) return loadDetail(_open);
         render();
       }
     });
 
     document.addEventListener('change', (e) => {
       const sel = e.target.closest('[data-stage-for]');
-      if (sel) patch(sel.dataset.stageFor, { stage: sel.value });
+      if (sel) return patch(sel.dataset.stageFor, { stage: sel.value });
+      const rep = e.target.closest('[data-replied-for]');
+      if (rep) return patch(rep.dataset.repliedFor, { replied: rep.checked });
     });
 
     document.addEventListener('pg:tab-change', (e) => {

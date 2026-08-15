@@ -6,11 +6,14 @@
 
    ── DESIGN DECISIONS, AND WHY ──────────────────────────────────────────────
 
-   THE PALETTE IS VALIDATED, NOT CHOSEN. Five categorical hues, snapped into
-   the dark-mode lightness band (OKLCH L 0.48–0.67) against the console
-   surface #131E2E, and checked for colour-vision separation: worst adjacent
-   pair ΔE 9.6 protan / 16.7 normal — above the ≥8 target and the ≥15
-   normal-vision floor. Do not substitute a hue by eye; re-run the validator.
+   THE PALETTE LIVES IN CSS, AND IS VALIDATED THERE. It is read from
+   --cx-s1..--cx-s5 at load rather than duplicated here, so there is one place
+   to change it and no way for the stylesheet and the script to drift apart.
+   The first version hardcoded five hues chosen against an invented surface
+   colour that this application does not use. The current set is derived from
+   the app's own accents and validated against the real --surface; the note
+   above the tokens in console.css carries the command and its output. Do not
+   substitute a hue by eye, and do not reorder them — the order is what passed.
 
    COLOUR NEVER CARRIES MEANING ALONE. Every series is direct-labelled or
    legended, every status carries a word, and the funnel prints its own
@@ -32,12 +35,25 @@
 (function (global) {
   const NS = 'http://www.w3.org/2000/svg';
 
+  /* Read the design tokens rather than restate them. The fallbacks are the
+     app's own values and exist only for the case where this file loads before
+     its stylesheet — they are not a second source of truth. */
+  const token = (name, fallback) => {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch { return fallback; }
+  };
+
   /* Validated categorical order. Assign in this order, never cycle. */
-  const SERIES = ['#3D8FD9', '#B08A2E', '#1F9077', '#9463BE', '#C4703F'];
-  const INK = '#E6EDF6';
-  const MUTED = '#8A9BB0';
-  const GRID = 'rgba(138,155,176,0.16)';
-  const SURFACE = '#131E2E';
+  const SERIES = [
+    token('--cx-s1', '#1F9E70'), token('--cx-s2', '#2E86D9'), token('--cx-s3', '#A2842C'),
+    token('--cx-s4', '#8A6BD6'), token('--cx-s5', '#C4573F'),
+  ];
+  const INK     = token('--text-primary',   '#f0f4ff');
+  const MUTED   = token('--text-muted',     '#4d6280');
+  const GRID    = token('--border',         '#263047');
+  const SURFACE = token('--surface',        '#111827');
 
   const esc = (s) => String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -165,7 +181,12 @@
     }).join('');
   }
 
-  /* ══ FUNNEL — the only chart on the analytics page that matters ═══════ */
+  /* ══ FUNNEL — the only chart on the analytics page that matters ═══════
+     ONE HUE FOR EVERY STEP. The steps of a funnel are a single quantity
+     shrinking, not five different things — magnitude, not identity, so the
+     categorical ramp does not apply. Painting them in series order also put
+     the terminal red on "completed the assessment", which reads as a failure
+     state on the one number the page exists to celebrate. */
   function funnel(host, stages, opts = {}) {
     if (!host) return;
     const known = stages.filter((s) => s.value != null);
@@ -194,7 +215,7 @@
         : 'entry';
       return `<div class="cx-funnel-step">
         <div class="cx-funnel-head"><span>${esc(s.label)}</span><b>${fmt(v)}</b></div>
-        <div class="cx-funnel-track"><div class="cx-funnel-fill" style="width:${w}%;background:${SERIES[i % SERIES.length]}"></div></div>
+        <div class="cx-funnel-track"><div class="cx-funnel-fill" style="width:${w}%;background:${opts.color || SERIES[1]}"></div></div>
         <div class="cx-funnel-note">${esc(step)}${first && i ? ` · ${((v / first) * 100).toFixed(2)}% of entry` : ''}</div>
         ${s.note ? `<div class="cx-funnel-note cx-sample">${esc(s.note)}</div>` : ''}
       </div>`;
