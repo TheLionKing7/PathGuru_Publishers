@@ -23,7 +23,9 @@ import { createServer }             from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname }            from 'node:path';
 import { fileURLToPath }            from 'node:url';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { parseBody } from './http/helpers.js';
 import { generateAndPublishBlogPost, publishBlogPost } from './blogPublisher.js';
 import * as cmsClient                     from './cmsClient.js';
 import { createPost as dbCreatePost, updatePost as dbUpdatePost, getSupabase, supabaseWrite } from './supabaseClient.js';
@@ -161,7 +163,7 @@ function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     req.on('data', c => chunks.push(c));
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { resolve({}); } });
+    req.on('end', () => resolve(parseBody(Buffer.concat(chunks).toString('utf8'), req.headers['content-type'])));
     req.on('error', reject);
   });
 }
@@ -172,6 +174,101 @@ function readRawBody(req) {
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
+}
+
+/**
+ * Validate Twilio's X-Twilio-Signature header per Twilio's documented algorithm:
+ * HMAC-SHA1(authToken, fullUrl + sortedParams), base64-encoded, compared with a
+ * timing-safe equality check. `params` is the parsed (decoded) POST body.
+ */
+function verifyTwilioSignature(req, params) {
+  const authToken = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+  if (!authToken) return false;
+  const signature = req.headers['x-twilio-signature'];
+  if (!signature) return false;
+
+  // Twilio signs the webhook URL it was configured with — reconstruct it from the
+  // public origin + the request target (path + query string).
+  const publicUrl = (process.env.PATHGURU_PUBLIC_URL || 'https://pathguru-publishers.onrender.com').replace(/\/$/, '');
+  const fullUrl = publicUrl + req.url;
+  const sortedParams = Object.keys(params).sort().map((k) => k + params[k]).join('');
+  const expected = createHmac('sha1', authToken).update(fullUrl + sortedParams).digest('base64');
+
+  try {
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(String(signature), 'utf8');
+    return a.length === b.length && timingSafeEqual(a, b);
+  } catch { return false; }
+}
+
+/**
+ * Twilio WhatsApp notification health — reports configuration presence and a
+ * live probe of the Messages list endpoint WITHOUT ever returning secret values.
+ * Only booleans for presence, a whatsapp: prefix check, and the HTTP status +
+ * last message status/error_code from Twilio are surfaced.
+ */
+async function twilioNotificationsHealth() {
+  const env = (name) => (typeof process.env[name] === 'string' ? process.env[name].trim() : '');
+
+  const sid   = env('TWILIO_ACCOUNT_SID');
+  const token = env('TWILIO_AUTH_TOKEN');
+  const from  = env('TWILIO_WHATSAPP_FROM');
+  const to    = env('WHATSAPP_TO');
+
+  const report = {
+    configured: {
+      TWILIO_ACCOUNT_SID:   Boolean(sid),
+      TWILIO_AUTH_TOKEN:    Boolean(token),
+      TWILIO_WHATSAPP_FROM: Boolean(from),
+      WHATSAPP_TO:          Boolean(to),
+    },
+    fromStartsWithWhatsapp: Boolean(from) && from.startsWith('whatsapp:'),
+    twilioMessagesList: {
+      attempted:  false,
+      httpStatus: null,
+      lastMessage: null,
+      error:      null,
+    },
+    checkedAt: new Date().toISOString(),
+  };
+
+  if (!sid || !token) {
+    report.twilioMessagesList.error = 'TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN are required for a live probe';
+    return report;
+  }
+
+  try {
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(sid)}/Messages.json?PageSize=1`, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Basic ' + Buffer.from(`${sid}:${token}`).toString('base64'),
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    report.twilioMessagesList.attempted  = true;
+    report.twilioMessagesList.httpStatus = res.status;
+
+    if (res.ok) {
+      let body = null;
+      try { body = await res.json(); } catch {}
+      const last = Array.isArray(body?.messages) ? body.messages[0] : null;
+      if (last) {
+        report.twilioMessagesList.lastMessage = {
+          status:    last.status ?? null,
+          errorCode: last.error_code ?? null,
+        };
+      }
+    } else {
+      // Never surface the response body — it can contain account details.
+      report.twilioMessagesList.error = `HTTP ${res.status}`;
+    }
+  } catch (e) {
+    report.twilioMessagesList.attempted = true;
+    report.twilioMessagesList.error = e?.message || 'Twilio probe failed';
+  }
+
+  return report;
 }
 
 const server = createServer(async (req, res) => {
@@ -270,6 +367,14 @@ const server = createServer(async (req, res) => {
         hybrid:   platform.hybrid,
       },
     });
+    return;
+  }
+
+  // ── GET /api/health/notifications — Twilio WhatsApp health (no secrets) ────
+  if (req.method === 'GET' && path === '/api/health/notifications') {
+    try {
+      json(res, await twilioNotificationsHealth());
+    } catch (e) { err(res, e.message, 500); }
     return;
   }
 
@@ -2162,82 +2267,113 @@ const server = createServer(async (req, res) => {
       return;
     }
     try {
-      // Twilio sends application/x-www-form-urlencoded
-      const raw = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', c => data += c);
-        req.on('end',  () => resolve(data));
-        req.on('error', reject);
-      });
-      const params  = new URLSearchParams(raw);
-      const from    = (params.get('From') || '').replace('whatsapp:', '').trim();
-      const msgBody = (params.get('Body') || '').trim();
+      // readBody now branches on content-type, so Twilio's urlencoded payload
+      // parses into a plain object and body._raw carries the exact body string.
+      const body = await readBody(req);
 
-      // Security: only accept messages from the owner's number
-      const ownerRaw   = (process.env.OWNER_PHONE || process.env.WHATSAPP_TO || '').trim().replace('whatsapp:', '');
-      const ownerPhone = ownerRaw.replace(/\s/g, '');
-      const fromNorm   = from.replace(/\s/g, '');
-      const allowed    = !ownerPhone
-        || fromNorm === ownerPhone
-        || fromNorm === ownerPhone.replace(/^\+/, '')
-        || `+${fromNorm.replace(/^\+/, '')}` === `+${ownerPhone.replace(/^\+/, '')}`;
+      // Validate X-Twilio-Signature (HMAC-SHA1 over the full URL + sorted params).
+      if (!verifyTwilioSignature(req, body)) {
+        console.warn('[WhatsApp] Rejected request with missing/invalid Twilio signature');
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
+        res.end('Invalid Twilio signature');
+        return;
+      }
+
+      const from        = (body.From || '').replace('whatsapp:', '').trim();
+      const msgBody     = (body.Body || '').trim();
+      const profileName = body.ProfileName || '';
+      const waId        = body.WaId || '';
+      const messageSid  = body.MessageSid || '';
 
       const twiml = reply => {
         res.writeHead(200, { 'Content-Type': 'text/xml' });
         res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${reply.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Message></Response>`);
       };
 
-      if (!allowed) {
-        console.warn(`[WhatsApp] Blocked message from unknown number: ${from}`);
-        return twiml('Unauthorised.');
-      }
-
-      if (!msgBody) return twiml('I did not receive any text. Please try again.');
-
-      console.log(`[WhatsApp→Nexus] From: ${from} | Message: ${msgBody.slice(0, 80)}`);
-
-      // ── Approval gate check — FIRST before Nexus chat ────────────────────
-      // If there is a pending approval request and Boss's reply is YES/NO,
-      // resolve it and execute the approved action rather than passing to chat.
-      let reply;
-      try {
-        const { processBossApprovalMessage } = await import('./skills/approvalActions.js');
-        const result = await processBossApprovalMessage(msgBody);
-
-        if (result.handled) {
-          console.log(`[WhatsApp] Approval resolved: ${result.approval?.decision} (${result.approval?.approvalId?.slice(0, 8)})`);
-          reply = result.reply;
-          const safe = (reply || '').length > 1550 ? reply.slice(0, 1547) + '…' : reply;
-          res.writeHead(200, { 'Content-Type': 'text/xml' });
-          res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>${safe.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</Message></Response>`);
-          return;
-        }
-      } catch (gateErr) {
-        console.warn('[WhatsApp] Approval gate check failed (continuing to Nexus chat):', gateErr.message);
-      }
-
-      // ── No pending approval — route to Nexus chat as normal ──────────────
-      // Maintain per-number conversation history in memory (resets on server restart)
-      if (!global._waHistory) global._waHistory = {};
-      const history = global._waHistory[from] || [];
-
-      // Pass to Nexus chat
-      const result = await AGENTS.nexus.chat(msgBody, history);
-      reply        = typeof result === 'string' ? result : result?.response || result?.message || JSON.stringify(result);
-
-      // Update history (keep last 10 turns to avoid bloat)
-      history.push({ role: 'user',      content: msgBody });
-      history.push({ role: 'assistant', content: reply   });
-      global._waHistory[from] = history.slice(-20);
-
-      // Twilio caps messages at 1600 chars — truncate gracefully
-      const safe = reply.length > 1550 ? reply.slice(0, 1547) + '…' : reply;
+      // Shared processing (owner gate → approval gate → Nexus chat). The queue
+      // drain calls the same function when replaying a previously-verified message.
+      const { handleWhatsAppMessage } = await import('./skills/whatsappInbound.js');
+      const { reply } = await handleWhatsAppMessage({ from, body: msgBody, profileName, waId, messageSid });
+      const safe = (reply || '').length > 1550 ? reply.slice(0, 1547) + '…' : reply;
       return twiml(safe);
 
     } catch (e) {
       console.error('[WhatsApp webhook] Error:', e.message);
       res.writeHead(200, { 'Content-Type': 'text/xml' });
       res.end(`<?xml version="1.0" encoding="UTF-8"?><Response><Message>Nexus encountered an error: ${e.message.slice(0, 100)}</Message></Response>`);
+    }
+    return;
+  }
+
+  // ── /api/webhooks/inbound-email — HMAC-authenticated inbound email ──────────
+  // Signature: HMAC-SHA256 over the raw body using INBOUND_WEBHOOK_SECRET.
+  // Headers: x-signature (hex), x-timestamp (unix seconds, must be ≤ 5 min old).
+  if (req.method === 'POST' && path === '/api/webhooks/inbound-email') {
+    try {
+      const raw     = await readRawBody(req);
+      const rawBody = raw.toString('utf8');
+      const { verifyInboundEmailSignature } = await import('./skills/inboundEmail.js');
+      const ok = verifyInboundEmailSignature({
+        rawBody,
+        timestamp: req.headers['x-timestamp'],
+        signature: req.headers['x-signature'],
+      });
+      if (!ok) { err(res, 'Invalid signature or stale timestamp', 401); return; }
+
+      let payload;
+      try { payload = JSON.parse(rawBody || '{}'); } catch { err(res, 'Invalid JSON body', 400); return; }
+
+      const { messageId, threadId, from, to, subject, body, receivedAt } = payload;
+      if (!subject && !body && !from) { err(res, 'Missing email fields (from/subject/body)', 400); return; }
+
+      // Hand off to Nexus for classification + drafting. Nexus NEVER sends — it
+      // writes a draft reply onto the row and creates an [APPROVAL] task.
+      const result = await nexus.processInboundEmail({ messageId, threadId, from, to, subject, body, receivedAt });
+      json(res, { ok: true, ...result });
+    } catch (e) {
+      console.error('[InboundEmail] error:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  // ── /api/webhooks/slack — Slack interactive approvals (x-slack-signature) ────
+  if (req.method === 'POST' && path === '/api/webhooks/slack') {
+    try {
+      const raw     = await readRawBody(req);
+      const rawBody = raw.toString('utf8');
+      const { verifySlackSignature, handleSlackBlockAction, parseSlackPayload } = await import('./skills/slackApprovals.js');
+      if (!verifySlackSignature({
+        rawBody,
+        timestamp: req.headers['x-slack-request-timestamp'],
+        signature: req.headers['x-slack-signature'],
+      })) {
+        err(res, 'Invalid Slack signature', 401);
+        return;
+      }
+
+      // Slack's Interactivity endpoint posts urlencoded (a single `payload` field
+      // of URL-encoded JSON); the Events API posts raw JSON. Signature verification
+      // above stays over the RAW body in both cases — never over the parsed form.
+      const payload = parseSlackPayload(rawBody, req.headers['content-type']);
+      if (!payload || typeof payload !== 'object') { err(res, 'Invalid payload', 400); return; }
+
+      // Slack's URL verification handshake — must echo the challenge.
+      if (payload.type === 'url_verification') { json(res, { challenge: payload.challenge }); return; }
+
+      // Interactive buttons (Approve / Reject / Edit) carrying a task id. Acknowledge
+      // immediately (Slack's 3-second budget), then process in the background.
+      if (payload.type === 'block_actions') {
+        handleSlackBlockAction(payload).catch((e) => console.error('[Slack] block action failed:', e.message));
+        json(res, { ok: true });
+        return;
+      }
+
+      // Any other event — acknowledge so Slack stops retrying.
+      json(res, { ok: true });
+    } catch (e) {
+      console.error('[Slack] webhook error:', e.message);
+      err(res, e.message, 500);
     }
     return;
   }
@@ -2603,6 +2739,116 @@ const server = createServer(async (req, res) => {
       if (!result.handled) { err(res, result.error || 'No pending approval', 404); return; }
       json(res, { reply: result.reply, approval: result.approval, timestamp: new Date().toISOString() });
     } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/agents/approvals — pending approval tasks + child task output ──
+  if (req.method === 'GET' && path === '/api/agents/approvals') {
+    try {
+      const { listPendingApprovals } = await import('./skills/approvalQueue.js');
+      json(res, await listPendingApprovals());
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/agents/approvals/:id — { decision: 'approve'|'reject', note } ──
+  if (req.method === 'POST' && /^\/api\/agents\/approvals\/[^/]+$/.test(path)) {
+    try {
+      const id = decodeURIComponent(path.split('/').pop());
+      const body = await readBody(req);
+      const decision = String(body.decision || '').toLowerCase();
+      if (decision !== 'approve' && decision !== 'reject') {
+        err(res, 'decision must be "approve" or "reject"', 400);
+        return;
+      }
+      const note = String(body.note || '').slice(0, 2000);
+      const { decideApproval } = await import('./skills/approvalQueue.js');
+      const result = await decideApproval(id, decision, note);
+      if (!result.handled) { err(res, result.error || 'Approval not found or already resolved', 404); return; }
+      json(res, { reply: result.reply, approval: result.approval, timestamp: new Date().toISOString() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/outbound/approved — approved drafts not yet sent (Make polls) ──
+  // Behind the operator gate (non-public /api/* path) plus the INBOUND_WEBHOOK_SECRET
+  // HMAC. Signature binds "<timestamp>.<method>.<path>".
+  if (req.method === 'GET' && path === '/api/outbound/approved') {
+    try {
+      const { verifyOutboundAuth, listApprovedDrafts } = await import('./skills/inboundEmail.js');
+      if (!verifyOutboundAuth({
+        timestamp: req.headers['x-timestamp'],
+        signature: req.headers['x-signature'],
+        method: 'GET',
+        path,
+        authorization: req.headers['authorization'],
+      })) { err(res, 'Unauthorized', 401); return; }
+
+      const { drafts, error } = await listApprovedDrafts();
+      if (error) { err(res, error, 500); return; }
+      json(res, {
+        drafts: drafts.map((d) => ({
+          id:           d.id,
+          messageId:    d.message_id,   // original email id → In-Reply-To
+          threadId:     d.thread_id,    // original thread id → References
+          from:         d.from_addr,
+          to:           d.to_addr,
+          subject:      d.subject,
+          draftSubject: d.draft_subject,
+          draftBody:    d.draft_body,
+          approvedAt:   d.approved_at,
+        })),
+      });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/outbound/:id/sent — mark a draft sent with its provider message id ─
+  if (req.method === 'POST' && /^\/api\/outbound\/[^/]+\/sent$/.test(path)) {
+    try {
+      const { verifyOutboundAuth, markInboundSent } = await import('./skills/inboundEmail.js');
+      if (!verifyOutboundAuth({
+        timestamp: req.headers['x-timestamp'],
+        signature: req.headers['x-signature'],
+        method: 'POST',
+        path,
+        authorization: req.headers['authorization'],
+      })) { err(res, 'Unauthorized', 401); return; }
+
+      const id  = decodeURIComponent(path.split('/')[3]);
+      const raw = await readRawBody(req);
+      let body = {};
+      try { body = JSON.parse(raw.toString('utf8') || '{}'); } catch {}
+      const result = await markInboundSent(id, body.providerMessageId || null);
+      if (result.error) { err(res, result.error, 404); return; }
+      json(res, result);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/queue/drain — HMAC-authenticated webhook queue drain ──────────
+  // Public path (no operator gate) but authenticated by HMAC-SHA256 over
+  // "<timestamp>.POST./api/queue/drain" (x-signature / x-timestamp, ≤5 min),
+  // same scheme as the outbound Make routes.
+  if (req.method === 'POST' && path === '/api/queue/drain') {
+    try {
+      await readRawBody(req); // drain the request stream (raw, for signature context)
+      const { verifyOutboundSignature } = await import('./skills/inboundEmail.js');
+      if (!verifyOutboundSignature({
+        timestamp: req.headers['x-timestamp'],
+        signature: req.headers['x-signature'],
+        method: 'POST',
+        path,
+      })) {
+        err(res, 'Invalid signature or stale timestamp', 401);
+        return;
+      }
+      const { drainWebhookQueue } = await import('./skills/webhookQueue.js');
+      json(res, await drainWebhookQueue());
+    } catch (e) {
+      console.error('[Queue] drain error:', e.message);
+      err(res, e.message, 500);
+    }
     return;
   }
 

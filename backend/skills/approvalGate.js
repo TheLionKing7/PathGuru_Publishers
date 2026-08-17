@@ -88,6 +88,18 @@ export async function createApprovalRequest({ approvalType, subject, detail, pay
     console.error('[ApprovalGate] WhatsApp dispatch failed:', e.message);
   }
 
+  // ── Slack approval surface ───────────────────────────────────────────────
+  // Post a Block Kit message (draft + Approve/Reject/Edit) to the Slack Incoming
+  // Webhook whenever an approval is created. Fire-and-forget, never blocks, and
+  // never logs secrets.
+  if (approvalId) {
+    try {
+      const { postSlackApproval } = await import('./slackApprovals.js');
+      postSlackApproval({ approvalId, subject, detail, draftBody: payload?.draftBody })
+        .catch((e) => console.warn('[ApprovalGate] Slack notify failed:', e.message));
+    } catch { /* Slack not configured or import failed — non-fatal */ }
+  }
+
   return { approvalId, whatsappSent };
 }
 

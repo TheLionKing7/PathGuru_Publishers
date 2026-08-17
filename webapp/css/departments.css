@@ -1133,6 +1133,75 @@ body.pg-shell-v3 .prod-toolbar .btn-sm:not(.prod-toolbar-add) {
   margin: 0 0 8px;
   line-height: 1.4;
 }
+.nexus-approvals-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.nexus-approvals-item {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.nexus-approvals-item:first-of-type { border-top: 0; padding-top: 4px; }
+.nexus-approvals-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.nexus-approvals-head-main { min-width: 0; flex: 1; }
+.nexus-approvals-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  line-height: 1.4;
+}
+.nexus-approvals-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nexus-approvals-note { width: 200px; }
+.nexus-approvals-detail {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+.nexus-approvals-children {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nexus-approvals-child {
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.nexus-approvals-child-title { display: block; margin: 4px 0; }
+.nexus-approvals-output {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 160px;
+  overflow: auto;
+}
 .analytics-section { margin-bottom: 18px; }
 .analytics-section-title {
   font-size: 12px;

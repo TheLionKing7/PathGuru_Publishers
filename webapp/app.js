@@ -169,6 +169,50 @@ function getBackendUrl () {
   return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
 }
 
+/* Twilio WhatsApp notification health — reports presence + a live probe,
+   never any secret values. Surfaced in the Settings modal. */
+async function loadNotificationsHealth () {
+  const el = document.getElementById('notificationsHealth');
+  if (!el) return;
+  el.innerHTML = '<span class="settings-health-loading">Checking…</span>';
+  try {
+    const res = await fetch(`${getBackendUrl()}/api/health/notifications`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    const cfg = data.configured || {};
+    const rows = [
+      ['TWILIO_ACCOUNT_SID', cfg.TWILIO_ACCOUNT_SID],
+      ['TWILIO_AUTH_TOKEN', cfg.TWILIO_AUTH_TOKEN],
+      ['TWILIO_WHATSAPP_FROM', cfg.TWILIO_WHATSAPP_FROM],
+      ['WHATSAPP_TO', cfg.WHATSAPP_TO],
+    ];
+    const badge = ok => ok
+      ? '<span class="settings-health-ok">set</span>'
+      : '<span class="settings-health-missing">missing</span>';
+
+    const tw = data.twilioMessagesList || {};
+    const last = tw.lastMessage
+      ? `${tw.lastMessage.status || 'unknown'}${tw.lastMessage.errorCode ? ` · error_code ${tw.lastMessage.errorCode}` : ''}`
+      : '—';
+    const probe = tw.attempted
+      ? `HTTP ${tw.httpStatus ?? '—'}${last !== '—' ? ` · last message: ${last}` : ''}${tw.error ? ` · ${tw.error}` : ''}`
+      : (tw.error ? tw.error : 'not run');
+
+    el.innerHTML = `
+      <ul class="settings-health-list">
+        ${rows.map(([k, ok]) => `<li><span class="settings-health-key">${k}</span>${badge(ok)}</li>`).join('')}
+        <li><span class="settings-health-key">FROM has whatsapp: prefix</span>${badge(!!data.fromStartsWithWhatsapp)}</li>
+      </ul>
+      <div class="settings-health-probe">
+        <span class="settings-health-key">Twilio Messages list probe</span>
+        <span>${String(probe).replace(/</g, '&lt;')}</span>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = `<span class="settings-health-error">${String(e.message).replace(/</g, '&lt;')}</span>`;
+  }
+}
+
 window.__pgSetTab = setActiveTab;
 window.PathGuruState = State;
 window.PathGuruUI = UI;
@@ -186,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('settingsBtn')?.addEventListener('click', () => {
     document.getElementById('settingsModal').style.display = 'flex';
     UI.render('settings');
+    loadNotificationsHealth();
   });
   document.getElementById('closeSettings')?.addEventListener('click', () => {
     document.getElementById('settingsModal').style.display = 'none';

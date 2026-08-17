@@ -158,10 +158,20 @@ async function callClaude(provider, prompt, systemHint) {
 }
 
 async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
+  const sendJsonFormat = json && provider.name !== 'deepseek';
   const defaultSystem = json
     ? 'You are a senior nonfiction editor. Return strict JSON only.'
     : 'You are a helpful, professional assistant. Respond naturally in plain text.';
-  const systemMsg = systemHint || defaultSystem;
+  let systemMsg = systemHint || defaultSystem;
+
+  // Groq (and other OpenAI-compatible providers) rejects json_object mode with a
+  // 400 unless a message contains the literal word "json". Callers pass their own
+  // persona system hints that never mention it, so guarantee it here — using the
+  // lowercase word, since the provider check is on the literal string.
+  if (sendJsonFormat && !systemMsg.includes('json') && !prompt.includes('json')) {
+    systemMsg = `${systemMsg}\nRespond with a single valid json object — no markdown fences, no commentary.`;
+  }
+
   const response = await fetch(`${provider.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -177,7 +187,7 @@ async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
       stream: false,
       temperature: json ? 0.78 : 0.82,
       max_tokens: json ? Number(process.env.AI_MAX_TOKENS || 32000) : 1024,
-      ...(json && provider.name !== 'deepseek' ? { response_format: { type: 'json_object' } } : {}),
+      ...(sendJsonFormat ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
   if (!response.ok) {

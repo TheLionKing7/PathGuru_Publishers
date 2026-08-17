@@ -13,6 +13,7 @@ node_modules/
 # Build outputs & temp files
 dist/
 /tmp/
+.wrangler/
 
 # Generated documents — large files, not source code
 *.pdf

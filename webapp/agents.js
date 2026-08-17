@@ -123,6 +123,28 @@
     return `${Math.floor(ms/60000)}m ${Math.floor((ms%60000)/1000)}s`;
   }
 
+  /* Reduce a task's output/result JSONB into a renderable string.
+     Prefers a summary/message/result text field, else a JSON string —
+     never lets an object fall through to "[object Object]". */
+  function formatTaskOutput (raw, opts = {}) {
+    if (raw == null || raw === '') return '';
+    if (typeof raw === 'string') return raw;
+    if (typeof raw !== 'object') return String(raw);
+
+    for (const key of ['summary', 'message', 'brief', 'response']) {
+      const v = raw[key];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    if (typeof raw.result === 'string' && raw.result.trim()) return raw.result;
+    if (raw.result && typeof raw.result === 'object') {
+      const nested = formatTaskOutput(raw.result, opts);
+      if (nested) return nested;
+    }
+    if (typeof raw.output === 'string' && raw.output.trim()) return raw.output;
+    try { return opts.pretty ? JSON.stringify(raw, null, 2) : JSON.stringify(raw); }
+    catch { return String(raw); }
+  }
+
   /* Status badge */
   function statusBadge (status) {
     const map = {
@@ -356,6 +378,85 @@
     } finally {
       if (btnA) btnA.disabled = false;
       if (btnR) btnR.disabled = false;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     APPROVALS QUEUE — list every pending approval, approve/reject each
+  ═══════════════════════════════════════════════════════════════ */
+  async function loadApprovalsQueue () {
+    const list = $('nexusApprovalsList');
+    if (!list) return;
+    list.innerHTML = '<p class="nexus-ops-intro">Loading pending approvals…</p>';
+    try {
+      const data = await apiFetch('/api/agents/approvals');
+      const approvals = data.approvals || data || [];
+      if (!approvals.length) {
+        list.innerHTML = '<p class="nexus-ops-intro">No pending approvals — nothing is waiting on you.</p>';
+        return;
+      }
+      list.innerHTML = approvals.map(renderApprovalItem).join('');
+      list.querySelectorAll('[data-approval-decision]').forEach(btn => {
+        btn.addEventListener('click', () => decideApproval(btn.dataset.approvalId, btn.dataset.approvalDecision));
+      });
+    } catch (e) {
+      list.innerHTML = `<p class="nexus-ops-intro content-empty-err">${esc(e.message)}</p>`;
+    }
+  }
+
+  function renderApprovalItem (a) {
+    const input   = a.input || {};
+    const payload = input.payload || {};
+    const when    = a.created_at ? new Date(a.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+    const subject = input.subject || String(a.title || 'Approval request').replace(/^\[APPROVAL\]\s*/i, '');
+    const detail  = input.detail || a.description || '';
+    const preview = payload.proposedTitle || payload.topic || '';
+
+    const children = (a.childTasks || []).map(c => {
+      const out = formatTaskOutput(c.output || c.result);
+      return `<li class="nexus-approvals-child">
+        <span class="nexus-ops-chip nexus-ops-chip-${esc(c.status || 'idle')}">${esc(c.agent_id || 'agent')}</span>
+        <strong class="nexus-approvals-child-title">${esc(c.title || c.type || 'Child task')}</strong>
+        ${out ? `<pre class="nexus-approvals-output">${esc(out)}</pre>` : ''}
+      </li>`;
+    }).join('');
+
+    return `
+      <article class="nexus-approvals-item" id="approval-${esc(a.id)}">
+        <header class="nexus-approvals-head">
+          <div class="nexus-approvals-head-main">
+            <h4 class="nexus-approvals-title">${esc(subject)}</h4>
+            <p class="nexus-ops-intro">${preview ? `${esc(preview)} · ` : ''}Ref ${esc(String(a.id).slice(0, 8))} · ${esc(when)}</p>
+          </div>
+          <div class="nexus-approvals-actions">
+            <input type="text" class="form-input nexus-approvals-note" id="approval-note-${esc(a.id)}" placeholder="Note (optional)…">
+            <button type="button" class="btn-primary btn-sm" data-approval-decision="approve" data-approval-id="${esc(a.id)}">Approve</button>
+            <button type="button" class="btn-secondary btn-sm" data-approval-decision="reject" data-approval-id="${esc(a.id)}">Reject</button>
+          </div>
+        </header>
+        ${detail ? `<p class="nexus-approvals-detail">${esc(detail)}</p>` : ''}
+        ${children ? `<ul class="nexus-approvals-children">${children}</ul>` : ''}
+      </article>`;
+  }
+
+  async function decideApproval (id, decision) {
+    const note = $('approval-note-' + id)?.value?.trim() || '';
+    const item = $('approval-' + id);
+    item?.querySelectorAll('button[data-approval-decision]').forEach(b => { b.disabled = true; });
+    try {
+      const res = await fetch(`${getBackendUrl()}/api/agents/approvals/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, note }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      if (window.pgToast) window.pgToast(data.reply || (decision === 'approve' ? 'Approved.' : 'Rejected.'), 'success');
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      await loadApprovalsQueue();
+      loadCeoOps().catch(() => {});
     }
   }
 
@@ -617,6 +718,7 @@
     grid.innerHTML = '<div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center…</span></div>';
     if (agentsEl) agentsEl.innerHTML = '';
     await loadApprovalPanel();
+    loadApprovalsQueue();
     loadFunnelAttribution();
     loadEngagementOps();
     loadEconomicsOps();
@@ -873,7 +975,8 @@
         const isLast = i === tasks.length - 1;
         const when = t.created_at ? new Date(t.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
         const title = t.title || t.description || 'Agent action';
-        const excerpt = (t.result || t.output || '').toString().slice(0, 160);
+        const rawOutput = formatTaskOutput(t.summary ?? t.result ?? t.output);
+        const excerpt = rawOutput.slice(0, 160);
         return `
           <article class="activity-timeline-item">
             <div class="activity-timeline-rail" aria-hidden="true">
@@ -887,7 +990,7 @@
                 ${statusBadge(t.status)}
               </header>
               <h4 class="activity-timeline-title">${esc(title)}</h4>
-              ${excerpt ? `<p class="activity-timeline-excerpt">${esc(excerpt)}${(t.result || t.output || '').length > 160 ? '…' : ''}</p>` : ''}
+              ${excerpt ? `<p class="activity-timeline-excerpt">${esc(excerpt)}${rawOutput.length > 160 ? '…' : ''}</p>` : ''}
               <footer class="activity-timeline-meta">
                 <span>${esc(agent.role || '')}</span>
                 ${t.completed_at ? `<span>Completed ${relTime(t.completed_at)}</span>` : ''}
@@ -2929,7 +3032,7 @@
     const body    = $('taskOutputBody');
     if (!drawer || !body) return;
     title.textContent = task.title || task.description || 'Task Output';
-    renderMarkdown(body, task.result || task.output || '(No output recorded)');
+    renderMarkdown(body, formatTaskOutput(task.result || task.output || task.summary, { pretty: true }) || '(No output recorded)');
     drawer.classList.add('open');
     overlay.classList.add('open');
     drawer.setAttribute('aria-hidden', 'false');
@@ -3065,6 +3168,7 @@
     $('ceoOpsRefreshBtn')?.addEventListener('click', loadCeoOps);
     $('nexusApproveBtn')?.addEventListener('click', () => resolvePendingApproval('approved'));
     $('nexusRejectBtn')?.addEventListener('click', () => resolvePendingApproval('rejected'));
+    $('nexusApprovalsRefreshBtn')?.addEventListener('click', loadApprovalsQueue);
     $('ceoNotionSyncBtn')?.addEventListener('click', async () => {
       const btn = $('ceoNotionSyncBtn');
       if (btn) { btn.disabled = true; btn.classList.add('is-loading'); btn.setAttribute('aria-busy', 'true'); }

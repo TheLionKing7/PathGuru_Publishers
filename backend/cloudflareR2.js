@@ -44,7 +44,7 @@ function getSigningKey(dateStamp, region, service) {
  * Build AWS4-HMAC-SHA256 signed headers for an R2 PUT.
  * Falls back to Bearer token if S3 credentials are absent.
  */
-async function buildR2Headers(url, body, contentType) {
+async function buildR2Headers(key, body, contentType) {
   // Fall back to Bearer if no S3 keys configured
   if (!accessKeyId || !secretKey) {
     return {
@@ -61,9 +61,13 @@ async function buildR2Headers(url, body, contentType) {
   const amzDate = toAmzDate(now);
   const dateStamp = amzDate.slice(0, 8);
 
-  const parsed     = new URL(url);
-  const host       = parsed.host;
-  const path       = parsed.pathname;
+  // The canonical URI is derived from the SAME encoded key that getObjectUrl
+  // places in the request URL — byte-for-byte. Deriving it from new URL().pathname
+  // would let the WHATWG URL parser normalise the path independently of the string
+  // actually sent, which is exactly how a key with a space, an ampersand or a
+  // non-ASCII character can sign for one path while requesting another.
+  const host = `${accountId}.r2.cloudflarestorage.com`;
+  const path = `/${bucket}/${encodeKey(key)}`;
 
   // Compute payload hash
   const bodyBuffer = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
@@ -118,8 +122,18 @@ function getBaseUrl() {
   return `https://${accountId}.r2.cloudflarestorage.com/${bucket}`;
 }
 
-function encodeKey(key) {
-  return key.split("/").map((segment) => encodeURIComponent(segment)).join("/");
+// AWS Signature V4 requires every byte in the canonical URI except the
+// unreserved set (A-Z a-z 0-9 - _ . ~) to be percent-encoded. encodeURIComponent
+// additionally leaves ! ' ( ) * raw, which makes the signature S3 computes differ
+// from the one we do (SignatureDoesNotMatch) for keys containing them.
+function encodeR2Segment(segment) {
+  return encodeURIComponent(segment)
+    .replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+}
+
+/** Percent-encode an object key path — each segment encoded, `/` separators kept. */
+export function encodeKey(key) {
+  return key.split("/").map(encodeR2Segment).join("/");
 }
 
 function getObjectUrl(key) {
@@ -128,7 +142,7 @@ function getObjectUrl(key) {
 
 async function uploadToR2(key, body, contentType) {
   const url     = getObjectUrl(key);
-  const headers = await buildR2Headers(url, body, contentType);
+  const headers = await buildR2Headers(key, body, contentType);
   const response = await fetch(url, { method: "PUT", headers, body });
 
   if (!response.ok) {

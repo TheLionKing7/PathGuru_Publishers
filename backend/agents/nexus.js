@@ -409,6 +409,147 @@ export class Nexus extends AgentBase {
     } catch { return []; }
   }
 
+  /**
+   * Classify an inbound email and, when a reply is warranted, draft one.
+   * NEXUS NEVER SENDS — this only produces a draft that then goes through the
+   * approval gate as an [APPROVAL] task.
+   */
+  async classifyAndDraftEmail(payload) {
+    const from    = String(payload.from || '').trim();
+    const to      = String(payload.to || '').trim();
+    const subject = String(payload.subject || '').trim();
+    const body    = String(payload.body || '').trim();
+
+    const prompt = `Classify this inbound email and, if it warrants a reply, draft one on behalf of DigiFusion.
+Return ONLY a valid JSON object with this exact schema:
+{
+  "category": "inquiry|support|sales|partnership|followup|internal|noise",
+  "intent": "one-line summary of what the sender wants",
+  "urgency": "low|medium|high",
+  "needsReply": true|false,
+  "draftSubject": "RE: ... (empty string when needsReply is false)",
+  "draftBody": "full reply body (empty string when needsReply is false)"
+}
+Never invent facts. Never promise anything you cannot confirm. If the message is noise, a newsletter or an automated notification, set needsReply to false and leave the draft fields empty.
+
+FROM: ${from}
+TO: ${to}
+SUBJECT: ${subject}
+
+BODY:
+${body}`;
+
+    const raw = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: true, fallback: true });
+    let parsed = {};
+    try {
+      const match = String(raw || '').match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : {};
+    } catch { parsed = {}; }
+
+    const needsReply = parsed.needsReply !== false && Boolean(parsed.draftBody);
+    return {
+      classification: {
+        category: parsed.category || 'inquiry',
+        intent:   parsed.intent || '',
+        urgency:  parsed.urgency || 'low',
+      },
+      draftSubject: needsReply ? (parsed.draftSubject || `Re: ${subject}`) : null,
+      draftBody:    needsReply ? (parsed.draftBody || null) : null,
+    };
+  }
+
+  /**
+   * Full inbound-email pipeline: persist → classify + draft → [APPROVAL] task.
+   * The draft is written onto the inbound_message row; Nexus never sends it.
+   * Idempotent: a redelivered webhook reuses the existing row and its draft and
+   * never mints a second approval task.
+   */
+  async processInboundEmail(payload) {
+    const { persistInboundMessage } = await import('../skills/inboundEmail.js');
+    const row = await persistInboundMessage(payload);
+
+    // Retry guard: if this message was already drafted, reuse it. Only ensure the
+    // approval task exists (the first attempt may have failed after drafting).
+    if (row?.draft_body) {
+      let approvalId = row.approval_task_id || null;
+      if (!approvalId) {
+        approvalId = await this._ensureEmailApprovalTask(row, payload, row.draft_subject, row.draft_body);
+      }
+      return {
+        id: row.id,
+        approvalId,
+        needsReply: true,
+        classification: row.classification || null,
+        draftSubject: row.draft_subject || null,
+        draftBody: row.draft_body,
+        deduped: true,
+      };
+    }
+
+    const { classification, draftSubject, draftBody } = await this.classifyAndDraftEmail(payload);
+
+    const db = getSupabase();
+    if (db && row?.id) {
+      await db.from('inbound_message').update({
+        classification,
+        draft_subject: draftSubject,
+        draft_body:    draftBody,
+        status:        draftBody ? 'draft' : 'received',
+      }).eq('id', row.id);
+    }
+
+    let approvalId = null;
+    if (draftBody) {
+      approvalId = await this._ensureEmailApprovalTask(row, payload, draftSubject, draftBody);
+    }
+
+    return {
+      id: row?.id || null,
+      approvalId,
+      needsReply: Boolean(draftBody),
+      classification,
+      draftSubject,
+      draftBody,
+    };
+  }
+
+  /**
+   * Create the [APPROVAL] task for an email reply draft and backfill the row's
+   * approval_task_id. Returns the approval task id (or null when not created).
+   */
+  async _ensureEmailApprovalTask(row, payload, draftSubject, draftBody) {
+    const db = getSupabase();
+    const subject = payload.subject || '(no subject)';
+    const { approvalId } = await createApprovalRequest({
+      approvalType: 'email_reply',
+      subject:      `Email reply — ${String(subject).slice(0, 60)}`,
+      detail: [
+        `From: ${payload.from || '—'}`,
+        `To: ${payload.to || '—'}`,
+        `Subject: ${subject}`,
+        ``,
+        `Draft reply:`,
+        draftSubject || '(no subject)',
+        ``,
+        draftBody,
+      ].join('\n'),
+      payload: {
+        inboundMessageId: row?.id || null,
+        messageId:        payload.messageId || null,
+        threadId:         payload.threadId || null,
+        from:             payload.from || null,
+        to:               payload.to || null,
+        subject,
+        draftSubject,
+        draftBody,
+      },
+    });
+    if (db && row?.id && approvalId) {
+      await db.from('inbound_message').update({ approval_task_id: approvalId }).eq('id', row.id);
+    }
+    return approvalId || null;
+  }
+
   _isResearchIntent(instruction) {
     const lower = instruction.toLowerCase();
     const researchSignals = [
@@ -1905,6 +2046,30 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     }));
   }
 
+  /**
+   * Reduce a task's output JSONB into a single human-readable summary string,
+   * or null when there is nothing renderable. Keeps the activity journal from
+   * printing "[object Object]" when output is a structured object rather than
+   * a flat string. Prefers an explicit summary/message/result text field and
+   * falls back to a JSON string for anything else.
+   */
+  static summarizeTaskOutput(output) {
+    if (output == null || output === '') return null;
+    if (typeof output === 'string') return output;
+    if (typeof output !== 'object') return String(output);
+
+    for (const key of ['summary', 'message', 'result', 'response', 'brief']) {
+      const v = output[key];
+      if (typeof v === 'string' && v.trim()) return v;
+    }
+    if (output.result && typeof output.result === 'object') {
+      const nested = Nexus.summarizeTaskOutput(output.result);
+      if (nested) return nested;
+    }
+    if (output.output && typeof output.output === 'string' && output.output.trim()) return output.output;
+    try { return JSON.stringify(output); } catch { return String(output); }
+  }
+
   async getTaskHistory({ agentId = null, status = null, limit = 30, offset = 0 } = {}) {
     const db = getSupabase();
     if (!db) return { tasks: [] };
@@ -1919,7 +2084,8 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
 
     const { data, count, error } = await q;
     if (error) return { tasks: [], error: error.message };
-    return { tasks: data || [], total: count, limit, offset };
+    const tasks = (data || []).map((t) => ({ ...t, summary: Nexus.summarizeTaskOutput(t.output) }));
+    return { tasks, total: count, limit, offset };
   }
 
   async generateStatusReport() {

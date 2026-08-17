@@ -14,6 +14,9 @@ export async function cancelStuckTasks({ olderThanMinutes = 30, dryRun = false }
     .from('tasks')
     .select('id, title, status, agent_id, created_at')
     .in('status', ['pending', 'in_progress'])
+    // Approval requests wait on the Boss indefinitely — they are not "stuck".
+    // Cancelling them here is what silently killed six blog articles.
+    .neq('type', 'pending_approval')
     .lt('created_at', cutoff)
     .limit(100);
 

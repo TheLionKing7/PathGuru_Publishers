@@ -1,0 +1,124 @@
+# The Arithmetic Audit: Six Questions That Break Most Business Cases in Under an Hour
+
+### Every proposal on your desk contains a number doing work it cannot support. Here is how to find it — without being the person in the meeting who is bad at maths.
+
+**By Boroji Adebayo-Hopewell**
+
+---
+
+I was shown a business case last year that projected a four-hundred-per-cent return on an automation programme. It was competently built. The assumptions were listed on their own tab, colour-coded, with a little legend. Three people had reviewed it and two had signed it.
+
+The whole thing rested on a single figure — the share of a process the technology would absorb — and that figure had come from a vendor's case study about a different company in a different industry, measured three years earlier, on a process that shared a name with theirs and nothing else. It was cell D14. Everything else in the model was arithmetic performed correctly on it.
+
+Nobody had lied. Nobody had even been careless in a way you could point at. The number had simply entered the model at the top, wearing the same typeface as everything else, and by the time it reached the return line at the bottom it had acquired an authority nothing about its origin justified.
+
+That is the ordinary condition of business cases, and it is why I have stopped reviewing them the way I used to. I no longer read a proposal for whether its conclusion is plausible. I audit its arithmetic — and the striking thing, having done this several hundred times now, is how few questions it takes. Six, usually. Under an hour, usually. And the failure, when there is one, is almost never sophisticated.
+
+What follows is the procedure. It is not a finance exercise and it does not require you to be quick with numbers. It requires you to be slow with them, which is different and much rarer.
+
+## Question one: is this number an amount or a rate?
+
+Start here, because it is the most common error and the most expensive, and it hides in plain sight.
+
+An amount is a quantity. A rate is a quantity per period, and rates compound. Confusing them is not a rounding difference — it changes the shape of the answer.
+
+Take a firm losing three per cent of its throughput each month to rework and queueing. Treated as an amount, that is thirty-six per cent a year, which sounds survivable and gets filed accordingly. Treated correctly it is 0.97 raised to the twelfth power: what survives is 0.694, so the loss is **30.6 per cent** — a little better than the naive figure, which is the last time this comparison flatters anyone. Because the same exponent runs the other way on everything the firm builds. Two businesses with identical revenue and margin, differing only in the friction rate they carry, do not end up slightly apart. Compounding at eight per cent against four, they diverge by 1.21 times after five periods, 1.46 after ten, and **2.13 after twenty.** That is not a performance gap. It is a category gap, and it was invisible for the first several years.
+
+So the audit question is blunt: **does this number apply once, or does it apply every period?** If it applies every period, the model must raise it to a power, and a startling share of models simply multiply. When you find one that does, you have not found a small error. You have found a model that will be wrong by a factor at exactly the horizon anyone cares about.
+
+## Question two: where did this number come from, and when was it measured?
+
+Every figure has a provenance, and provenance is a claim you are entitled to inspect.
+
+Ask two things about any number that matters. Who measured it, and *when did the measurement happen* — not when the page you found it on was published. Those two dates come apart constantly, and the gap between them is where most bad numbers live.
+
+I have watched a widely-cited technical comparison circulate through the trade press for three years, freshly date-stamped each time, describing a system nobody has deployed since. I have watched a survey finding about enterprise readiness get quoted as current when the fieldwork was eighteen months old and the market it described had turned over twice. Neither was fraud. Each was a measurement that stopped being reported with its date, and a number without its date is not a fact. It is a rumour with a decimal point.
+
+I should say that I have been caught by this myself, more than once, and recently enough to be embarrassed about it. A figure I had used in print for months turned out to trace to a publisher that sells developer subscriptions, not to any primary measurement, and I had repeated it because it appeared in a table that looked like every other table. That is the whole difficulty: bad numbers do not arrive looking bad. They arrive formatted.
+
+The second half of the question is who benefits. A vendor's own benchmark is a marketing document — which does not make it useless, and I want to be precise here, because the reflex to dismiss vendor data throws away the best evidence available in one specific case. **When a vendor publishes something against its own commercial interest, that is the strongest evidence you will get.** A supplier telling you its product's known weakness is testifying against itself. A supplier telling you its product scored well on a test it designed is telling you nothing. Learn to tell those two apart and you can use vendor material safely; fail to, and you will either believe all of it or none, both of which are wrong.
+
+## Question three: what is the base?
+
+Percentages are the easiest place in a document to smuggle something past a reader, because a percentage is a ratio and a ratio has a denominator that is often left off the page.
+
+"Reduces errors by ninety per cent" — of what? All errors, or the subset this system sees? Before or after the exceptions were routed elsewhere? Measured against the manual baseline, or against the previous version of the same system?
+
+Here is a live example of why this matters, from a calculation I run constantly. Suppose an automated flow handles sixty-five thousand cases a year, escalates eleven per cent of them to a human, and operates within a published half-per-cent error budget. How many errors a year?
+
+Not 325. The escalated cases were reviewed by a person, so they come out of the base first: sixty-five thousand less eleven per cent leaves 57,850 that proceed unsupervised, and half a per cent of that is **289.** The naive figure is wrong by twelve per cent — and in the other direction, I have seen the same budget applied to a base that had already excluded the escalations *twice*, understating the answer by a quarter.
+
+Neither error is dramatic on its own. Both matter, because this number is the input to the one that actually decides things: how many of those errors reach an action that cannot be undone. Get the base wrong at the top and every figure downstream inherits it, quietly, with no error message.
+
+**So: for every percentage in the document, write the denominator in the margin.** You will not get through many pages. That is the point — the ones where nobody can tell you what the base is are the ones worth the meeting.
+
+## Question four: does the arithmetic reconcile in both directions?
+
+This is the highest-yield check in the whole procedure and it takes ninety seconds.
+
+Most models are built forward: assumptions in, conclusion out. Almost nobody runs them backward — and running a model backward is how you discover that its stated relationships cannot all be true at once.
+
+The pattern to look for is a document that gives you both a total and its components, or both a ratio and its terms. Add the components; see whether they make the total. Take the ratio; see whether the terms produce it. It is tedious and it feels faintly rude, and I have never once regretted doing it.
+
+I once reviewed a fine-tuning cost estimate that gave an all-in figure of twelve to twenty-four hundred dollars, said data preparation was about half of it, and *also* stated an annotation rate of two to ten dollars a sample for a thousand to ten thousand examples. Those cannot both hold. The annotation alone is two thousand to a hundred thousand dollars. The all-in figure was not merely low; it was inconsistent with a number printed on the same page.
+
+And the corrected version made the argument *stronger*, which is the thing worth internalising. The honest arithmetic is roughly five to thirty dollars of computation against two to ten thousand dollars of labelling — a ratio of two hundred to two thousand times. The real finding was that the compute everyone was arguing about was a rounding error, and the cost was people writing down what the right answer was. That finding was sitting inside the model, and the model's own inconsistency was what pointed at it.
+
+**Reconciling arithmetic does not usually destroy a business case. It relocates the argument to where the money actually is.**
+
+## Question five: what does this assume about independence?
+
+The subtlest of the six, and the one that ends firms rather than embarrassing them.
+
+Most models assume their components fail separately. Redundant checks assume the second catches what the first missed. Diversified initiatives assume they will not all disappoint at once. Chained steps assume each is an independent opportunity to be wrong.
+
+Reliability engineers settled this decades ago and wrote it into a standard, because they learned it expensively: install two identical pumps and the calculated failure probability falls by orders of magnitude, and then in service it does not, because a fraction of failures come from something both units share. The instrument is the beta-factor model, and the arithmetic is worth carrying.
+
+Two checks, each failing half a per cent of the time, independent, give one failure in forty thousand. Let a tenth of failures arrive through a shared channel — one document both read, one assumption both inherit, one supplier both depend on — and the figure becomes **one in under two thousand.** The second check was costed as a two-hundred-fold improvement. It delivers about nine and a half fold. Ninety-five per cent of what you paid for is gone, and it is gone because of a fraction most reviews would round to zero.
+
+So the question to put to any proposal claiming safety through redundancy: **what do these two things share?** If the answer is a common input, a common assumption, a common supplier or a common data source, they are not two independent controls. They are one control, billed twice, and the model is wrong by a factor rather than a margin.
+
+## Question six: what is the size of the commitment, and how was it chosen?
+
+The last question is not about the numbers in the case. It is about the number *beside* it — how much of the firm is going in.
+
+There is a mathematics for this, older than any of the technology it is now being applied to. For any genuine advantage there is a fraction of your resources that maximises long-run growth, and the curve around that optimum is not symmetrical. Commit half the right fraction and you keep roughly seventy-six per cent of the growth you could have had. Commit twice it and your growth rate does not halve — it turns **negative**, with more than half of all paths finishing below where they started, despite the advantage being real throughout. Underbetting costs time. Overbetting costs the firm. On a spreadsheet those two errors look symmetrical, and they are nothing of the sort.
+
+Which lands on the question that ought to be asked before any of the others and almost never is. **The right fraction depends on a probability. Has anyone measured it?**
+
+Not estimated it. Not benchmarked it against a case study. Measured it, on your own resolved cases, in your own operation. Because a probability you have not measured is not an input to a model — it is a wish, and sizing a commitment on a wish is how a firm with a genuinely good idea manages to be destroyed by it.
+
+I want to be careful about how far this travels, since the failure mode of a good analogy is being pushed one step past where it holds. The clean form of this mathematics assumes bets that repeat, that can be re-sized freely, and that are independent of one another. A firm's transformation programme is none of those: it is lumpy, partly irreversible, and its initiatives fail together rather than separately because they usually fail from the same unmapped process. So this is not a formula to run your capital budget through. It is a ceiling and a discipline — a way of establishing the number you will not exceed before enthusiasm establishes it for you.
+
+---
+
+### The takeaway
+
+- **Amounts add; rates compound.** If a number applies every period, the model must raise it to a power. Many simply multiply, and are therefore wrong by a factor exactly where it matters.
+- **A number without its date of measurement is a rumour.** Ask when it was measured, not when it was published — those come apart constantly.
+- **Write the denominator in the margin** for every percentage. Where nobody can tell you what the base is, you have found the conversation worth having.
+- **Run the model backward.** Where a document gives both a total and its parts, check that they reconcile. Inconsistent arithmetic usually relocates the argument to where the money really is.
+- **Ask what the redundant things share.** A tenth of failures arriving through a common channel destroys ninety-five per cent of the value of a second check.
+- **Ask how the commitment was sized, and whether anyone measured the probability it rests on.** Underbetting costs time; overbetting costs the firm; and they look identical on a spreadsheet.
+
+None of this requires you to be quick with numbers. It requires you to be slow with them — to stop on the third page and ask where one figure came from, while everyone else is turning to the recommendation. That is a social act more than a numerical one, and it is most of what the job consists of.
+
+---
+
+*This is the evidence discipline behind my books* **The Thermodynamic Firm** *and* **The Agentic Stack** *— where every figure carries its date of measurement, every vendor claim is labelled as one, and the arithmetic is run in both directions before it is printed. If this article gave you a question you cannot answer about a document on your desk, the books are the field manual. [Learn more / get your copy →]*
+
+---
+
+*Boroji Adebayo-Hopewell is a techno-economist and enterprise systems architect. He writes about the physics of how work actually moves through companies.*
+
+---
+---
+
+**SUGGESTED META DESCRIPTION**
+Every business case contains a number doing work it cannot support. Six questions — on rates, provenance, denominators, reconciliation, independence and sizing — that break most proposals in under an hour.
+
+**SUGGESTED SOCIAL CAPTIONS**
+
+*LinkedIn:* A business case crossed my desk projecting a 400% return. Competent, reviewed, signed by two people. The whole thing rested on one number, taken from a vendor case study about a different company in a different industry three years earlier. Nobody lied. Here are the six questions I now ask instead. 👇
+
+*X/Twitter:* Two checks at 0.5% error, independent = 1 failure in 40,000. Let a tenth of failures share a channel = 1 in under 2,000. You paid for 200× and got 9.6×. Six questions that break most business cases:

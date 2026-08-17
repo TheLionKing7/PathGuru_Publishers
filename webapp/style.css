@@ -1483,6 +1483,33 @@ select option { background: var(--surface-2); }
   line-height: 1.5;
 }
 
+.settings-health { font-size: 12px; }
+.settings-health-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+}
+.settings-health-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.settings-health-key { color: var(--text-secondary); }
+.settings-health-ok { color: var(--green, #3ecf8e); font-weight: 600; }
+.settings-health-missing { color: var(--red, #ef4444); font-weight: 600; }
+.settings-health-probe {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-health-error { color: var(--red, #ef4444); }
+.settings-health-loading { color: var(--text-muted); }
+
 .settings-color-row {
   display: flex;
   align-items: center;

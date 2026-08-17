@@ -1500,6 +1500,17 @@
               <p class="nexus-ops-intro" id="nexusApprovalResult" style="margin-top:8px"></p>
             </div>
 
+            <!-- ── Approvals queue — all pending approvals with child output ── -->
+            <div class="nexus-approval-panel" id="nexusApprovalsPanel">
+              <div class="nexus-approvals-panel-head">
+                <h3 class="nexus-ops-agents-title">Approvals queue</h3>
+                <button type="button" class="btn-secondary btn-sm" id="nexusApprovalsRefreshBtn">Refresh</button>
+              </div>
+              <div id="nexusApprovalsList">
+                <p class="nexus-ops-intro">Loading pending approvals…</p>
+              </div>
+            </div>
+
             <div class="nexus-ops-grid" id="ceoOpsGrid">
               <div class="agents-grid-loading"><div class="agents-spinner"></div><span>Loading command center...</span></div>
             </div>
@@ -2097,6 +2108,10 @@
         <div class="settings-field">
           <label class="settings-label" for="brandLogoUrl">Brand logo URL (optional)</label>
           <input class="settings-input" id="brandLogoUrl" type="url" placeholder="Leave blank to use imprint default logo">
+        </div>
+        <div class="settings-field">
+          <label class="settings-label">Notifications (Twilio WhatsApp)</label>
+          <div id="notificationsHealth" class="settings-health">Loading…</div>
         </div>
       </form>
       <div class="modal-footer">

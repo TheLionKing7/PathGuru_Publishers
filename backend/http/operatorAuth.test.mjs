@@ -53,7 +53,8 @@ t('bearer without token env rejected', !A.verifyOperator(req({ authorization: 'B
 console.log('— the allowlist —');
 const mustBePublic = ['/ping','/health','/api/cron/ping','/api/platform/config','/api/auth/login',
   '/api/auth/status','/api/agents/status','/api/webhooks/whatsapp','/api/bookings/calendly-webhook',
-  '/api/newsletter/unsubscribe','/api/cron/nurture','/index.html','/js/core/shell.js','/css/style.css','/'];
+  '/api/newsletter/unsubscribe','/api/cron/nurture','/index.html','/js/core/shell.js','/css/style.css','/',
+  '/api/queue/drain','/api/outbound/approved','/api/outbound/abc-123/sent'];
 for (const p of mustBePublic) t(`public: ${p}`, A.isPublicPath(p));
 
 const mustBeGated = ['/api/frictioniq/sessions','/api/frictioniq/session','/api/clients','/api/invoices',

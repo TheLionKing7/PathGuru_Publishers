@@ -246,11 +246,17 @@ const PUBLIC_EXACT = new Set([
   '/api/webhooks/whatsapp',
   '/api/webhooks/whatsapp/',
   '/api/webhooks/erp',
+  '/api/webhooks/inbound-email',
+  '/api/webhooks/slack',
+  '/api/queue/drain',
+  // Outbound Make routes self-authenticate (HMAC or bearer) via verifyOutboundAuth.
+  '/api/outbound/approved',
   '/api/bookings/calendly-webhook',
 ]);
 
 const PUBLIC_PREFIXES = [
-  '/api/cron/',   // gated separately by cronAuth.js — see the header note
+  '/api/cron/',      // gated separately by cronAuth.js — see the header note
+  '/api/outbound/',  // /api/outbound/:id/sent self-authenticates via verifyOutboundAuth
 ];
 
 export function isPublicPath(path) {

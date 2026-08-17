@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  PathGuru webhook edge
+#
+#  Deploy:   npx wrangler deploy
+#  Secrets:  npx wrangler secret put <NAME>     (one at a time, never in this file)
+#
+#  Nothing secret belongs in wrangler.toml — it is committed to git. The [vars]
+#  block below holds only values that are already public (your Render hostname)
+#  or that are safe to read from a repo.
+# ═══════════════════════════════════════════════════════════════════════════
+
+name = "pathguru-webhooks"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[observability]
+enabled = true          # free-tier logs; you will want these on day one
+
+[vars]
+RENDER_ORIGIN = "https://pathguru-publishers-api.onrender.com"
+SUPABASE_URL  = "https://vyljyzaesbauuorsonpl.supabase.co"
+
+# Optional. Set only if Twilio signature checks fail because the URL Twilio
+# signed differs from the one the Worker sees (redirect, custom domain).
+# TWILIO_WEBHOOK_URL = "https://pathguru-webhooks.YOURNAME.workers.dev/webhooks/whatsapp"
+
+# Safety net so nothing sits in the queue if a wake call fails.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# ── Custom domain — served on the same account's digitafusion.com zone ────────
+# `custom_domain = true` creates a Worker Custom Domain (auto DNS + cert) rather
+# than a path route. The workers.dev URL remains as a fallback.
+[[routes]]
+pattern = "webhooks.digitafusion.com"
+custom_domain = true
+
+# ── Secrets, set with `wrangler secret put` ────────────────────────────────
+#   SUPABASE_ANON_KEY        anon key — NOT the service-role key
+#   SLACK_SIGNING_SECRET     Slack app → Basic Information
+#   TWILIO_AUTH_TOKEN        Twilio console
+#   INBOUND_WEBHOOK_SECRET   same value as on Render
+#   MAKE_INBOUND_TOKEN      bearer token for Make → inbound-email (optional)
