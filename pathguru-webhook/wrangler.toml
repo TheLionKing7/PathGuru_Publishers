@@ -52,4 +52,5 @@ custom_domain = true
 #   SLACK_SIGNING_SECRET     Slack app → Basic Information
 #   TWILIO_AUTH_TOKEN        Twilio console
 #   INBOUND_WEBHOOK_SECRET   same value as on Render
-#   MAKE_INBOUND_TOKEN      bearer token for Make → inbound-email (optional)
+#   MAKE_WEBHOOK_TOKEN      shared bearer secret for Make → /webhooks/inbound-email
+#                            and /webhooks/outbound-sent (required — 401 without it)

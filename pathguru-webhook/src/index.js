@@ -115,8 +115,9 @@ async function verifyTwilio(rawBody, request, env) {
 }
 
 /* ── Make / inbound email: our own HMAC-SHA256 over the raw body, OR a bearer
-   token (MAKE_INBOUND_TOKEN) in the Authorization header. Either authenticates;
-   neither replaces the other. When MAKE_INBOUND_TOKEN is unset, only HMAC works. */
+   token (MAKE_WEBHOOK_TOKEN, falling back to MAKE_INBOUND_TOKEN) in the
+   Authorization header. Either authenticates; neither replaces the other. When
+   the bearer token is unset, only HMAC works. */
 async function verifyInbound(rawBody, headers, hmacSecret, bearerSecret) {
   // Bearer path — constant-time compare, fail closed when the token is unset.
   const auth = headers.get('authorization');
@@ -137,10 +138,11 @@ async function verifyInbound(rawBody, headers, hmacSecret, bearerSecret) {
   return safeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'signature mismatch' };
 }
 
-/* ── Make / outbound-sent: bearer token only (MAKE_INBOUND_TOKEN). There is no
-   HMAC fallback for a send confirmation — if the token is unset, fail closed. */
+/* ── Make / outbound-sent: bearer token only (MAKE_WEBHOOK_TOKEN, falling back
+   to MAKE_INBOUND_TOKEN). No HMAC fallback for a send confirmation — if neither
+   token is set, fail closed. */
 async function verifyBearer(headers, bearerSecret) {
-  if (!bearerSecret) return { ok: false, why: 'MAKE_INBOUND_TOKEN not set' };
+  if (!bearerSecret) return { ok: false, why: 'MAKE_WEBHOOK_TOKEN not set' };
   const auth = headers.get('authorization');
   const m = auth ? auth.match(/^Bearer\s+(.+)$/i) : null;
   if (!m?.[1]) return { ok: false, why: 'missing bearer token' };
@@ -217,7 +219,7 @@ export default {
           slack:    Boolean(env.SLACK_SIGNING_SECRET),
           twilio:   Boolean(env.TWILIO_AUTH_TOKEN),
           inbound:  Boolean(env.INBOUND_WEBHOOK_SECRET),
-          makeInbound: Boolean(env.MAKE_INBOUND_TOKEN),
+          makeInbound: Boolean(env.MAKE_WEBHOOK_TOKEN || env.MAKE_INBOUND_TOKEN),
           backend:  Boolean(env.RENDER_ORIGIN),
         },
       });
@@ -248,11 +250,11 @@ export default {
       dedupeKey = new URLSearchParams(rawBody).get('MessageSid');
     } else if (pathname === '/webhooks/inbound-email') {
       kind = 'inbound_email';
-      verdict = await verifyInbound(rawBody, request.headers, env.INBOUND_WEBHOOK_SECRET, env.MAKE_INBOUND_TOKEN);
+      verdict = await verifyInbound(rawBody, request.headers, env.INBOUND_WEBHOOK_SECRET, env.MAKE_WEBHOOK_TOKEN ?? env.MAKE_INBOUND_TOKEN);
       try { dedupeKey = JSON.parse(rawBody).messageId || null; } catch { dedupeKey = null; }
     } else if (pathname === '/webhooks/outbound-sent') {
       kind = 'outbound_sent';
-      verdict = await verifyBearer(request.headers, env.MAKE_INBOUND_TOKEN);
+      verdict = await verifyBearer(request.headers, env.MAKE_WEBHOOK_TOKEN ?? env.MAKE_INBOUND_TOKEN);
       try { dedupeKey = JSON.parse(rawBody).id || null; } catch { dedupeKey = null; }
     } else {
       return json({ error: 'Not found' }, 404);
