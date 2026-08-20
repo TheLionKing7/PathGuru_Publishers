@@ -136,6 +136,7 @@ async function handleOutboundSent(row, payload) {
       sent_at:             new Date().toISOString(),
       status:              'sent',
       provider_message_id: payload.providerMessageId || null,
+      send_claimed_at:     null,
     })
     .eq('id', id)
     .select('id');

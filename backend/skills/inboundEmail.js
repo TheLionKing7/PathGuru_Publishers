@@ -157,17 +157,29 @@ export async function persistInboundMessage(payload) {
   return data;
 }
 
-/** Approved drafts not yet sent — the outbound queue Make polls. */
-export async function listApprovedDrafts() {
-  const db = getSupabase();
+/** Approved drafts not yet sent — the outbound queue Make polls. Claims atomically. */
+export async function listApprovedDrafts(db = getSupabase()) {
   if (!db) return { drafts: [] };
 
-  const { data, error } = await db.from('inbound_message')
-    .select('id, message_id, thread_id, from_addr, to_addr, subject, draft_subject, draft_body, status, approved_at, created_at')
+  // Park rows that exhausted their send attempts without a confirmation. Three
+  // unconfirmed sends is a broken pipeline, not something to keep retrying at a
+  // stranger's inbox.
+  const cutoff = new Date(Date.now() - 10 * 60000).toISOString();
+  const parked = await db.from('inbound_message')
+    .update({ status: 'send_failed' })
     .eq('status', 'approved')
     .is('sent_at', null)
-    .order('approved_at', { ascending: true });
+    .gte('send_attempts', 3)
+    .lt('send_claimed_at', cutoff)
+    .select('id');
+  if (parked.error) return { drafts: [], error: parked.error.message };
+  for (const row of (parked.data || [])) {
+    console.log(`[Outbound] send_failed: inbound_message ${row.id} (3 unconfirmed sends)`);
+  }
 
+  // Atomic claim — one UPDATE ... RETURNING. A second caller arriving before the
+  // confirmation (or before the 10-minute claim window lapses) gets nothing.
+  const { data, error } = await db.rpc('claim_outbound_drafts');
   if (error) return { drafts: [], error: error.message };
   return { drafts: data || [] };
 }
@@ -182,6 +194,7 @@ export async function markInboundSent(id, providerMessageId) {
       status:              'sent',
       sent_at:             new Date().toISOString(),
       provider_message_id: providerMessageId || null,
+      send_claimed_at:     null,
     })
     .eq('id', id)
     .eq('status', 'approved')
