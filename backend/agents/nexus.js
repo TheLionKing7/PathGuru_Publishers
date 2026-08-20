@@ -76,6 +76,18 @@ import {
   isNotionConfigured,
 } from '../skills/truthGuard.js';
 import { runTaskHygiene } from '../skills/taskHygiene.js';
+import { finalizeEmailDraft } from '../skills/emailReplyDraft.js';
+import {
+  CLASSIFICATION_CATEGORIES,
+  shouldDraft,
+  countWords,
+  MAX_FIRST_TOUCH_WORDS,
+  enforceWordCap,
+  findUngroundedClaims,
+  loadCapabilityCorpus,
+  buildClassificationPrompt,
+  buildDraftPrompt,
+} from '../skills/inboundEmailPipeline.js';
 
 const CHAT_TIMEOUT_MS = Number(process.env.NEXUS_CHAT_TIMEOUT_MS || 25000);
 
@@ -129,6 +141,14 @@ HONESTY RULES — violation of these is a critical failure:
 - When uncertain: be short and honest. "I can't verify that without checking" is always correct.
 
 ${buildNexusCeoPromptBlock()}`;
+
+// Identity-free system prompt for outbound email drafting. The reply is sent by a
+// human after approval, so the model must never sign as an agent or name the
+// network or any internal system — the signature is appended by the system.
+const EMAIL_DRAFT_SYSTEM = `You draft concise, professional email replies on behalf of a firm.
+Write in the first person as the firm's representative. Never mention any AI agent, internal system, or internal team name. Never write a closing signature, sign-off block, name, or title — the signature is appended separately by the system after generation.`;
+
+const CLASSIFY_SYSTEM = `You are an email triage assistant. Classify an inbound email into exactly one category and extract structured facts. Return strict JSON only — no markdown fences, no commentary. Never invent facts; leave fields empty when absent.`;
 
 // ── Agent capability map ──────────────────────────────────────────────────────
 // Agent display names for human-readable output
@@ -410,88 +430,130 @@ export class Nexus extends AgentBase {
   }
 
   /**
-   * Classify an inbound email and, when a reply is warranted, draft one.
-   * NEXUS NEVER SENDS — this only produces a draft that then goes through the
-   * approval gate as an [APPROVAL] task.
+   * Stage 1 — classify + extract. One call decides a single category and extracts
+   * structured facts (sender, organisation, stated need, timeline, budget, referral).
    */
-  async classifyAndDraftEmail(payload) {
-    const from    = String(payload.from || '').trim();
-    const to      = String(payload.to || '').trim();
-    const subject = String(payload.subject || '').trim();
-    const body    = String(payload.body || '').trim();
+  async classifyInboundEmail(payload) {
+    const prompt = buildClassificationPrompt(payload, loadCapabilityCorpus());
 
-    const prompt = `Classify this inbound email and, if it warrants a reply, draft one on behalf of DigiFusion.
-Return ONLY a valid JSON object with this exact schema:
-{
-  "category": "inquiry|support|sales|partnership|followup|internal|noise",
-  "intent": "one-line summary of what the sender wants",
-  "urgency": "low|medium|high",
-  "needsReply": true|false,
-  "draftSubject": "RE: ... (empty string when needsReply is false)",
-  "draftBody": "full reply body (empty string when needsReply is false)"
-}
-Never invent facts. Never promise anything you cannot confirm. If the message is noise, a newsletter or an automated notification, set needsReply to false and leave the draft fields empty.
-
-FROM: ${from}
-TO: ${to}
-SUBJECT: ${subject}
-
-BODY:
-${body}`;
-
-    const raw = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { json: true, fallback: true });
+    const raw = await callAiProvider(resolveProvider(), prompt, CLASSIFY_SYSTEM, { json: true, fallback: true });
     let parsed = {};
     try {
       const match = String(raw || '').match(/\{[\s\S]*\}/);
       parsed = match ? JSON.parse(match[0]) : {};
     } catch { parsed = {}; }
 
-    const needsReply = parsed.needsReply !== false && Boolean(parsed.draftBody);
-    return {
-      classification: {
-        category: parsed.category || 'inquiry',
-        intent:   parsed.intent || '',
-        urgency:  parsed.urgency || 'low',
-      },
-      draftSubject: needsReply ? (parsed.draftSubject || `Re: ${subject}`) : null,
-      draftBody:    needsReply ? (parsed.draftBody || null) : null,
+    const category = CLASSIFICATION_CATEGORIES.includes(parsed.category) ? parsed.category : 'other';
+    const e = parsed.extracted && typeof parsed.extracted === 'object' ? parsed.extracted : {};
+    const extracted = {
+      senderName:     String(e.senderName || '').trim(),
+      organisation:   String(e.organisation || '').trim(),
+      statedNeed:     String(e.statedNeed || '').trim(),
+      timelineSignal: String(e.timelineSignal || '').trim(),
+      budgetSignal:   String(e.budgetSignal || '').trim(),
+      referralSource: String(e.referralSource || '').trim(),
     };
+
+    return { category, extracted };
   }
 
   /**
-   * Full inbound-email pipeline: persist → classify + draft → [APPROVAL] task.
+   * Stage 2 + 3 — grounded composition + fixed shape. Grounds the draft in the
+   * capability corpus, enforces the first-touch word cap (regenerating once), and
+   * runs the ungrounded-claim check. Never sends; the signature is appended later.
+   */
+  async draftEmailReply(payload, extracted, category) {
+    const corpus = loadCapabilityCorpus();
+    const prompt = buildDraftPrompt(payload, extracted, corpus, category);
+
+    const generate = async (extra) => {
+      const p = extra ? `${prompt}\n\n${extra}` : prompt;
+      const raw = await callAiProvider(resolveProvider(), p, EMAIL_DRAFT_SYSTEM, { json: true, fallback: true });
+      let parsed = {};
+      try {
+        const match = String(raw || '').match(/\{[\s\S]*\}/);
+        parsed = match ? JSON.parse(match[0]) : {};
+      } catch { parsed = {}; }
+      return {
+        draftSubject: parsed.draftSubject || `Re: ${String(payload.subject || '').trim()}`,
+        draftBody:    parsed.draftBody || null,
+      };
+    };
+
+    const first = await generate();
+
+    // Stage 3 — hard ceiling 120 words: regenerate once, then flag.
+    const { draftBody, regenerated, flagged } = await enforceWordCap(first.draftBody, async () => {
+      const retry = await generate(`Your previous draft was ${countWords(first.draftBody)} words. Rewrite it under ${MAX_FIRST_TOUCH_WORDS} words.`);
+      return retry.draftBody;
+    });
+
+    // Stage 2 post-generation check — capability language absent from the corpus.
+    const ungrounded = findUngroundedClaims(draftBody, corpus);
+    if (ungrounded.length) {
+      console.log('[Draft] ungrounded claim suspected:', ungrounded.map((u) => u.ungrounded.join(', ')).join('; '));
+    }
+
+    return { draftSubject: first.draftSubject, draftBody, regenerated, flagged, ungrounded };
+  }
+
+  /**
+   * Full inbound-email pipeline: persist → classify + extract → (draft → approve).
    * The draft is written onto the inbound_message row; Nexus never sends it.
-   * Idempotent: a redelivered webhook reuses the existing row and its draft and
+   * Idempotent: a redelivered webhook reuses the stored classification/draft and
    * never mints a second approval task.
    */
   async processInboundEmail(payload) {
     const { persistInboundMessage } = await import('../skills/inboundEmail.js');
     const row = await persistInboundMessage(payload);
 
-    // Retry guard: if this message was already drafted, reuse it. Only ensure the
-    // approval task exists (the first attempt may have failed after drafting).
-    if (row?.draft_body) {
+    // Retry guard: if this message was already classified, reuse the stored result.
+    if (row?.classification) {
       let approvalId = row.approval_task_id || null;
-      if (!approvalId) {
-        approvalId = await this._ensureEmailApprovalTask(row, payload, row.draft_subject, row.draft_body);
+      if (row.draft_body && !approvalId) {
+        approvalId = await this._ensureEmailApprovalTask(row, payload, row.draft_subject, row.draft_body, row.classification, row.extracted);
       }
       return {
         id: row.id,
         approvalId,
-        needsReply: true,
+        needsReply: Boolean(row.draft_body),
         classification: row.classification || null,
+        extracted: row.extracted || null,
         draftSubject: row.draft_subject || null,
         draftBody: row.draft_body,
         deduped: true,
       };
     }
 
-    const { classification, draftSubject, draftBody } = await this.classifyAndDraftEmail(payload);
+    // Stage 1 — classify + extract.
+    const { category, extracted } = await this.classifyInboundEmail(payload);
 
     const db = getSupabase();
     if (db && row?.id) {
+      await db.from('inbound_message').update({ classification: category, extracted }).eq('id', row.id);
+    }
+
+    // client_enquiry, partner_approach and not_a_fit draft; everything else is stored classified.
+    if (!shouldDraft(category)) {
+      return {
+        id: row?.id || null,
+        approvalId: null,
+        needsReply: false,
+        classification: category,
+        extracted,
+        draftSubject: null,
+        draftBody: null,
+      };
+    }
+
+    // Stage 2 + 3 — grounded composition + fixed shape (a decline for not_a_fit).
+    const { draftSubject, draftBody: rawDraftBody } = await this.draftEmailReply(payload, extracted, category);
+    // System post-processing before storage: strip any leaked internal name and
+    // append the human signature (the model never writes a signature itself).
+    const draftBody = finalizeEmailDraft(rawDraftBody);
+
+    if (db && row?.id) {
       await db.from('inbound_message').update({
-        classification,
         draft_subject: draftSubject,
         draft_body:    draftBody,
         status:        draftBody ? 'draft' : 'received',
@@ -500,14 +562,15 @@ ${body}`;
 
     let approvalId = null;
     if (draftBody) {
-      approvalId = await this._ensureEmailApprovalTask(row, payload, draftSubject, draftBody);
+      approvalId = await this._ensureEmailApprovalTask(row, payload, draftSubject, draftBody, category, extracted);
     }
 
     return {
       id: row?.id || null,
       approvalId,
       needsReply: Boolean(draftBody),
-      classification,
+      classification: category,
+      extracted,
       draftSubject,
       draftBody,
     };
@@ -516,14 +579,24 @@ ${body}`;
   /**
    * Create the [APPROVAL] task for an email reply draft and backfill the row's
    * approval_task_id. Returns the approval task id (or null when not created).
+   * The approval card surfaces classification + extracted facts above the draft.
    */
-  async _ensureEmailApprovalTask(row, payload, draftSubject, draftBody) {
+  async _ensureEmailApprovalTask(row, payload, draftSubject, draftBody, classification, extracted) {
     const db = getSupabase();
     const subject = payload.subject || '(no subject)';
+    const e = extracted || {};
     const { approvalId } = await createApprovalRequest({
       approvalType: 'email_reply',
       subject:      `Email reply — ${String(subject).slice(0, 60)}`,
       detail: [
+        `Category: ${classification || '—'}`,
+        `Sender: ${e.senderName || '—'}`,
+        `Organisation: ${e.organisation || '—'}`,
+        `Stated need: ${e.statedNeed || '—'}`,
+        `Timeline: ${e.timelineSignal || '—'}`,
+        `Budget: ${e.budgetSignal || '—'}`,
+        `Referral: ${e.referralSource || '—'}`,
+        ``,
         `From: ${payload.from || '—'}`,
         `To: ${payload.to || '—'}`,
         `Subject: ${subject}`,
@@ -540,6 +613,8 @@ ${body}`;
         from:             payload.from || null,
         to:               payload.to || null,
         subject,
+        classification,
+        extracted:        e,
         draftSubject,
         draftBody,
       },

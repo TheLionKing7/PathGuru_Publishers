@@ -137,8 +137,18 @@ async function verifyInbound(rawBody, headers, hmacSecret, bearerSecret) {
   return safeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'signature mismatch' };
 }
 
+/* ── Make / outbound-sent: bearer token only (MAKE_INBOUND_TOKEN). There is no
+   HMAC fallback for a send confirmation — if the token is unset, fail closed. */
+async function verifyBearer(headers, bearerSecret) {
+  if (!bearerSecret) return { ok: false, why: 'MAKE_INBOUND_TOKEN not set' };
+  const auth = headers.get('authorization');
+  const m = auth ? auth.match(/^Bearer\s+(.+)$/i) : null;
+  if (!m?.[1]) return { ok: false, why: 'missing bearer token' };
+  return safeEqual(m[1].trim(), bearerSecret) ? { ok: true } : { ok: false, why: 'bearer token mismatch' };
+}
+
 /* ── Supabase: one INSERT, via the REST API ─────────────────────────────── */
-async function enqueue(env, row) {
+export async function enqueue(env, row) {
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/webhook_queue`, {
     method: 'POST',
     headers: {
@@ -240,6 +250,10 @@ export default {
       kind = 'inbound_email';
       verdict = await verifyInbound(rawBody, request.headers, env.INBOUND_WEBHOOK_SECRET, env.MAKE_INBOUND_TOKEN);
       try { dedupeKey = JSON.parse(rawBody).messageId || null; } catch { dedupeKey = null; }
+    } else if (pathname === '/webhooks/outbound-sent') {
+      kind = 'outbound_sent';
+      verdict = await verifyBearer(request.headers, env.MAKE_INBOUND_TOKEN);
+      try { dedupeKey = JSON.parse(rawBody).id || null; } catch { dedupeKey = null; }
     } else {
       return json({ error: 'Not found' }, 404);
     }

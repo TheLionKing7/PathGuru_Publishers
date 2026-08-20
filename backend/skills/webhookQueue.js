@@ -80,7 +80,7 @@ async function dispatchWebhook(row) {
     const payload = parseSlackPayload(rawBody, contentType);
     if (!payload || typeof payload !== 'object') throw new Error('slack payload could not be parsed');
     await handleSlackBlockAction(payload);
-    return;
+    return 'done';
   }
 
   if (row.kind === 'whatsapp') {
@@ -93,7 +93,7 @@ async function dispatchWebhook(row) {
       waId:        form.WaId || '',
       messageSid:  form.MessageSid || '',
     });
-    return;
+    return 'done';
   }
 
   if (row.kind === 'inbound_email') {
@@ -101,10 +101,55 @@ async function dispatchWebhook(row) {
     try { payload = JSON.parse(rawBody || '{}'); } catch { throw new Error('inbound_email payload could not be parsed'); }
     const { nexus } = await import('../agents/nexus.js');
     await nexus.processInboundEmail(payload);
-    return;
+    return 'done';
+  }
+
+  if (row.kind === 'outbound_sent') {
+    let payload;
+    try { payload = JSON.parse(rawBody || '{}'); } catch { throw new Error('outbound_sent payload could not be parsed'); }
+    return await handleOutboundSent(row, payload);
   }
 
   throw new Error(`Unknown webhook kind: ${row.kind}`);
+}
+
+/**
+ * outbound_sent — Make's "email actually sent" confirmation. Marks the matching
+ * inbound_message row sent. An orphaned confirmation (no matching row) fails the
+ * queue row permanently with an explanatory error instead of retrying forever.
+ * Returns 'done' or 'failed' (already handled); throws only on a real DB error.
+ */
+async function handleOutboundSent(row, payload) {
+  const db = getSupabase();
+  if (!db) throw new Error('Supabase not configured');
+
+  const id = payload.id;
+  if (!id) {
+    await db.from('webhook_queue')
+      .update({ status: 'failed', last_error: 'outbound_sent payload missing id', claimed_at: null, updated_at: new Date().toISOString() })
+      .eq('id', row.id);
+    return 'failed';
+  }
+
+  const { data, error } = await db.from('inbound_message')
+    .update({
+      sent_at:             new Date().toISOString(),
+      status:              'sent',
+      provider_message_id: payload.providerMessageId || null,
+    })
+    .eq('id', id)
+    .select('id');
+
+  if (error) throw error;
+
+  if (!data || data.length === 0) {
+    await db.from('webhook_queue')
+      .update({ status: 'failed', last_error: `inbound_message ${id} not found`, claimed_at: null, updated_at: new Date().toISOString() })
+      .eq('id', row.id);
+    return 'failed';
+  }
+
+  return 'done';
 }
 
 /**
@@ -130,7 +175,7 @@ export async function drainWebhookQueue() {
     drained: 0,
     succeeded: 0,
     failed: 0,
-    byKind: { slack: 0, whatsapp: 0, inbound_email: 0 },
+    byKind: { slack: 0, whatsapp: 0, inbound_email: 0, outbound_sent: 0 },
   };
 
   for (const row of rows) {
@@ -140,13 +185,18 @@ export async function drainWebhookQueue() {
     summary.drained++;
 
     try {
-      await dispatchWebhook(claimed);
-      const now = new Date().toISOString();
-      await db.from('webhook_queue')
-        .update({ status: 'done', processed_at: now, updated_at: now })
-        .eq('id', claimed.id);
-      summary.succeeded++;
-      summary.byKind[claimed.kind] = (summary.byKind[claimed.kind] || 0) + 1;
+      const outcome = await dispatchWebhook(claimed);
+      if (outcome === 'failed') {
+        // The handler already marked this row failed with an explanatory error.
+        summary.failed++;
+      } else {
+        const now = new Date().toISOString();
+        await db.from('webhook_queue')
+          .update({ status: 'done', processed_at: now, updated_at: now })
+          .eq('id', claimed.id);
+        summary.succeeded++;
+        summary.byKind[claimed.kind] = (summary.byKind[claimed.kind] || 0) + 1;
+      }
     } catch (e) {
       summary.failed++;
       const attempts = claimed.attempts || 1;
