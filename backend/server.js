@@ -2775,7 +2775,7 @@ const server = createServer(async (req, res) => {
   // HMAC. Signature binds "<timestamp>.<method>.<path>".
   if (req.method === 'GET' && path === '/api/outbound/approved') {
     try {
-      const { verifyOutboundAuth, listApprovedDrafts } = await import('./skills/inboundEmail.js');
+      const { verifyOutboundAuth, listApprovedDrafts, normaliseAddress } = await import('./skills/inboundEmail.js');
       if (!verifyOutboundAuth({
         timestamp: req.headers['x-timestamp'],
         signature: req.headers['x-signature'],
@@ -2793,6 +2793,8 @@ const server = createServer(async (req, res) => {
           threadId:     d.thread_id,    // original thread id → References
           from:         d.from_addr,
           to:           d.to_addr,
+          sendTo:       normaliseAddress(d.from_addr),   // reply recipient = original sender
+          sendFrom:     normaliseAddress(d.to_addr),     // mailbox we reply from
           subject:      d.subject,
           draftSubject: d.draft_subject,
           draftBody:    d.draft_body,

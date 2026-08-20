@@ -8,7 +8,7 @@
  * No framework, no dependency, exits non-zero on failure.
  */
 import { createHmac } from 'node:crypto';
-import { verifyOutboundAuth } from './inboundEmail.js';
+import { verifyOutboundAuth, normaliseAddress } from './inboundEmail.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { cond ? (pass++, console.log('  PASS', name)) : (fail++, console.log('  FAIL', name)); };
@@ -35,6 +35,19 @@ t('HMAC still accepted when token unset', verifyOutboundAuth({ authorization: nu
 console.log('— both outbound routes 401 without HMAC or bearer —');
 t('GET /api/outbound/approved rejected without auth', !verifyOutboundAuth({ authorization: null, timestamp: null, signature: null, method: 'GET', path: '/api/outbound/approved' }));
 t('POST /api/outbound/:id/sent rejected without auth', !verifyOutboundAuth({ authorization: null, timestamp: null, signature: null, method: 'POST', path: '/api/outbound/abc-123/sent' }));
+
+console.log('— address normalisation (sendTo / sendFrom) —');
+t('clean address passes through', normaliseAddress('enquiries@digitafusion.com') === 'enquiries@digitafusion.com');
+t('display-name wrapper unwrapped', normaliseAddress('Enquiries Desk <enquiries@digitafusion.com>') === 'enquiries@digitafusion.com');
+t('literal angle brackets unwrapped', normaliseAddress('<enquiries@digitafusion.com>') === 'enquiries@digitafusion.com');
+t('HTML entities decoded then unwrapped', normaliseAddress('&lt;enquiries@digitafusion.com&gt;') === 'enquiries@digitafusion.com');
+t('quot entities in display name', normaliseAddress('&quot;Enquiries&quot; &lt;enquiries@digitafusion.com&gt;') === 'enquiries@digitafusion.com');
+t('apos + amp entities in display name', normaliseAddress('O&#39;Brien &amp; Co <obrien@example.com>') === 'obrien@example.com');
+t('malformed string returns null', normaliseAddress('not-an-address') === null);
+t('empty angle brackets return null', normaliseAddress('<>') === null);
+t('blank returns null', normaliseAddress('') === null);
+t('null input returns null', normaliseAddress(null) === null);
+t('undefined input returns null', normaliseAddress(undefined) === null);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

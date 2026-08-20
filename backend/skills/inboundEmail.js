@@ -83,6 +83,34 @@ export function verifyOutboundAuth({ timestamp, signature, method, path, authori
   return verifyBearerToken(authorization);
 }
 
+// ── Address normalisation ───────────────────────────────────────────────────
+
+const ADDRESS_ENTITY_RE = /&lt;|&gt;|&amp;|&quot;|&#39;/g;
+const ADDRESS_ENTITY_MAP = {
+  '&lt;':   '<',
+  '&gt;':   '>',
+  '&amp;':  '&',
+  '&quot;': '"',
+  '&#39;':  "'",
+};
+
+// Basic shape only — no whitespace, no angle brackets, an @ and a dotted domain.
+const ADDRESS_RE = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]{2,}$/;
+
+/**
+ * Normalise an inbound address for outbound use. Decodes the HTML entities we
+ * see in the table (&lt; &gt; &amp; &quot; &#39;), extracts the address from
+ * inside angle brackets when present, trims, and returns null when the result
+ * is not a plausible address. Read-only: never mutates the stored row.
+ */
+export function normaliseAddress(raw) {
+  if (raw == null) return null;
+  const decoded = String(raw).replace(ADDRESS_ENTITY_RE, (m) => ADDRESS_ENTITY_MAP[m]);
+  const inside = decoded.match(/<([^<>]*)>/);
+  const candidate = (inside ? inside[1] : decoded).trim();
+  return ADDRESS_RE.test(candidate) ? candidate : null;
+}
+
 // ── Persistence ─────────────────────────────────────────────────────────────
 
 export async function persistInboundMessage(payload) {
