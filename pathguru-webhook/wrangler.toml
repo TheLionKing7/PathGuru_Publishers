@@ -29,7 +29,7 @@ persist = true
 head_sampling_rate = 1
 
 [vars]
-RENDER_ORIGIN = "https://pathguru-publishers-api.onrender.com"
+RENDER_ORIGIN = "https://pathguru-publishers.onrender.com"
 SUPABASE_URL  = "https://vyljyzaesbauuorsonpl.supabase.co"
 
 # Optional. Set only if Twilio signature checks fail because the URL Twilio
