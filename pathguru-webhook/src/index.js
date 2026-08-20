@@ -169,12 +169,16 @@ function wakeBackend(env, ctx) {
       try {
         const ts = Math.floor(Date.now() / 1000);
         const sig = toHex(await hmac('SHA-256', env.INBOUND_WEBHOOK_SECRET, `${ts}.POST./api/queue/drain`));
-        await fetch(url, {
+        const r = await fetch(url, {
           method: 'POST',
           headers: { 'x-timestamp': String(ts), 'x-signature': sig, 'Content-Type': 'application/json' },
           body: '{}',
           signal: AbortSignal.timeout(120_000),
         });
+        console.log('wake', r.status, url);
+        if (!r.ok) {
+          console.log('wake body:', (await r.text()).slice(0, 200));
+        }
       } catch (e) {
         // Nothing to do here. The cron trigger below is the safety net, so a
         // failed wake delays the queue rather than losing it.

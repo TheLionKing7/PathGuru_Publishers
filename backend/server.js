@@ -2829,20 +2829,45 @@ const server = createServer(async (req, res) => {
   // ── POST /api/queue/drain — HMAC-authenticated webhook queue drain ──────────
   // Public path (no operator gate) but authenticated by HMAC-SHA256 over
   // "<timestamp>.POST./api/queue/drain" (x-signature / x-timestamp, ≤5 min),
-  // same scheme as the outbound Make routes.
+  // byte-for-byte identical to wakeBackend() in pathguru-webhook/src/index.js.
+  // Fails closed: a missing secret is 503, never an unauthenticated drain.
   if (req.method === 'POST' && path === '/api/queue/drain') {
+    const secret = (process.env.INBOUND_WEBHOOK_SECRET || '').trim();
+    if (!secret) {
+      console.error('[Queue] drain rejected: INBOUND_WEBHOOK_SECRET not set');
+      err(res, 'Queue drain unavailable: INBOUND_WEBHOOK_SECRET not set', 503);
+      return;
+    }
+
+    const timestamp = req.headers['x-timestamp'];
+    const signature = req.headers['x-signature'];
+    if (!timestamp || !signature) {
+      console.error('[Queue] drain rejected: missing x-timestamp/x-signature');
+      err(res, 'Invalid signature or stale timestamp', 401);
+      return;
+    }
+
+    const ts = Number(timestamp);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+      console.error('[Queue] drain rejected: stale timestamp');
+      err(res, 'Invalid signature or stale timestamp', 401);
+      return;
+    }
+
+    const expected = createHmac('sha256', secret)
+      .update(`${timestamp}.POST./api/queue/drain`)
+      .digest('hex');
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(String(signature), 'utf8');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      console.error('[Queue] drain rejected: signature mismatch');
+      err(res, 'Invalid signature or stale timestamp', 401);
+      return;
+    }
+
+    console.log('[Queue] drain authorised');
     try {
-      await readRawBody(req); // drain the request stream (raw, for signature context)
-      const { verifyOutboundSignature } = await import('./skills/inboundEmail.js');
-      if (!verifyOutboundSignature({
-        timestamp: req.headers['x-timestamp'],
-        signature: req.headers['x-signature'],
-        method: 'POST',
-        path,
-      })) {
-        err(res, 'Invalid signature or stale timestamp', 401);
-        return;
-      }
+      await readRawBody(req); // drain the request stream (unused by this route)
       const { drainWebhookQueue } = await import('./skills/webhookQueue.js');
       json(res, await drainWebhookQueue());
     } catch (e) {
