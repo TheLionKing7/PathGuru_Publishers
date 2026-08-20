@@ -22,14 +22,37 @@ export async function cancelStuckTasks({ olderThanMinutes = 30, dryRun = false }
 
   const cancelled = [];
   for (const t of stuck || []) {
+    const reason = `stuck in ${t.status} for >${olderThanMinutes}m`;
     if (!dryRun) {
       await db.from('tasks').update({
         status:     'cancelled',
         updated_at: new Date().toISOString(),
-        error:      `Auto-cancelled: stuck in ${t.status} for >${olderThanMinutes}m (task hygiene)`,
+        error:      `Auto-cancelled: ${reason} (task hygiene)`,
       }).eq('id', t.id);
     }
-    cancelled.push({ id: t.id, title: t.title, agent_id: t.agent_id });
+    cancelled.push({ id: t.id, title: t.title, agent_id: t.agent_id, status: t.status, reason });
+  }
+
+  // A hygiene sweep that quietly kills work is indistinguishable from work that
+  // was never done — it hid six blog articles for weeks. Post every cancellation
+  // to ops so a kill is always attributable to a task and a reason.
+  if (!dryRun && cancelled.length) {
+    try {
+      const { postSlackMessage, slackChannelFor, recordNotificationAttempt } = await import('./slackNotify.js');
+      const channel = slackChannelFor('ops');
+      if (channel) {
+        const lines = cancelled.map((c) => `• \`${c.title}\` (${c.agent_id || 'unknown'}) — ${c.reason}`);
+        const res = await postSlackMessage({
+          channel,
+          text: `:broom: *Task hygiene auto-cancelled ${cancelled.length} stuck task(s)*\n${lines.join('\n')}`,
+        });
+        await recordNotificationAttempt({ db, channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
+      } else {
+        console.warn('[TaskHygiene] cancelled tasks but SLACK_OPS_CHANNEL unset — no notice posted');
+      }
+    } catch (e) {
+      console.warn('[TaskHygiene] Slack ops notice failed:', e.message);
+    }
   }
 
   return { cancelled };

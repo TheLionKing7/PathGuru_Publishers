@@ -11,6 +11,13 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { getSupabase } from '../supabaseClient.js';
+import { isPaused } from './systemFlags.js';
+import {
+  MAX_SENDS_PER_RECIPIENT_PER_DAY,
+  countRecipientSends,
+  recordSend,
+  blockOutboundDraft,
+} from './outboundRate.js';
 
 function env(name) {
   return (process.env[name] || '').trim();
@@ -161,6 +168,13 @@ export async function persistInboundMessage(payload) {
 export async function listApprovedDrafts(db = getSupabase()) {
   if (!db) return { drafts: [] };
 
+  // Global pause — the approved-draft hand-off to Make IS the outbound email
+  // send. When paused, hand out nothing so no email can leave the estate.
+  if (await isPaused({ db })) {
+    console.log('[Paused] outbound email send suppressed');
+    return { drafts: [], paused: true };
+  }
+
   // Park rows that exhausted their send attempts without a confirmation. Three
   // unconfirmed sends is a broken pipeline, not something to keep retrying at a
   // stranger's inbox.
@@ -181,7 +195,46 @@ export async function listApprovedDrafts(db = getSupabase()) {
   // confirmation (or before the 10-minute claim window lapses) gets nothing.
   const { data, error } = await db.rpc('claim_outbound_drafts');
   if (error) return { drafts: [], error: error.message };
-  return { drafts: data || [] };
+
+  // Hard rate cap: at most one email per recipient per 24h. Refuse (and mark
+  // send_blocked) any claimed draft whose recipient already has a recent send,
+  // or was already handed out earlier in this same run.
+  const claimed  = data || [];
+  const drafts   = [];
+  const handedOut = new Set();
+  let blocked    = 0;
+
+  for (const d of claimed) {
+    const toAddr = (normaliseAddress(d.from_addr) || '').toLowerCase() || null;
+
+    if (!toAddr) {
+      await blockOutboundDraft(db, d, { reason: 'no parseable recipient' });
+      blocked++;
+      continue;
+    }
+
+    let recent;
+    try {
+      recent = await countRecipientSends(db, toAddr);
+    } catch (e) {
+      // Fail closed — a hard cap you cannot verify must refuse the send.
+      console.warn('[Outbound] rate-cap check failed, refusing send:', e.message);
+      await blockOutboundDraft(db, d, { toAddr, reason: 'rate check failed' });
+      blocked++;
+      continue;
+    }
+
+    if (recent >= MAX_SENDS_PER_RECIPIENT_PER_DAY || handedOut.has(toAddr)) {
+      await blockOutboundDraft(db, d, { toAddr, reason: 'rate cap' });
+      blocked++;
+      continue;
+    }
+
+    handedOut.add(toAddr);
+    drafts.push(d);
+  }
+
+  return { drafts, blocked };
 }
 
 /** Mark an approved draft as sent, recording the provider's message id. */
@@ -202,5 +255,14 @@ export async function markInboundSent(id, providerMessageId) {
     .single();
 
   if (error) return { error: error.message };
+
+  // Record the confirmed send so the rate cap sees it on the next hand-out.
+  const toAddr = (normaliseAddress(data?.from_addr) || '').toLowerCase() || null;
+  if (toAddr) {
+    await recordSend(db, { toAddr, inboundMessageId: id }).catch((e) => {
+      console.warn('[Outbound] failed to record send:', e.message);
+    });
+  }
+
   return { ok: true, message: data };
 }

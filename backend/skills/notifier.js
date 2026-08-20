@@ -32,6 +32,14 @@
  */
 
 import { getSupabase } from '../supabaseClient.js';
+import { isPaused } from './systemFlags.js';
+import {
+  isSlackConfigured,
+  slackChannelFor,
+  postSlackMessage,
+  recordNotificationAttempt,
+  getMissingSlackVars,
+} from './slackNotify.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,7 +75,11 @@ async function sendWhatsAppTwilio(title, body, recipients) {
   for (const to of recipients) {
     const toWA = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
     try {
-      const params = new URLSearchParams({ From: from, To: toWA, Body: message });
+      // Twilio posts delivery status (delivered/undelivered/failed + ErrorCode)
+      // here. The Worker verifies + queues it so the backend can record the
+      // real outcome instead of assuming a returned SID means delivered.
+      const statusCallback = env('TWILIO_STATUS_CALLBACK_URL') || 'https://webhooks.digitafusion.com/webhooks/whatsapp-status';
+      const params = new URLSearchParams({ From: from, To: toWA, Body: message, StatusCallback: statusCallback });
       const res    = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
         method:  'POST',
         headers: {
@@ -152,6 +164,11 @@ async function sendWhatsAppMeta(title, body, recipients) {
 // ── WhatsApp dispatcher (tries Twilio first, then Meta) ───────────────────────
 
 async function sendWhatsApp(title, body) {
+  if (await isPaused()) {
+    console.log('[Paused] WhatsApp send suppressed');
+    return { skipped: true, reason: 'paused' };
+  }
+
   // Accept WHATSAPP_TO or OWNER_PHONE — whichever is set (WHATSAPP_TO takes priority)
   const toRaw = env('WHATSAPP_TO') || env('OWNER_PHONE');
   if (!toRaw) {
@@ -171,6 +188,78 @@ async function sendWhatsApp(title, body) {
   }
 
   return { results: result };
+}
+
+// ── High-priority definition ─────────────────────────────────────────────────
+const HIGH_SEVERITIES = new Set(['warning', 'critical']);
+function isHighPriority(severity) {
+  return HIGH_SEVERITIES.has(severity);
+}
+
+/**
+ * Send via WhatsApp and record every attempt in notification_attempt. Returns
+ * the raw WhatsApp result plus an `ok` roll-up and the `attempts` it recorded.
+ */
+export async function sendWhatsAppRecorded(title, body, db = getSupabase()) {
+  const wa = await sendWhatsApp(title, body);
+  const attempts = [];
+
+  if (wa.skipped) {
+    const target = env('WHATSAPP_TO') || env('OWNER_PHONE') || '';
+    await recordNotificationAttempt({ db, channel: 'whatsapp', target, ok: false, error: wa.reason || 'skipped' });
+    attempts.push({ channel: 'whatsapp', target, ok: false, error: wa.reason || 'skipped' });
+    return { ...wa, ok: false, attempts };
+  }
+
+  let anyOk = false;
+  for (const r of (wa.results || [])) {
+    const ok = !!r.sent;
+    if (ok) anyOk = true;
+    await recordNotificationAttempt({ db, channel: 'whatsapp', target: r.to, ok, providerId: r.sid || r.id || null, error: r.error || null });
+    attempts.push({ channel: 'whatsapp', target: r.to, ok, providerId: r.sid || r.id || null, error: r.error || null });
+  }
+  return { ...wa, ok: anyOk, attempts };
+}
+
+/**
+ * Deliver an owner notification: Slack first, always. WhatsApp is a fallback
+ * used only when the Slack post fails AND the item is high-priority. Every
+ * attempt — including "Slack not configured" — is recorded, so a skipped
+ * notification never disappears into the void.
+ *
+ * @param {object} opts
+ * @param {string} opts.title
+ * @param {string} opts.body
+ * @param {'info'|'warning'|'critical'} [opts.severity]
+ * @param {'approval'|'ops'} [opts.kind]
+ * @returns {Promise<{ ok: boolean, attempts: Array }>}
+ */
+export async function deliverOwnerNotification({ title, body, severity = 'info', kind = 'ops', db = getSupabase() }) {
+  const text = `*${title}*\n${body}`;
+  const attempts = [];
+
+  // Slack first, always.
+  let slackOk = false;
+  if (isSlackConfigured()) {
+    const channel = slackChannelFor(kind);
+    const res = await postSlackMessage({ channel, text });
+    await recordNotificationAttempt({ db, channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
+    attempts.push({ channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
+    slackOk = res.ok;
+  } else {
+    const error = `Slack not configured (${getMissingSlackVars().join(', ')} unset)`;
+    await recordNotificationAttempt({ db, channel: 'slack', target: slackChannelFor(kind) || '', ok: false, error });
+    attempts.push({ channel: 'slack', target: slackChannelFor(kind) || '', ok: false, error });
+  }
+
+  if (slackOk) return { ok: true, attempts };
+
+  // WhatsApp fallback — only when Slack failed, and only for high-priority items.
+  if (!isHighPriority(severity)) return { ok: false, attempts };
+
+  const wa = await sendWhatsAppRecorded(title, body, db);
+  attempts.push(...(wa.attempts || []));
+  return { ok: !!wa.ok, attempts };
 }
 
 // ── Main dispatch loop ────────────────────────────────────────────────────────
@@ -211,29 +300,14 @@ export async function dispatchPendingNotifications(limit = 50) {
     let dispatch    = {};
 
     try {
-      const needsPush = channel === 'push'      || channel === 'all';
-      const needsWA   = channel === 'whatsapp'  || channel === 'all';
-
-      if (needsPush) {
-        dispatch.push = await sendPush(title, body);
-        if (dispatch.push?.error) finalStatus = 'partial';
+      if (channel === 'dashboard') {
+        // Dashboard-only — no external delivery; the frontend polls the table.
+        finalStatus = 'sent';
+      } else {
+        const delivery = await deliverOwnerNotification({ title, body, severity });
+        dispatch = { attempts: delivery.attempts };
+        finalStatus = delivery.ok ? 'sent' : 'error';
       }
-
-      if (needsWA) {
-        dispatch.whatsapp = await sendWhatsApp(title, body);
-        // 429 rate-limited — mark permanently so it is never retried
-        if (dispatch.whatsapp?.results?.some(r => r.rateLimited)) {
-          finalStatus = 'rate_limited';
-        } else if (dispatch.whatsapp?.error) {
-          finalStatus = 'partial';
-        }
-      }
-
-      // dashboard channel — just mark sent (frontend polls the table)
-      if (channel === 'dashboard') finalStatus = 'sent';
-
-      if (dispatch.push?.skipped && dispatch.whatsapp?.skipped) finalStatus = 'skipped';
-
       dispatched++;
     } catch (e) {
       console.error(`[Notifier] Error dispatching notification ${id}:`, e.message);
@@ -243,7 +317,7 @@ export async function dispatchPendingNotifications(limit = 50) {
 
     // Update status in Supabase
     await db.from('notifications').update({
-      status:      finalStatus,
+      status:        finalStatus,
       dispatched_at: new Date().toISOString(),
       dispatch_log:  dispatch,
     }).eq('id', id);
@@ -255,14 +329,13 @@ export async function dispatchPendingNotifications(limit = 50) {
 
 /**
  * Send a one-off notification immediately without going through the table.
- * Useful for urgent alerts that can't wait for the next sweep.
+ * Slack first, always; WhatsApp only as a fallback for high-priority items.
+ * @param {string} title
+ * @param {string} body
+ * @param {'push'|'whatsapp'|'dashboard'|'all'} [channel] — retained for call-site
+ *   compatibility; the delivery order is decided here, not by the caller.
+ * @param {'info'|'warning'|'critical'} [severity]
  */
-export async function sendImmediate(title, body, channel = 'push') {
-  const needsPush = channel === 'push'     || channel === 'all';
-  const needsWA   = channel === 'whatsapp' || channel === 'all';
-
-  const result = {};
-  if (needsPush) result.push      = await sendPush(title, body);
-  if (needsWA)   result.whatsapp  = await sendWhatsApp(title, body);
-  return result;
+export async function sendImmediate(title, body, channel = 'push', severity = 'info') {
+  return deliverOwnerNotification({ title, body, severity, kind: 'ops' });
 }

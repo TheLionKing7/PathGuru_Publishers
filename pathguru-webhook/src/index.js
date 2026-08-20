@@ -98,13 +98,13 @@ async function verifySlack(rawBody, headers, secret) {
    is that URL — but if you ever put the Worker behind a redirect or change the
    route, the string Twilio signed and the string we rebuild diverge and every
    message 403s. TWILIO_WEBHOOK_URL overrides it explicitly for that case. */
-async function verifyTwilio(rawBody, request, env) {
+async function verifyTwilio(rawBody, request, env, urlOverride) {
   const token = env.TWILIO_AUTH_TOKEN;
   if (!token) return { ok: false, why: 'TWILIO_AUTH_TOKEN not set' };
   const sig = request.headers.get('x-twilio-signature');
   if (!sig) return { ok: false, why: 'missing X-Twilio-Signature' };
 
-  const url = env.TWILIO_WEBHOOK_URL || request.url;
+  const url = urlOverride || env.TWILIO_WEBHOOK_URL || request.url;
   const params = new URLSearchParams(rawBody);
   const keys = [...params.keys()].sort();
   let payload = url;
@@ -232,22 +232,43 @@ export default {
 
     let kind, verdict, dedupeKey = null;
 
-    if (pathname === '/webhooks/slack') {
+    if (pathname === '/webhooks/slack-events') {
       kind = 'slack';
       verdict = await verifySlack(rawBody, request.headers, env.SLACK_SIGNING_SECRET);
 
-      /* Slack's URL-verification handshake must be answered inline — it is not
-         work to be queued, and Slack refuses to save the URL without it. */
+      /* Events API posts JSON. Branch on content type before parsing: the
+         url_verification handshake is answered inline; real events queue with
+         their event id as the dedupe key so a Slack retry becomes a 409. */
       if (verdict.ok) {
-        try {
-          const probe = JSON.parse(rawBody);
-          if (probe.type === 'url_verification') return json({ challenge: probe.challenge });
-        } catch { /* interactivity payloads are urlencoded; fall through */ }
+        const ct = (request.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+          try {
+            const probe = JSON.parse(rawBody);
+            if (probe.type === 'url_verification') return json({ challenge: probe.challenge });
+            dedupeKey = probe.event_id || (probe.event && (probe.event.ts || probe.event.event_ts)) || null;
+          } catch { /* not json after all — queue without a dedupe key */ }
+        }
       }
+    } else if (pathname === '/webhooks/slack') {
+      // Interactivity + slash commands. block_actions arrive form-encoded as
+      // `payload=<json>`; slash commands as `command=/name`. Queued raw — the
+      // backend branches on content type before parsing.
+      kind = 'slack';
+      verdict = await verifySlack(rawBody, request.headers, env.SLACK_SIGNING_SECRET);
     } else if (pathname === '/webhooks/whatsapp') {
       kind = 'whatsapp';
       verdict = await verifyTwilio(rawBody, request, env);
       dedupeKey = new URLSearchParams(rawBody).get('MessageSid');
+    } else if (pathname === '/webhooks/whatsapp-status') {
+      kind = 'whatsapp_status';
+      // Status callbacks are signed against their own URL; the inbound
+      // TWILIO_WEBHOOK_URL override must not be applied to this route.
+      verdict = await verifyTwilio(rawBody, request, env, request.url);
+      const p = new URLSearchParams(rawBody);
+      const sid = p.get('MessageSid') || p.get('SmsSid') || '';
+      // Dedupe per (message, status) so a retried callback is a 409, but each
+      // distinct status transition (sent → delivered → failed) still queues.
+      dedupeKey = sid ? `${sid}:${p.get('MessageStatus') || ''}` : null;
     } else if (pathname === '/webhooks/inbound-email') {
       kind = 'inbound_email';
       verdict = await verifyInbound(rawBody, request.headers, env.INBOUND_WEBHOOK_SECRET, env.MAKE_WEBHOOK_TOKEN ?? env.MAKE_INBOUND_TOKEN);
@@ -286,11 +307,25 @@ export default {
 
     wakeBackend(env, ctx);
 
-    /* Slack gets a visible, honest interim state. `replace_original` swaps the
-       card immediately so a tap is never silent; the backend replaces it again
-       with the real outcome once it has actually decided. Saying "Approved"
-       here would be a lie — nothing has been approved yet. */
+    /* Events API wants a plain 2xx — Slack retries anything else. No interim
+       message: an app_mention or DM is not an interactive card. */
+    if (pathname === '/webhooks/slack-events') {
+      return new Response('', { status: 200 });
+    }
+
+    /* Interactivity + slash commands get a visible, honest interim state.
+       view_submission (modal submit) needs a modal ack, not a message card. */
     if (kind === 'slack') {
+      const ct = (request.headers.get('content-type') || '').toLowerCase();
+      if (ct.includes('application/x-www-form-urlencoded')) {
+        const field = new URLSearchParams(rawBody).get('payload');
+        if (field) {
+          try {
+            const p = JSON.parse(field);
+            if (p.type === 'view_submission') return json({ response_action: 'clear' });
+          } catch { /* not json */ }
+        }
+      }
       return json({
         response_type: 'ephemeral',
         replace_original: false,
@@ -299,15 +334,51 @@ export default {
     }
 
     // Twilio wants an empty 200 or TwiML; anything else appears as an error.
-    if (kind === 'whatsapp') return new Response('', { status: 200 });
+    if (kind === 'whatsapp' || kind === 'whatsapp_status') return new Response('', { status: 200 });
 
     return json({ ok: true, queued: true, duplicate: Boolean(stored.duplicate) });
   },
 
-  /* Safety net. If the wake call failed — Render mid-deploy, network blip — the
-     queue would sit until the next webhook. Five minutes is the longest anything
-     should wait. Costs nothing on the free plan. */
+  // Scheduled triggers. wrangler.toml declares three crons; `event.cron` says
+  // which one fired:
+  //   "*/5 * * * *"  → wake the backend (queue-drain safety net)
+  //   "0 6 * * *"    → GET /api/cron/morning-digest
+  //   "0 4 * * *"    → GET /api/cron/tasks-purge
+  // The two daily jobs carry the shared CRON_SECRET so Render's /api/cron/* auth
+  // accepts them, and each logs its response status — a silent cron is how the
+  // drain hid for a week.
   async scheduled(event, env, ctx) {
-    wakeBackend(env, ctx);
+    if (event.cron === '*/5 * * * *') {
+      wakeBackend(env, ctx);
+      return;
+    }
+
+    const job = event.cron === '0 6 * * *' ? '/api/cron/morning-digest'
+      : event.cron === '0 4 * * *' ? '/api/cron/tasks-purge'
+      : null;
+
+    if (!job) {
+      console.log('scheduled: unknown cron pattern', event.cron);
+      return;
+    }
+
+    if (!env.RENDER_ORIGIN) return;
+    const url = `${env.RENDER_ORIGIN.replace(/\/$/, '')}${job}`;
+
+    ctx.waitUntil(
+      (async () => {
+        try {
+          const r = await fetch(url, {
+            method: 'GET',
+            headers: { Authorization: `Bearer ${env.CRON_SECRET}` },
+            signal: AbortSignal.timeout(120_000),
+          });
+          console.log('cron', job, r.status);
+          if (!r.ok) console.log('cron body:', (await r.text()).slice(0, 200));
+        } catch (e) {
+          console.log('cron failed:', job, e.name);
+        }
+      })(),
+    );
   },
 };

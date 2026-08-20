@@ -26,6 +26,7 @@ import { resolveProvider, resolveEditorialProvider, callAiProvider } from './aiP
 import { synthesizer } from './agents/synthesizer.js';
 import { injectAdvocateIntoBlogPrompt, buildContentAdvocateSystemBlock } from './skills/contentAdvocate.js';
 import { extractPostBody } from './lib/extractPostBody.js';
+import { isPaused } from './skills/systemFlags.js';
 
 /** Default byline for DigiFusion blog posts — founder voice, not system accounts. */
 export const DEFAULT_BLOG_AUTHOR = 'Boroji Adebayo-Hopewell, Founder';
@@ -560,17 +561,22 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
   // 6. Publish to platform(s)
   const publishResults = [];
   const platforms = input.platforms || [];
+  const paused = await isPaused();
 
-  for (const platform of platforms) {
-    try {
-      let result;
-      if (platform.type === 'wordpress')   result = await publishToWordPress(post, platform, featuredImageUrl);
-      else if (platform.type === 'ghost')       result = await publishToGhost(post, platform, featuredImageUrl);
-      else if (platform.type === 'webflow')     result = await publishToWebflow(post, platform, featuredImageUrl);
-      else if (platform.type === 'digifusion')  result = await publishToDigiFusion(post, platform, bodyHtml);
-      if (result) publishResults.push(result);
-    } catch (err) {
-      publishResults.push({ platform: platform.type, error: err.message });
+  if (paused && platforms.length) {
+    console.log('[Paused] blog publish suppressed');
+  } else {
+    for (const platform of platforms) {
+      try {
+        let result;
+        if (platform.type === 'wordpress')   result = await publishToWordPress(post, platform, featuredImageUrl);
+        else if (platform.type === 'ghost')       result = await publishToGhost(post, platform, featuredImageUrl);
+        else if (platform.type === 'webflow')     result = await publishToWebflow(post, platform, featuredImageUrl);
+        else if (platform.type === 'digifusion')  result = await publishToDigiFusion(post, platform, bodyHtml);
+        if (result) publishResults.push(result);
+      } catch (err) {
+        publishResults.push({ platform: platform.type, error: err.message });
+      }
     }
   }
 
@@ -614,6 +620,7 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
     html,
     dbResult:      dbResult?.data || null,
     publishResults,
+    paused,
     persona:       personaBylineMeta(persona),
     seo: {
       title:           post.title,
@@ -635,6 +642,11 @@ SEO keyword: ${input.seoKeyword || input.topic}`;
    Does NOT re-run the AI.
 ══════════════════════════════════════════════ */
 export async function publishBlogPost({ post, html, platforms, postId, featuredImageUrl }) {
+  if (await isPaused()) {
+    console.log('[Paused] blog publish suppressed');
+    return { publishResults: [], paused: true };
+  }
+
   const publishResults = [];
 
   for (const platform of (platforms || [])) {

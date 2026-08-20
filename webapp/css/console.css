@@ -211,7 +211,16 @@
 .cx-btn-primary { background:var(--gold,#c9a84c); border-color:var(--gold,#c9a84c);
                   color:var(--bg,#0a0e17); font-weight:600; }
 .cx-btn-primary:hover { background:var(--gold-dim,#a88932); border-color:var(--gold-dim,#a88932); }
+.cx-btn-sm { padding:4px 9px; font-size:11px; }
+/* Destructive actions reuse the red treatment style.css already defines for
+   .btn-danger, restated on the console's own button base so a delete reads as
+   a delete without inventing a new colour. */
+.cx-btn-danger { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:var(--red,#ef4444); }
+.cx-btn-danger:hover { background:rgba(239,68,68,.2); border-color:var(--red,#ef4444); }
 .cx-chip { font-size:11px; color:var(--text-muted,#4d6280); padding:4px 0; }
+.cx-check { display:inline-flex; align-items:center; gap:6px; font-size:12px;
+            color:var(--text-secondary,#8fa3c0); cursor:pointer; white-space:nowrap; }
+.cx-check input { accent-color:var(--gold,#c9a84c); cursor:pointer; width:auto; }
 
 /* ── Register table ──────────────────────────────────────────────────────── */
 .cx-table { width:100%; border-collapse:collapse; font-size:12.5px; }
@@ -224,6 +233,8 @@
 .cx-table th[data-sort] { cursor:pointer; user-select:none; }
 .cx-table th[data-sort]:hover { color:var(--text-primary,#f0f4ff); }
 .cx-table th[aria-sort] { color:var(--gold,#c9a84c); }
+.cx-th-actions { width:1%; text-align:right; }
+.cx-actions { display:inline-flex; gap:6px; justify-content:flex-end; white-space:nowrap; }
 .cx-table td { padding:10px 11px; border-bottom:1px solid var(--border,#263047);
                color:var(--text-primary,#f0f4ff); vertical-align:middle; }
 .cx-table tbody tr[data-token] { cursor:pointer; }
@@ -265,6 +276,8 @@
            font-size:9.5px; letter-spacing:.06em; text-transform:uppercase; font-weight:600; }
 .cx-flag-replied { background:rgba(43,179,163,.20); color:#9fded4; }
 .cx-flag-hot     { background:rgba(250,178,25,.16); color:var(--cx-note); }
+.cx-flag-test    { background:rgba(250,178,25,.16); color:var(--cx-note); }
+.cx-flag-deleted { background:rgba(239,68,68,.16);  color:var(--red,#ef4444); }
 
 /* ── Row detail ──────────────────────────────────────────────────────────── */
 .cx-detail td { background:var(--bg,#0a0e17); padding:0; }

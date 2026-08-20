@@ -107,6 +107,17 @@ services:
         sync: false
 
       # ── Notifications ─────────────────────────────
+      # Slack is the primary approval + conversation surface. All four are
+      # required; a missing var is logged at boot ([Slack] DISABLED) and the
+      # health endpoint reports slackConfigured:false. Set in the dashboard.
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_APPROVAL_CHANNEL
+        sync: false
+      - key: SLACK_OPS_CHANNEL
+        sync: false
       - key: ONESIGNAL_APP_ID
         sync: false
       - key: ONESIGNAL_API_KEY
@@ -118,6 +129,8 @@ services:
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_WHATSAPP_FROM
+        sync: false
+      - key: TWILIO_STATUS_CALLBACK_URL
         sync: false
       - key: META_WHATSAPP_TOKEN
         sync: false

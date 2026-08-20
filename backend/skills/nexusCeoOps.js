@@ -200,36 +200,9 @@ export async function checkContentCadence(nexusAgent) {
     return { action: 'none', reason: 'Content already queued or awaiting approval', snap };
   }
 
-  const sectors = ['sme', 'automation', 'business_development', 'digital_media'];
-  const sector  = sectors[Math.floor(Date.now() / 86400000) % sectors.length];
-  const prompt  = `You are Nexus CEO. Propose ONE blog topic for DigiFusion (sector: ${sector}) aligned with C2C Pipeline and firm IP. African business context. Return JSON only: { "topic": "...", "angle": "...", "sector": "..." }`;
-
-  let topic, angle;
-  try {
-    const raw = await nexusAgent.runLLM(prompt, { knowledgeQuery: 'content strategy C2C' });
-    const m = raw.match(/\{[\s\S]*\}/);
-    const parsed = m ? JSON.parse(m[0]) : {};
-    topic = parsed.topic || `How ${sector} leaders use AI automation without losing control`;
-    angle = parsed.angle || 'Engagement Model Phase 01 diagnostic angle';
-  } catch {
-    topic = 'Why African SMEs stall at manual ops — and the 90-day fix';
-    angle = 'AVE Diagnose phase + cost of inaction';
-  }
-
-  const research = await nexusAgent.dispatchResearch({ topic, forAgent: 'aether', depth: 'standard' });
-  const orch = await nexusAgent.orchestrate(topic, {
-    researchBrief: research?.brief || '',
-    nextStep:      'blog',
-    priority:      3,
-  });
-
-  return {
-    action:     orch.type === 'pending_boss_approval' ? 'approval_sent' : 'failed',
-    topic,
-    angle,
-    approvalId: orch.approvalId,
-    snap,
-  };
+  // Autonomous topic generation is retired. No agent invents its own subject —
+  // content is now commissioned by a human (see /api/content/commission).
+  return { action: 'none', reason: 'content is now commissioned, not scheduled — see /api/content/commission', snap };
 }
 
 /** Sync CEO dashboard row to Notion */

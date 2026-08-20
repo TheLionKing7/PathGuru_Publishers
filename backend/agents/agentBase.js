@@ -27,6 +27,7 @@ import { writeTrace }    from '../harness/trace.js';
 import { hashContent }   from '../harness/trace.js';
 import { assertChainLength, assertNonEmpty, MAX_UNVERIFIED_STEPS } from '../harness/verify.js';
 import { consumeBudget, withBudget, BudgetExceededError } from '../harness/budget.js';
+import { isPaused } from '../skills/systemFlags.js';
 
 // Default model follows AI_PROVIDER (e.g. deepseek) when set
 const DEFAULT_MODEL = process.env.SYNTHESIZER_MODEL
@@ -67,6 +68,11 @@ export class AgentBase {
    * Create a new task in Supabase and return its ID.
    */
   async createTask({ title, description, type = 'general', priority = 3, input = {}, parentTaskId = null, createdBy = null }) {
+    if (await isPaused()) {
+      console.log(`[Paused] autonomous task creation suppressed (${this.displayName} → "${title}")`);
+      return null;
+    }
+
     const db = getSupabase();
     if (!db) return null;
 
@@ -398,6 +404,11 @@ Return ONLY the JSON array, no other text.`;
    * The target agent picks it up on its next poll or API call.
    */
   async delegate({ toAgent, title, description, type = 'general', priority = 3, input = {}, parentTaskId = null }) {
+    if (await isPaused()) {
+      console.log(`[Paused] autonomous task creation suppressed (${this.displayName} → ${toAgent}: "${title}")`);
+      return null;
+    }
+
     const db = getSupabase();
     if (!db) return null;
 

@@ -13,18 +13,24 @@ export async function buildReplyAfterApproval(approval) {
 
   if (approval.decision === 'approved') {
     if (approval.approvalType === 'blog_post' && approval.payload) {
-      try {
-        const { executeApprovedBlogPublish } = await import('./blogApprovalFlow.js');
-        const blogResult = await executeApprovedBlogPublish(approval.payload);
-        const url = blogResult?.url || (blogResult?.slug ? `https://www.digitafusion.com/blog/${blogResult.slug}` : '');
-        const caveatNote = approval.caveats?.length
-          ? `\n\n(Applied your notes: ${approval.caveats.join('; ').slice(0, 200)})`
-          : '';
-        return `✅ Approved and published.${caveatNote}\n\n${blogResult.topic || 'Blog post'} is live${url ? `:\n${url}` : ''}.`;
-      } catch (blogErr) {
-        console.error('[ApprovalActions] Blog publish after approval failed:', blogErr.message);
-        return `✅ Approved, but publishing hit an error: ${blogErr.message.slice(0, 200)}. Check PathGuru logs or retry from Command Center.`;
+      const { runApprovedBlogPublish } = await import('./blogApprovalFlow.js');
+      const outcome = await runApprovedBlogPublish(approval);
+      const caveatNote = approval.caveats?.length
+        ? `\n\n(Applied your notes: ${approval.caveats.join('; ').slice(0, 200)})`
+        : '';
+
+      if (outcome.state === 'published') {
+        return `✅ Approved and published.${caveatNote}\n\n${outcome.topic || 'Blog post'} is live${outcome.url ? `:\n${outcome.url}` : ''}.`;
       }
+      return `✅ Approved, but publishing failed: ${String(outcome.error || 'unknown error').slice(0, 200)}. Recorded as publish_failed — check PathGuru logs or retry.`;
+    }
+    if (approval.approvalType === 'content_commission' && approval.payload?.commissionId) {
+      const { publishCommission } = await import('./contentCommissionPipeline.js');
+      const res = await publishCommission({ id: approval.payload.commissionId, payload: approval.payload });
+      if (res.published) {
+        return `✅ Approved and published.${res.url ? `\n\n${res.url}` : ''}`;
+      }
+      return `✅ Approved, but publishing failed: ${String(res.error || 'unknown error').slice(0, 200)}.`;
     }
     return `✅ Approved. I'll proceed with: ${approval.subject || approval.approvalType}.`;
   }
@@ -35,8 +41,8 @@ export async function buildReplyAfterApproval(approval) {
 /**
  * Process Boss reply text (YES/NO + caveats) when a pending approval exists.
  */
-export async function processBossApprovalMessage(replyText) {
-  const approval = await handleApprovalReply(replyText);
+export async function processBossApprovalMessage(replyText, surface = 'whatsapp') {
+  const approval = await handleApprovalReply(replyText, surface);
   if (!approval.handled) return { handled: false, reply: null, approval };
   const reply = await buildReplyAfterApproval(approval);
   return { handled: true, reply, approval };
@@ -55,7 +61,7 @@ export async function forceResolvePendingApproval(decision = 'approved', feedbac
 
   const finalDecision = parsed.decision === 'rejected' ? 'rejected' : (decision === 'rejected' ? 'rejected' : 'approved');
 
-  await resolveApproval(pending.id, finalDecision, feedback);
+  await resolveApproval(pending.id, finalDecision, feedback, {}, { surface: 'web', channel: 'web' });
 
   const input = typeof pending.input === 'string' ? JSON.parse(pending.input) : (pending.input || {});
   const caveats = parsed.caveats || [];

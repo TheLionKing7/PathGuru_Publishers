@@ -88,6 +88,8 @@ import {
 } from './http/operatorAuth.js';
 import { enforce as rateLimit } from './http/rateLimit.js';
 import { buildPlatformConfig } from './skills/productRegistry.js';
+import { isPaused, setPaused } from './skills/systemFlags.js';
+import { logSlackConfigStatus, getMissingSlackVars } from './skills/slackNotify.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEBAPP    = join(__dirname, '..', 'webapp');
@@ -342,6 +344,25 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── Global pause switch — POST /api/system/pause & /api/system/resume ──────
+  // Operator-gated: these are /api/* paths not in the public allowlist, so the
+  // deny-by-default gate above already requires an operator session.
+  if (req.method === 'POST' && path === '/api/system/pause') {
+    try {
+      await setPaused(true, 'operator');
+      json(res, { ok: true, paused: true });
+    } catch (e) { err(res, e.message || 'Failed to pause', 500); }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/system/resume') {
+    try {
+      await setPaused(false, 'operator');
+      json(res, { ok: true, paused: false });
+    } catch (e) { err(res, e.message || 'Failed to resume', 500); }
+    return;
+  }
+
   // ── Ping (lightweight — point UptimeRobot here, 60s timeout) ─────────────
   if (path === '/ping' || path === '/api/cron/ping') {
     json(res, { ok: true, service: 'digifusion-command', ts: new Date().toISOString() });
@@ -356,12 +377,17 @@ const server = createServer(async (req, res) => {
 
   // ── Health (full diagnostics — Render dashboard; avoid for 5-min keep-alive) ──
   if (path === '/health') {
-    const platform = buildPlatformConfig();
+    const platform    = buildPlatformConfig();
+    const paused      = await isPaused();
+    const slackMissing = getMissingSlackVars();
     json(res, {
       status:  'ok',
       service: 'DigiFusion Command',
       version: '3.0',
       ts:      new Date().toISOString(),
+      paused,
+      slackConfigured: slackMissing.length === 0,
+      slackMissing,
       platform: {
         products: platform.products.map(p => p.id),
         hybrid:   platform.hybrid,
@@ -1120,6 +1146,34 @@ const server = createServer(async (req, res) => {
         .catch(e => console.warn('[Server] Nexus WhatsApp task-ack failed:', e.message));
 
       json(res, { success: true, task: data });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/tasks/purge — permanently remove old tasks ─────────────────
+  // Operator-gated via the default /api gate. Body: { before?, statuses?, dryRun?, allowPending? }
+  if (req.method === 'POST' && path === '/api/tasks/purge') {
+    try {
+      const body = await readBody(req);
+      const { resolvePurgeParams, isPurgeAllowed, countTasksToPurge, purgeTasks } = await import('./skills/taskPurge.js');
+      const { statuses, before } = resolvePurgeParams({ before: body.before, statuses: body.statuses });
+      if (Number.isNaN(before.getTime())) { err(res, 'before must be a valid ISO date', 400); return; }
+      if (!isPurgeAllowed(statuses, body.allowPending)) {
+        err(res, 'Refusing to purge pending tasks without allowPending: true', 400);
+        return;
+      }
+
+      const db = getSupabase();
+      if (!db) { err(res, 'Supabase not configured', 503); return; }
+
+      if (body.dryRun === true) {
+        const wouldRemove = await countTasksToPurge(db, { before, statuses });
+        json(res, { removed: 0, wouldRemove, dryRun: true, before: before.toISOString(), statuses });
+        return;
+      }
+
+      const removed = await purgeTasks(db, { before, statuses });
+      json(res, { removed, before: before.toISOString(), statuses });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -2337,12 +2391,13 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // ── /api/webhooks/slack — Slack interactive approvals (x-slack-signature) ────
+  // ── /api/webhooks/slack — Slack approvals + /pause & /resume slash commands ──
   if (req.method === 'POST' && path === '/api/webhooks/slack') {
     try {
-      const raw     = await readRawBody(req);
-      const rawBody = raw.toString('utf8');
-      const { verifySlackSignature, handleSlackBlockAction, parseSlackPayload } = await import('./skills/slackApprovals.js');
+      const raw         = await readRawBody(req);
+      const rawBody     = raw.toString('utf8');
+      const contentType = String(req.headers['content-type'] || '').toLowerCase();
+      const { verifySlackSignature, handleSlackBlockAction, parseSlackPayload, handleSlashCommand, handleSlackEventCallback, handleSlackViewSubmission } = await import('./skills/slackApprovals.js');
       if (!verifySlackSignature({
         rawBody,
         timestamp: req.headers['x-slack-request-timestamp'],
@@ -2350,6 +2405,14 @@ const server = createServer(async (req, res) => {
       })) {
         err(res, 'Invalid Slack signature', 401);
         return;
+      }
+
+      // Slash commands post urlencoded with a top-level `command` field (no
+      // `payload` field). Handle /pause and /resume before the payload parse,
+      // which would otherwise reject them as unparseable.
+      if (contentType.includes('application/x-www-form-urlencoded')) {
+        const form = Object.fromEntries(new URLSearchParams(rawBody));
+        if (form.command) { json(res, await handleSlashCommand(form)); return; }
       }
 
       // Slack's Interactivity endpoint posts urlencoded (a single `payload` field
@@ -2365,6 +2428,27 @@ const server = createServer(async (req, res) => {
       // immediately (Slack's 3-second budget), then process in the background.
       if (payload.type === 'block_actions') {
         handleSlackBlockAction(payload).catch((e) => console.error('[Slack] block action failed:', e.message));
+        json(res, { ok: true });
+        return;
+      }
+
+      // Modal submissions (Reject reason / Edit + approve in one action).
+      if (payload.type === 'view_submission') {
+        const result = await handleSlackViewSubmission(payload).catch((e) => {
+          console.error('[Slack] view_submission failed:', e.message);
+          return { handled: false, error: e.message };
+        });
+        if (result.error === 'draft required') {
+          json(res, { response_action: 'errors', errors: { draft: 'Draft is required' } });
+          return;
+        }
+        json(res, { response_action: 'clear' });
+        return;
+      }
+
+      // Events API — app_mention (commission intake) and thread replies (Gate 1).
+      if (payload.type === 'event_callback') {
+        handleSlackEventCallback(payload).catch((e) => console.error('[Slack] event callback failed:', e.message));
         json(res, { ok: true });
         return;
       }
@@ -2763,9 +2847,23 @@ const server = createServer(async (req, res) => {
       }
       const note = String(body.note || '').slice(0, 2000);
       const { decideApproval } = await import('./skills/approvalQueue.js');
-      const result = await decideApproval(id, decision, note);
+      const result = await decideApproval(id, decision, note, {}, { surface: 'web', channel: 'web' });
       if (!result.handled) { err(res, result.error || 'Approval not found or already resolved', 404); return; }
       json(res, { reply: result.reply, approval: result.approval, timestamp: new Date().toISOString() });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── GET /api/approvals/events — the approval audit trail ─────────────────
+  if (req.method === 'GET' && path === '/api/approvals/events') {
+    try {
+      const { listApprovalEvents } = await import('./skills/approvalEvent.js');
+      json(res, await listApprovalEvents({
+        approvalId: url.searchParams.get('approval_id') || null,
+        decision:   url.searchParams.get('decision') || null,
+        surface:    url.searchParams.get('surface') || null,
+        limit:      url.searchParams.get('limit') || 200,
+      }));
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -2868,6 +2966,15 @@ const server = createServer(async (req, res) => {
     }
 
     console.log('[Queue] drain authorised');
+    // Record the authorised-drain heartbeat and run the invariant sweep; the
+    // sweep posts alerts but must not delay the drain response.
+    try {
+      const { recordDrainAuthorised, sweepInvariants } = await import('./skills/invariantAlerts.js');
+      await recordDrainAuthorised();
+      sweepInvariants().catch((e) => console.warn('[Invariant] sweep error:', e.message));
+    } catch (e) {
+      console.warn('[Invariant] heartbeat record failed:', e.message);
+    }
     try {
       await readRawBody(req); // drain the request stream (unused by this route)
       const { drainWebhookQueue } = await import('./skills/webhookQueue.js');
@@ -3156,6 +3263,45 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/cron/morning-digest — 07:00 WAT ops digest → SLACK_OPS_CHANNEL
+  if (req.method === 'GET' && path === '/api/cron/morning-digest') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { postMorningDigest } = await import('./skills/morningDigest.js');
+      json(res, await postMorningDigest());
+    } catch (e) {
+      console.error('[Cron] morning-digest failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  // GET /api/cron/invariant-sweep — check broken invariants → SLACK_OPS_CHANNEL
+  if (req.method === 'GET' && path === '/api/cron/invariant-sweep') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { sweepInvariants } = await import('./skills/invariantAlerts.js');
+      json(res, await sweepInvariants());
+    } catch (e) {
+      console.error('[Cron] invariant-sweep failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  // GET /api/cron/tasks-purge — nightly 30-day journal purge
+  if (req.method === 'GET' && path === '/api/cron/tasks-purge') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { runNightlyPurge } = await import('./skills/taskPurge.js');
+      json(res, await runNightlyPurge());
+    } catch (e) {
+      console.error('[Cron] tasks-purge failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   // GET /api/cron/evening-briefing
   if (req.method === 'GET' && path === '/api/cron/evening-briefing') {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
@@ -3168,21 +3314,15 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // GET /api/cron/content-cadence — blog cadence check (every 12h recommended)
+  // GET /api/cron/content-cadence — retired. Content is now commissioned, not scheduled.
   if (req.method === 'GET' && path === '/api/cron/content-cadence') {
-    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
-    try {
-      json(res, await AGENTS.nexus.runContentCadenceCheck());
-    } catch (e) { err(res, e.message, 500); }
+    json(res, { error: 'content is now commissioned, not scheduled — see /api/content/commission' }, 410);
     return;
   }
 
-  // GET /api/cron/process-scheduled-content — due calendar items → approval gate
+  // GET /api/cron/process-scheduled-content — retired. Content is now commissioned, not scheduled.
   if (req.method === 'GET' && path === '/api/cron/process-scheduled-content') {
-    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
-    try {
-      json(res, await AGENTS.nexus.processDueScheduledContent());
-    } catch (e) { err(res, e.message, 500); }
+    json(res, { error: 'content is now commissioned, not scheduled — see /api/content/commission' }, 410);
     return;
   }
 
@@ -3341,12 +3481,9 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // POST /api/agents/nexus/content-cadence-check — trigger cadence pipeline if due
+  // POST /api/agents/nexus/content-cadence-check — retired. Content is now commissioned, not scheduled.
   if (req.method === 'POST' && path === '/api/agents/nexus/content-cadence-check') {
-    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
-    try {
-      json(res, await AGENTS.nexus.runContentCadenceCheck());
-    } catch (e) { err(res, e.message, 500); }
+    json(res, { error: 'content is now commissioned, not scheduled — see /api/content/commission' }, 410);
     return;
   }
 
@@ -3477,20 +3614,42 @@ const server = createServer(async (req, res) => {
       const result = await AGENTS.researcher.research(body);
 
       if (taskId) {
-        const { scoreResearchBrief } = await import('./skills/researchQualityGate.js');
+        const { scoreResearchBrief, notifyFailedResearchBrief } = await import('./skills/researchQualityGate.js');
+        const { completeResearchDeliverable, failResearchDeliverable, MIN_BRIEF_LENGTH } = await import('./lib/researchDeliverables.js');
         const qScore = scoreResearchBrief(result);
-        const { completeResearchDeliverable } = await import('./lib/researchDeliverables.js');
-        await completeResearchDeliverable({
-          taskId,
-          instruction: body.topic,
-          brief:       result.brief,
-          sources:     result.sources,
-          gaps:        result.gaps,
-          qualityScore: qScore,
-          depth:       result.depth || body.depth || 'standard',
-          forAgent:    body.forAgent || 'nexus',
-          mergedWithKB: result.mergedWithKB,
-        });
+        const briefText = String(result.brief || '').trim();
+
+        if (!qScore.passed || briefText.length < MIN_BRIEF_LENGTH) {
+          await notifyFailedResearchBrief({
+            topic: body.topic,
+            qScore,
+            extraReason: briefText.length < MIN_BRIEF_LENGTH
+              ? `Brief is ${briefText.length} characters — shorter than the ${MIN_BRIEF_LENGTH}-character minimum.`
+              : null,
+          });
+          await failResearchDeliverable({
+            taskId,
+            instruction: body.topic,
+            qualityScore: qScore,
+            reason: !qScore.passed
+              ? `Research brief failed the quality gate (${qScore.score}/100)`
+              : `Research brief shorter than ${MIN_BRIEF_LENGTH} characters — not stored as a completed artifact`,
+            depth: result.depth || body.depth || 'standard',
+            forAgent: body.forAgent || 'nexus',
+          });
+        } else {
+          await completeResearchDeliverable({
+            taskId,
+            instruction: body.topic,
+            brief:       result.brief,
+            sources:     result.sources,
+            gaps:        result.gaps,
+            qualityScore: qScore,
+            depth:       result.depth || body.depth || 'standard',
+            forAgent:    body.forAgent || 'nexus',
+            mergedWithKB: result.mergedWithKB,
+          });
+        }
       }
 
       json(res, { ...result, taskId });
@@ -3678,6 +3837,43 @@ const server = createServer(async (req, res) => {
   // POST /api/content/publish       — Aether writes + publishes a blog post from a brief
   // GET  /api/content/calendar      — upcoming scheduled content
   // ══════════════════════════════════════════════════════════════════
+
+  // POST /api/content/commission — open a content commission (URL or topic)
+  //   body: { url?, topic?, note?, commissionedBy?, slackChannel?, slackThreadTs? }
+  if (req.method === 'POST' && path === '/api/content/commission') {
+    try {
+      const body = await readBody(req);
+      const sourceUrl  = String(body.url || '').trim() || null;
+      const sourceNote = String(body.note || body.topic || '').trim() || null;
+      if (!sourceUrl && !sourceNote) { err(res, 'url or topic is required', 400); return; }
+
+      const { createContentCommission, assessContentCommission, assertCommissionCapacity } = await import('./skills/contentCommission.js');
+      const capacity = await assertCommissionCapacity({});
+      if (!capacity.ok) {
+        json(res, { ok: false, atCapacity: true, count: capacity.count, inFlight: capacity.inFlight }, 409);
+        return;
+      }
+      const created = await createContentCommission({
+        sourceUrl,
+        sourceNote,
+        commissionedBy: body.commissionedBy || null,
+        slackChannel:   body.slackChannel || null,
+        slackThreadTs:  body.slackThreadTs || null,
+        mirror: false,
+      });
+      if (!created.ok) { err(res, created.error, 500); return; }
+
+      // Assessment is async: fetch + read the URL, then propose candidate angles.
+      if (sourceUrl) {
+        assessContentCommission({ id: created.commission.id }).catch((e) => {
+          console.error('[ContentCommission] assessment failed:', e.message);
+        });
+      }
+
+      json(res, { ok: true, commission: created.commission }, 201);
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
 
   // POST /api/content/brief — generate a research-backed content brief
   if (req.method === 'POST' && path === '/api/content/brief') {
@@ -3878,11 +4074,24 @@ Write the full article now.`;
          the register down rather than degrading it. The scale is DERIVED below
          from depth_ceiling, which migration 0011 added for exactly this reason:
          "report it beside the score or a partial assessment reads as a poor one." */
-      const { data: rows, error: dbErr } = await db
+
+      /* Soft delete: deleted rows leave the register, tiles, band mix and
+         funnel by default. `deleted=1` flips the read into recovery view —
+         deleted rows only, newest deletion first — so an operator can restore
+         one. A delete that still counts is worse than no delete. */
+      const deletedOnly = url.searchParams.get('deleted') === '1';
+
+      let rowsQuery = db
         .from('frictioniq_session')
-        .select('token,created_at,total,depth,depth_ceiling,full_total,full_band,full_capped,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority,outcome,outcome_value,outcome_at')
-        .order('created_at', { ascending: false })
+        .select('token,created_at,total,depth,depth_ceiling,full_total,full_band,full_capped,band,capped,sector,role,headcount_band,country,email,stage,organization,replied_at,lead_score,priority,outcome,outcome_value,outcome_at,is_test,deleted_at,deleted_by,delete_reason')
+        .order(deletedOnly ? 'deleted_at' : 'created_at', { ascending: false })
         .limit(limit);
+
+      rowsQuery = deletedOnly
+        ? rowsQuery.not('deleted_at', 'is', null)
+        : rowsQuery.is('deleted_at', null);
+
+      const { data: rows, error: dbErr } = await rowsQuery;
 
       if (dbErr) { err(res, dbErr.message, 500); return; }
 
@@ -3922,6 +4131,10 @@ Write the full article now.`;
         outcome_at: r.outcome_at ?? null,
         lead_score: r.lead_score,
         priority: r.priority,
+        is_test: r.is_test === true,
+        deleted_at: r.deleted_at ?? null,
+        deleted_by: r.deleted_by ?? null,
+        delete_reason: r.delete_reason ?? null,
       }));
 
       /* Real counts, against the whole register rather than this page. Four
@@ -3947,13 +4160,13 @@ Write the full article now.`;
 
       const countOf = async (build) => {
         const { count } = await build(
-          db.from('frictioniq_session').select('token', { count: 'exact', head: true })
+          db.from('frictioniq_session').select('token', { count: 'exact', head: true }).is('deleted_at', null)
         );
         return count ?? 0;
       };
 
       let stats = null;
-      try {
+      if (!deletedOnly) try {
         stats = await Promise.race([
           Promise.all([
             countOf(q => q),
@@ -4082,8 +4295,92 @@ Write the full article now.`;
     return;
   }
 
+  /* ── DELETE /api/frictioniq/session/:token — soft delete ──────────────────
+   * Soft, not hard: the row leaves the register, tiles, band mix and funnel by
+   * the deleted_at filter the read routes apply by default, but the data stays
+   * for recovery. The same treatment cascades to the prospect's touches (the
+   * dispatcher skips rows carrying deleted_at). Outcomes live as columns on the
+   * session row, so deleting the row deletes the outcome. */
+  const fiqDeleteMatch = path.match(/^\/api\/frictioniq\/session\/([^/]+)$/);
+  if (req.method === 'DELETE' && fiqDeleteMatch) {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const token = decodeURIComponent(fiqDeleteMatch[1]);
+      let body = {}; try { body = await readBody(req) || {}; } catch { body = {}; }
+
+      const now = new Date().toISOString();
+      const by = String(body.deleted_by || body.by || '').trim().slice(0, 120) || 'operator';
+      const reason = String(body.delete_reason || body.reason || '').trim().slice(0, 300) || null;
+
+      const { data: existing } = await db.from('frictioniq_session').select('token').eq('token', token).maybeSingle();
+      if (!existing) { err(res, 'unknown session', 404); return; }
+
+      const { error: uErr } = await db
+        .from('frictioniq_session')
+        .update({ deleted_at: now, deleted_by: by, delete_reason: reason })
+        .eq('token', token);
+      if (uErr) { err(res, uErr.message, 500); return; }
+
+      // Cascade the same treatment to the outbox. The dispatcher's due query
+      // excludes deleted_at, so nothing already scheduled goes out afterwards.
+      try { await db.from('frictioniq_touch').update({ deleted_at: now }).eq('token', token); } catch { /* touch table may be absent pre-0010 */ }
+
+      json(res, { ok: true, token, deleted_at: now });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/frictioniq/session/:token/restore — undo a soft delete ──────
+  const fiqRestoreMatch = path.match(/^\/api\/frictioniq\/session\/([^/]+)\/restore$/);
+  if (req.method === 'POST' && fiqRestoreMatch) {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const token = decodeURIComponent(fiqRestoreMatch[1]);
+
+      const { error: uErr } = await db
+        .from('frictioniq_session')
+        .update({ deleted_at: null, deleted_by: null, delete_reason: null })
+        .eq('token', token);
+      if (uErr) { err(res, uErr.message, 500); return; }
+
+      try { await db.from('frictioniq_touch').update({ deleted_at: null }).eq('token', token); } catch { /* touch table may be absent */ }
+
+      json(res, { ok: true, token, restored: true });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // ── POST /api/frictioniq/sessions/mark-test — bulk test flag ──────────────
+  if (req.method === 'POST' && path === '/api/frictioniq/sessions/mark-test') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const body = await readBody(req) || {};
+      const tokens = Array.isArray(body.tokens)
+        ? body.tokens.map((t) => String(t).trim()).filter(Boolean)
+        : [];
+      if (!tokens.length) { err(res, 'tokens[] required', 400); return; }
+      if (tokens.length > 1000) { err(res, 'too many tokens (max 1000)', 400); return; }
+      const flag = body.is_test !== false;   // default: mark as test
+
+      const { error: uErr } = await db.from('frictioniq_session').update({ is_test: flag }).in('token', tokens);
+      if (uErr) { err(res, uErr.message, 500); return; }
+
+      json(res, { ok: true, updated: tokens.length, is_test: flag });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   err(res, `Not found: ${path}`, 404);
 });
+
+// ── Startup: ping Tavily once so a dead key is visible at boot, not after six
+// weeks of D-grade briefs ──────────────────────────────────────────────────────
+researcher._healthCheckTavily()
+  .then((health) => {
+    if (health.ok) console.log('[Researcher] Tavily health check at boot: OK');
+    else console.error(`[Researcher] Tavily health check at boot FAILED: ${health.reason}`);
+  })
+  .catch((e) => console.error(`[Researcher] Tavily health check at boot errored: ${e.message}`));
 
 server.listen(PORT, () => {
   console.log(`
@@ -4105,12 +4402,9 @@ server.listen(PORT, () => {
   │   POST /api/webhooks/whatsapp                    │
   │   GET  /api/cron/morning-briefing                │
   │   GET  /api/cron/evening-briefing                │
-  │   GET  /api/cron/content-cadence                 │
-  │   GET  /api/cron/process-scheduled-content       │
   │   GET  /api/agents/nexus/ceo-ops                 │
   │   POST /api/agents/nexus/evening-briefing        │
   │   POST /api/agents/nexus/design-workflow         │
-  │   POST /api/agents/nexus/content-cadence-check   │
   │   GET  /api/agents/nexus/check-escalations       │
   │   POST /api/agents/researcher/research           │
   │   POST /api/agents/synthesizer/ingest            │
@@ -4149,6 +4443,7 @@ async function startup() {
     }
   } catch (e) { console.warn('[FirmIP] Engagement Model seed skipped:', e.message); }
   logOperatorAuthStatus();
+  logSlackConfigStatus();
   if (isCronAuthRequired()) {
     console.log('[Cron] CRON_SECRET set — external /api/cron/* routes require auth');
   } else {
@@ -4158,16 +4453,15 @@ async function startup() {
   setInterval(async () => {
     try { await AGENTS.pulse.sweep(); } catch(e) { console.warn('[Pulse] sweep error:', e.message); }
   }, PULSE_SWEEP_INTERVAL_MS);
-  scheduleDailyBriefing();
-  scheduleEveningBriefing();
-  scheduleContentCadenceCheck();
-  scheduleWeeklyNewsletterProposal();
-  // Process due scheduled content — every 6 hours (approval path only, never auto-publish)
+  // Invariant sweep — broken invariants alert to SLACK_OPS_CHANNEL (≤1/h each).
   setInterval(async () => {
     try {
-      await AGENTS.nexus.processDueScheduledContent();
-    } catch (e) { console.warn('[Nexus CEO] scheduled content error:', e.message); }
-  }, 6 * 60 * 60 * 1000);
+      const { sweepInvariants } = await import('./skills/invariantAlerts.js');
+      await sweepInvariants();
+    } catch (e) { console.warn('[Invariant] sweep error:', e.message); }
+  }, 5 * 60 * 1000);
+  scheduleDailyBriefing();
+  scheduleEveningBriefing();
   // Process due orchestration campaign steps — every 15 minutes
   setInterval(async () => {
     try {
@@ -4225,41 +4519,4 @@ function scheduleEveningBriefing() {
   }, msUntil6pm());
 }
 
-function scheduleContentCadenceCheck() {
-  const intervalMs = 12 * 60 * 60 * 1000;
-  setInterval(async () => {
-    try {
-      const result = await AGENTS.nexus.runContentCadenceCheck();
-      if (result.action === 'approval_sent') {
-        console.log('[Nexus CEO] Blog cadence triggered approval for:', result.topic);
-      }
-    } catch (e) { console.warn('[Nexus CEO] Cadence check error:', e.message); }
-  }, intervalMs);
-  // First check 30 min after startup (avoid deploy flood with briefings)
-  setTimeout(async () => {
-    try { await AGENTS.nexus.runContentCadenceCheck(); } catch (e) { /* ignore */ }
-  }, 30 * 60 * 1000);
-}
 
-function scheduleWeeklyNewsletterProposal() {
-  // Fire every Monday at 8am Lagos time (UTC+1)
-  function msUntilNextMonday8am() {
-    const now  = new Date();
-    const next = new Date(now);
-    const day  = now.getDay(); // 0=Sun … 6=Sat
-    const daysUntilMon = day === 1 ? 7 : (8 - day) % 7 || 7;
-    next.setDate(now.getDate() + daysUntilMon);
-    next.setHours(7, 0, 0, 0); // 8am Lagos = 7am UTC
-    return Math.max(next - now, 1000);
-  }
-  setTimeout(async function run() {
-    try { await nexus.proposeNewsletterTopics(); }
-    catch(e) { console.warn('[Nexus] Newsletter proposal error:', e.message); }
-    setTimeout(run, 7 * 24 * 60 * 60 * 1000); // re-schedule next Monday
-  }, msUntilNextMonday8am());
-}
-
-/** @deprecated Use AGENTS.nexus.processDueScheduledContent() — approval gate only */
-async function processContentSchedule() {
-  return AGENTS.nexus.processDueScheduledContent();
-}

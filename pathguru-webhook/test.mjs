@@ -47,8 +47,17 @@ await t('url_verification answers challenge inline, not queued', async () => {
   const body = JSON.stringify({type:'url_verification',challenge:'abc123'});
   const ts = String(now());
   const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
-  const r = await run('/webhooks/slack', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
+  const r = await run('/webhooks/slack-events', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
   eq((await r.json()).challenge,'abc123','challenge'); eq(inserted.length,0,'must not queue');
+});
+await t('slack-events app_mention queued with event id dedupe', async () => {
+  inserted=[];
+  const body = JSON.stringify({type:'event_callback',event_id:'Ev12345',event:{type:'app_mention',channel:'C1',ts:'1700000000.000001',text:'<https://example.com/post> please'}});
+  const ts = String(now());
+  const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
+  const r = await run('/webhooks/slack-events', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
+  eq(r.status,200,'status'); eq(inserted.length,1,'inserted'); eq(inserted[0].kind,'slack','kind'); eq(inserted[0].dedupe_key,'Ev12345','dedupe');
+  eq(await r.text(),'','empty 200 body');
 });
 await t('bad signature rejected, nothing queued', async () => {
   inserted=[];
@@ -144,6 +153,57 @@ await t('unknown path 404, GET /health reports config by name only', async () =>
   if (JSON.stringify(j).includes('slack-secret')) throw new Error('health leaked a secret');
 });
 await t('wake was fired', async () => { if (woke < 1) throw new Error('backend never woken'); });
+
+console.log('Scheduled');
+await t('scheduled */5 wakes the backend', async () => {
+  woke = 0;
+  let waited;
+  const sctx = { waitUntil: p => { waited = p; } };
+  await worker.scheduled({ cron: '*/5 * * * *' }, env, sctx);
+  await waited;
+  if (woke < 1) throw new Error('wake branch did not wake the backend');
+});
+await t('scheduled 0 6 * * * hits morning-digest with CRON_SECRET', async () => {
+  const calls = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), auth: opts?.headers?.Authorization || null });
+    return new Response('{}', { status: 200 });
+  };
+  let waited;
+  const sctx = { waitUntil: p => { waited = p; } };
+  await worker.scheduled({ cron: '0 6 * * *' }, { ...env, CRON_SECRET: 'cron-secret' }, sctx);
+  await waited;
+  globalThis.fetch = saved;
+  eq(calls.length, 1, 'one cron call');
+  eq(calls[0].url, 'https://render.example/api/cron/morning-digest', 'morning-digest url');
+  eq(calls[0].auth, 'Bearer cron-secret', 'auth header');
+});
+await t('scheduled 0 4 * * * hits tasks-purge with CRON_SECRET', async () => {
+  const calls = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url: String(url), auth: opts?.headers?.Authorization || null });
+    return new Response('{}', { status: 200 });
+  };
+  let waited;
+  const sctx = { waitUntil: p => { waited = p; } };
+  await worker.scheduled({ cron: '0 4 * * *' }, { ...env, CRON_SECRET: 'cron-secret' }, sctx);
+  await waited;
+  globalThis.fetch = saved;
+  eq(calls.length, 1, 'one cron call');
+  eq(calls[0].url, 'https://render.example/api/cron/tasks-purge', 'tasks-purge url');
+  eq(calls[0].auth, 'Bearer cron-secret', 'auth header');
+});
+await t('scheduled unknown cron does nothing', async () => {
+  let called = false;
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => { called = true; return new Response('{}', { status: 200 }); };
+  const sctx = { waitUntil: () => {} };
+  await worker.scheduled({ cron: '0 0 1 1 *' }, { ...env, CRON_SECRET: 'cron-secret' }, sctx);
+  globalThis.fetch = saved;
+  if (called) throw new Error('unknown cron should not fetch');
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

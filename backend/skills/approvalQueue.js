@@ -69,7 +69,7 @@ export async function listPendingApprovals() {
  * @param {string} note — operator note stored on the resolved task
  * @returns {{ handled: boolean, error?: string, reply?: string, approval?: object }}
  */
-export async function decideApproval(approvalId, decision, note = '') {
+export async function decideApproval(approvalId, decision, note = '', metadata = {}, event = {}) {
   const db = getSupabase();
   if (!db) return { handled: false, error: 'Supabase not configured' };
 
@@ -84,33 +84,40 @@ export async function decideApproval(approvalId, decision, note = '') {
 
   const input = safeJson(pending.input);
   const resolvedDecision = decision === 'approve' ? 'approved' : 'rejected';
+  const editedDraft = metadata.editedDraft || null;
 
   const approval = {
     handled: true,
     decision: resolvedDecision,
     approvalId: pending.id,
     approvalType: input.approvalType || null,
-    payload: { ...(input.payload || {}), bossFeedback: note },
+    payload: {
+      ...(input.payload || {}),
+      bossFeedback: note,
+      ...(editedDraft ? { draftBody: editedDraft, draft: editedDraft } : {}),
+    },
     subject: input.subject || pending.title,
     feedback: note,
     caveats: [],
     conditional: false,
   };
 
-  const resolved = await resolveApproval(approvalId, resolvedDecision, note);
+  const resolved = await resolveApproval(approvalId, resolvedDecision, note, metadata, event);
   if (!resolved) return { handled: false, error: 'Failed to persist approval decision' };
 
   // Email drafts: the approval references an inbound_message row. Approving moves
   // that draft to `approved` (visible on /api/outbound/approved for the sender);
-  // rejecting parks it. This keeps every approval surface (webapp, WhatsApp, Slack)
-  // consistent.
+  // rejecting parks it. An edited draft replaces the stored reply body before it
+  // is handed to Make. This keeps every approval surface consistent.
   if (input.approvalType === 'email_reply' && input.payload?.inboundMessageId) {
     const draftStatus = resolvedDecision === 'approved' ? 'approved' : 'rejected';
+    const patch = {
+      status:      draftStatus,
+      approved_at: resolvedDecision === 'approved' ? new Date().toISOString() : null,
+    };
+    if (editedDraft) patch.draft_body = editedDraft;
     await db.from('inbound_message')
-      .update({
-        status:      draftStatus,
-        approved_at: resolvedDecision === 'approved' ? new Date().toISOString() : null,
-      })
+      .update(patch)
       .eq('id', input.payload.inboundMessageId);
   }
 

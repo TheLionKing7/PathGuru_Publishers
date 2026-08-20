@@ -18,13 +18,14 @@ npm install -g wrangler          # or npx wrangler for each command
 ```
 
 Edit `wrangler.toml` — set `SUPABASE_URL` to your project URL and confirm
-`RENDER_ORIGIN`. Then set the four secrets (never in the toml, it goes to git):
+`RENDER_ORIGIN`. Then set the five secrets (never in the toml, it goes to git):
 
 ```bash
 npx wrangler secret put SUPABASE_ANON_KEY        # anon key, NOT service_role
 npx wrangler secret put SLACK_SIGNING_SECRET
 npx wrangler secret put TWILIO_AUTH_TOKEN
 npx wrangler secret put INBOUND_WEBHOOK_SECRET   # same value as on Render
+npx wrangler secret put CRON_SECRET              # same value as on Render (cron auth)
 npx wrangler deploy
 ```
 
@@ -36,15 +37,26 @@ curl -s https://pathguru-webhooks.<your-subdomain>.workers.dev/health
 
 All five flags must be `true`.
 
-## 3. Repoint the three senders
+## 3. Repoint the senders
 
 | Sender | New URL |
 |---|---|
+| Slack app → Events API → Request URL | `https://…workers.dev/webhooks/slack-events` |
 | Slack app → Interactivity → Request URL | `https://…workers.dev/webhooks/slack` |
 | Twilio → Sandbox settings → When a message comes in | `https://…workers.dev/webhooks/whatsapp` |
+| Twilio → WhatsApp senders → Status callback URL | `https://webhooks.digitafusion.com/webhooks/whatsapp-status` |
 | Make → Scenario A → HTTP module | `https://…workers.dev/webhooks/inbound-email` |
 
+Slack Events API: subscribe to `app_mention` and `message.im` (the bot must be in
+the relevant channels). The backend ignores `bot_id`/`subtype` so Nexus never
+answers its own messages.
+
 Nothing points at Render any more except the Worker itself.
+
+The status-callback URL is also the backend default: `TWILIO_STATUS_CALLBACK_URL`
+on Render, falling back to `https://webhooks.digitafusion.com/webhooks/whatsapp-status`.
+Apply migration `0035_whatsapp_status_callback.sql` before status callbacks
+start arriving.
 
 ## 4. Smoke test
 

@@ -58,6 +58,17 @@ const SKIP_SCRAPE_DOMAINS = [
   'instagram.com', 'facebook.com', 'tiktok.com', 'youtube.com', 'amazon.com',
 ];
 
+/**
+ * Build the error for a Tavily outage. Carries `code: 'TAVILY_UNAVAILABLE'` so
+ * the orchestrator can tell an infrastructure outage from a quality failure —
+ * a dead key is a fix-the-key problem, not a re-run-the-query problem.
+ */
+function tavilyUnavailable(reason) {
+  const err = new Error(`Tavily unavailable — ${reason}`);
+  err.code = 'TAVILY_UNAVAILABLE';
+  return err;
+}
+
 export class Researcher extends AgentBase {
   constructor() {
     super({
@@ -142,7 +153,7 @@ export class Researcher extends AgentBase {
    * @param {boolean} [options.mergeWithKB]  — merge with internal knowledge base (default true)
    * @returns {object} { brief, sources, coverStats, gaps, mergedWithKB }
    */
-  async research({ topic, forAgent = 'nexus', context = '', focusAreas = [], depth = 'standard', mergeWithKB = true }) {
+  async research({ topic, forAgent = 'nexus', context = '', focusAreas = [], depth = 'standard', mergeWithKB = true, strict = false }) {
     console.log(`[Researcher] Starting ${depth} research: "${topic.slice(0, 120)}" for ${forAgent}`);
     this._logKeyStatus();
 
@@ -150,33 +161,35 @@ export class Researcher extends AgentBase {
     console.log(`[Researcher] Generated ${queries.length} queries`);
 
     // ── Pre-flight: verify Tavily is operational before burning queries ──────
-    let tavilyDown = null; // { ok: false, reason } if the API is unreachable / dead
-
     // Layer 1: Tavily discovery (+ expansion pass if thin)
     let tavilyResults = [];
-    if (process.env.TAVILY_API_KEY) {
-      tavilyResults = await this._tavilySearch(queries);
-      let tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
-      if (tavilyHitCount === 0) {
-        // If ALL queries returned zero results, run a health check before
-        // wasting time on fallback queries — the key may be dead.
-        const health = await this._healthCheckTavily();
-        if (!health.ok) {
-          tavilyDown = { ok: false, reason: health.reason };
-          console.error(`[Researcher] Tavily health check FAILED — aborting retries: ${health.reason}`);
-        } else {
-          const expanded = this._buildFallbackQueries(topic, focusAreas, depth);
-          console.warn(`[Researcher] Tavily thin — retrying with ${expanded.length} short fallback queries`);
-          const retry = await this._tavilySearch(expanded);
-          tavilyResults = this._mergeTavilyResults(tavilyResults, retry);
-          tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
-        }
-      }
-      console.log(`[Researcher] Tavily: ${tavilyHitCount} results across ${tavilyResults.length} queries${tavilyDown ? ` (API DOWN: ${tavilyDown.reason})` : ''}`);
-    } else {
-      console.warn('[Researcher] Tavily skipped — TAVILY_API_KEY not set');
-      tavilyDown = { ok: false, reason: 'TAVILY_API_KEY not set — Orion cannot search the web' };
+    let tavilyFailedQueries = [];
+
+    if (!process.env.TAVILY_API_KEY) {
+      throw tavilyUnavailable('TAVILY_API_KEY not set — Orion cannot search the web');
     }
+
+    const primary = await this._tavilySearch(queries);   // throws if every query errors
+    tavilyResults = primary.results;
+    tavilyFailedQueries.push(...(primary.failed || []));
+
+    let tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+
+    if (tavilyHitCount === 0) {
+      // Zero hits — run a health check before the fallback pass; the key may be dead.
+      const health = await this._healthCheckTavily();
+      if (!health.ok) {
+        throw tavilyUnavailable(health.reason);
+      }
+      const expanded = this._buildFallbackQueries(topic, focusAreas, depth);
+      console.warn(`[Researcher] Tavily thin — retrying with ${expanded.length} short fallback queries`);
+      const retry = await this._tavilySearch(expanded);   // throws if every fallback query errors
+      tavilyResults = this._mergeTavilyResults(tavilyResults, retry.results || []);
+      tavilyFailedQueries.push(...(retry.failed || []));
+      tavilyHitCount = tavilyResults.reduce((n, r) => n + (r.results?.length || 0), 0);
+    }
+
+    console.log(`[Researcher] Tavily: ${tavilyHitCount} results across ${tavilyResults.length} queries${tavilyFailedQueries.length ? ` (${tavilyFailedQueries.length} query(ies) failed)` : ''}`);
 
     // Layer 2: Firecrawl deep scrape — seed from Tavily URLs + answers
     let scrapedContent = [];
@@ -203,7 +216,7 @@ export class Researcher extends AgentBase {
     // Synthesize raw findings into a structured brief
     const rawBrief = hasWebGrounding
       ? await this._synthesizeFindings({
-          topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth,
+          topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth, strict,
         })
       : {
           brief: '',
@@ -237,7 +250,7 @@ export class Researcher extends AgentBase {
       forAgent,
       topic,
       researchedAt: new Date().toISOString(),
-      tavilyDown,  // null | { ok: false, reason } — Nexus uses this for intelligent retry
+      tavilyFailedQueries,  // queries that errored — recorded for observability
     };
   }
 
@@ -325,21 +338,42 @@ Return a JSON array of strings only. No full sentences — search-engine style q
 
   async _tavilySearch(queries) {
     const results = [];
+    const failed  = [];
     for (const query of queries) {
-      let hit = await this._tavilySearchOne(query, 'advanced');
-      if (!(hit.results?.length)) {
-        hit = await this._tavilySearchOne(query, 'basic');
+      try {
+        let hit = await this._tavilySearchOne(query, 'advanced');
+        if (!(hit.results?.length)) {
+          hit = await this._tavilySearchOne(query, 'basic');
+        }
+        if (hit.results?.length || hit.answer) results.push(hit);
+      } catch (e) {
+        failed.push({ query, reason: e.message });
       }
-      if (hit.results?.length || hit.answer) results.push(hit);
     }
-    return results;
+
+    // Every query errored — a research job with no reachable search provider
+    // must fail loudly, never return an empty result set that becomes an
+    // ungrounded brief. Partial failure (some succeeded) is returned above.
+    if (queries.length && failed.length === queries.length && !results.length) {
+      const err = tavilyUnavailable(`search failed for all ${queries.length} queries — no reachable search provider (first: ${failed[0]?.reason || 'unknown'})`);
+      err.failedQueries = failed;
+      throw err;
+    }
+
+    return { results, failed };
   }
 
   async _tavilySearchOne(query, searchDepth = 'advanced') {
     const safeQuery = String(query || '').slice(0, 400);
     if (!safeQuery.trim()) return { query: safeQuery, answer: null, results: [] };
+
+    // Presence only — never the value — so a 401 (bad key) is distinguishable
+    // from a 429 (quota) or a plain outage in the logs.
+    const hasKey = Boolean(process.env.TAVILY_API_KEY);
+
+    let res;
     try {
-      const res = await fetch(`${TAVILY_BASE}/search`, {
+      res = await fetch(`${TAVILY_BASE}/search`, {
         method:  'POST',
         headers: {
           'Content-Type':  'application/json',
@@ -356,17 +390,20 @@ Return a JSON array of strings only. No full sentences — search-engine style q
         }),
         signal: AbortSignal.timeout(20_000),
       });
-      if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        console.warn(`[Researcher] Tavily HTTP ${res.status} (${searchDepth}) for "${safeQuery.slice(0, 60)}": ${errText.slice(0, 180)}`);
-        return { query: safeQuery, answer: null, results: [] };
-      }
-      const data = await res.json();
-      return { query: safeQuery, answer: data.answer, results: data.results || [] };
     } catch (e) {
-      console.warn(`[Researcher] Tavily query failed ("${safeQuery.slice(0, 60)}"): ${e.message}`);
-      return { query: safeQuery, answer: null, results: [] };
+      const kind = e?.name === 'AbortError' ? 'timeout' : 'network error';
+      console.error(`[Researcher] Tavily ${kind} (${searchDepth}) for "${safeQuery.slice(0, 60)}" — key ${hasKey ? 'present' : 'MISSING'}: ${e.message}`);
+      throw e;
     }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(`[Researcher] Tavily HTTP ${res.status} (${searchDepth}) for "${safeQuery.slice(0, 60)}" — key ${hasKey ? 'present' : 'MISSING'}: ${body.slice(0, 500)}`);
+      throw new Error(`Tavily HTTP ${res.status} for "${safeQuery.slice(0, 60)}"${hasKey ? '' : ' (TAVILY_API_KEY missing)'}`);
+    }
+
+    const data = await res.json();
+    return { query: safeQuery, answer: data.answer, results: data.results || [] };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -453,7 +490,7 @@ Return a JSON array of strings only. No full sentences — search-engine style q
   // SYNTHESIS — combine all raw findings into a structured brief
   // ══════════════════════════════════════════════════════════════════════════
 
-  async _synthesizeFindings({ topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth = 'standard' }) {
+  async _synthesizeFindings({ topic, forAgent, tavilyResults, scrapedContent, focusAreas, depth = 'standard', strict = false }) {
     const provider = this._synthesisChain[0] || resolveProvider();
     if (!provider) {
       return { brief: this._fallbackBrief(topic, tavilyResults, scrapedContent), coverStats: [], gaps: [] };
@@ -469,7 +506,7 @@ Return a JSON array of strings only. No full sentences — search-engine style q
       .join('\n\n---\n\n')
       .slice(0, 6000);
 
-    const wordTarget = depth === 'deep' ? '800-1200' : '500-1000';
+    const wordTarget = strict ? '1200-1800' : (depth === 'deep' ? '800-1200' : '500-1000');
     const synthesisPrompt = `You are Orion synthesizing web intelligence for: ${forAgent}
 
 TOPIC: "${this._shortTopic(topic)}"
@@ -493,7 +530,7 @@ Synthesize ONLY from the findings above into a structured intelligence brief. Re
   "keyFindings": ["finding 1", "finding 2"]
 }
 
-RULES: Never invent statistics or URLs. Only cite sources present in the findings above. If data is thin, list gaps honestly.`;
+RULES: Never invent statistics or URLs. Only cite sources present in the findings above. If data is thin, list gaps honestly.${strict ? '\n\nSTRICT MODE (retry after a quality failure): Produce a longer, more specific brief. Include at least 5 concrete statistics or data points, name frameworks explicitly, and cite a source URL for each substantive claim. Do not pad or repeat the thin output that failed. If the findings cannot support this specificity, state the gap explicitly.' : ''}`;
 
     try {
       const raw = await callAiProvider(provider, synthesisPrompt, RESEARCHER_SYSTEM, { json: true });

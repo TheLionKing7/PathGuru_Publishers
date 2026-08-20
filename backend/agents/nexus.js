@@ -23,6 +23,7 @@ import { getSupabase }    from '../supabaseClient.js';
 import { callAiProvider, resolveProvider } from '../aiProviders.js';
 import { notion }         from '../notionClient.js';
 import { sendImmediate }  from '../skills/notifier.js';
+import { isPaused }       from '../skills/systemFlags.js';
 
 // ── HARNESS: Phase 1 instrumentation ────────────────────────────────────────
 import { generateRunId, writeTrace, hashContent } from '../harness/trace.js';
@@ -30,7 +31,7 @@ import { verifyStep, assertChainLength, MAX_UNVERIFIED_STEPS } from '../harness/
 import { createBudget, consumeBudget, BudgetExceededError } from '../harness/budget.js';
 import { checkPermission } from '../harness/perimeter.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';
-import { scoreResearchBrief, formatQualityBadge } from '../skills/researchQualityGate.js';
+import { scoreResearchBrief, formatQualityBadge, notifyFailedResearchBrief } from '../skills/researchQualityGate.js';
 import { buildNexusCeoPromptBlock, resolveCeoModule, BLOG_CADENCE_DAYS } from '../skills/nexusCeoDoctrine.js';
 import { scoreCeoOutput, formatCeoQualityBadge } from '../skills/ceoQualityGate.js';
 import {
@@ -147,6 +148,13 @@ ${buildNexusCeoPromptBlock()}`;
 // network or any internal system — the signature is appended by the system.
 const EMAIL_DRAFT_SYSTEM = `You draft concise, professional email replies on behalf of a firm.
 Write in the first person as the firm's representative. Never mention any AI agent, internal system, or internal team name. Never write a closing signature, sign-off block, name, or title — the signature is appended separately by the system after generation.`;
+
+// Identity-free system prompt for the external surface. The boundary is
+// structural, not prompt wording: callers pass surface:'external' and this
+// replaces the internal prompt entirely — no agent names, vendors, pricing,
+// methodology, or client names can leak.
+const NEXUS_EXTERNAL_SYSTEM = `You are a concise, professional assistant acting on behalf of a firm.
+Write in the first person as the firm's representative. Never mention AI agents, internal systems, internal team names, vendors, pricing, methodology, or client names. Be direct and brief.`;
 
 const CLASSIFY_SYSTEM = `You are an email triage assistant. Classify an inbound email into exactly one category and extract structured facts. Return strict JSON only — no markdown fences, no commentary. Never invent facts; leave fields empty when absent.`;
 
@@ -292,9 +300,10 @@ export class Nexus extends AgentBase {
     // channel = 'whatsapp' — Chrome push is permanently disabled; WhatsApp only.
     await this.notify(subject, body, severity, 'whatsapp', context.leadId || null);
 
-    // For warning/critical — send immediately without waiting for Pulse sweep
+    // For warning/critical — send immediately without waiting for Pulse sweep.
+    // Slack first, WhatsApp fallback (high-priority only).
     if (severity === 'warning' || severity === 'critical') {
-      sendImmediate(subject, body, 'whatsapp').catch(e =>
+      sendImmediate(subject, body, 'whatsapp', severity).catch(e =>
         console.warn('[Nexus] Immediate dispatch error:', e.message)
       );
     }
@@ -653,7 +662,6 @@ export class Nexus extends AgentBase {
     const db = getSupabase();
     let brief = null;
     let researchMeta = {};
-    let tavilyDown = null; // API status flag — if set, retries are pointless
 
     try {
       const { researcher } = await import('./researcher.js');
@@ -663,8 +671,20 @@ export class Nexus extends AgentBase {
         depth:       'deep',
         mergeWithKB: true,
       });
-      brief        = result?.brief || result?.summary || String(result || '');
-      tavilyDown   = result?.tavilyDown || null;
+
+      // Never stringify an object into a content field — `String(result || '')`
+      // can only ever produce "[object Object]". A job that returns no usable
+      // brief (absent, or shorter than the 400-character floor) is a failure.
+      const rawBrief = typeof result?.brief === 'string' ? result.brief
+        : typeof result?.summary === 'string' ? result.summary
+        : null;
+      if (!rawBrief || rawBrief.trim().length < 400) {
+        throw new Error(rawBrief
+          ? `Research returned a brief of ${rawBrief.trim().length} characters — shorter than the 400-character floor.`
+          : 'Research returned no usable brief (missing brief field).');
+      }
+
+      brief        = rawBrief;
       researchMeta = {
         sources:      result?.sources      || [],
         gaps:         result?.gaps         || [],
@@ -674,65 +694,92 @@ export class Nexus extends AgentBase {
       };
     } catch (e) {
       console.error('[Nexus] Orion research failed:', e.message);
-      if (db) {
-        await db.from('tasks').update({
-          status: 'failed', error: e.message, completed_at: new Date().toISOString(),
-        }).eq('id', taskId);
+      const { failResearchDeliverable } = await import('../lib/researchDeliverables.js');
+
+      // A dead / missing Tavily key is an infrastructure outage, not a quality
+      // problem — tell the Boss so the key gets fixed, then fail the task.
+      if (e?.code === 'TAVILY_UNAVAILABLE') {
+        await this.escalateToOwner({
+          subject:  '⚠️ Tavily API down — Orion research blocked',
+          body:     `Orion tried to research "${instruction.slice(0, 100)}" but Tavily is unavailable: ${e.message}\n\nAction: check TAVILY_API_KEY on Render (quota, expiry, rotation), then re-run this task from the Command Center.`,
+          severity: 'critical',
+          context:  { taskId, instruction: instruction.slice(0, 200), tavilyReason: e.message },
+        }).catch((escErr) => console.warn('[Nexus] Infrastructure escalation failed:', escErr.message));
       }
+
+      await failResearchDeliverable({
+        taskId, instruction,
+        reason: e.message,
+        depth: 'deep', forAgent: 'nexus',
+      });
       return;
     }
+
+    const { completeResearchDeliverable, failResearchDeliverable, MIN_BRIEF_LENGTH } = await import('../lib/researchDeliverables.js');
 
     let qScore = scoreResearchBrief({ brief, ...researchMeta });
     console.log(`[Nexus] Research quality: ${qScore.grade} (${qScore.score}/100)`);
 
-    // ── Intelligent retry: only re-run if the API is healthy and quality failed on content, not connectivity ──
+    // ── Quality gate: a brief scoring below 60 never advances to writing ──
     if (!qScore.passed) {
-      const apiDown = tavilyDown && !tavilyDown.ok;
+      // API is healthy — one automatic retry with a stricter prompt is permitted.
+      await notifyFailedResearchBrief({ topic: instruction, qScore });
+      console.warn('[Nexus] Research quality below gate — retrying with a stricter prompt');
+      try {
+        const { researcher } = await import('./researcher.js');
+        const deepResult = await researcher.research({
+          topic:       instruction,
+          forAgent:    'nexus',
+          depth:       'deep',
+          mergeWithKB: true,
+          strict:      true,
+          context:     'The previous brief failed the quality gate. Target specific statistics, named frameworks, and cited sources.',
+          focusAreas:  ['market data and statistics', 'expert frameworks', 'regional context', 'competitive landscape'],
+        });
+        brief        = deepResult?.brief || brief;
+        researchMeta = {
+          sources:      deepResult?.sources      || researchMeta.sources,
+          gaps:         deepResult?.gaps         || researchMeta.gaps,
+          coverStats:   deepResult?.coverStats   || researchMeta.coverStats,
+          mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
+          depth:        'deep',
+        };
+        qScore = scoreResearchBrief({ brief, ...researchMeta });
+      } catch (e) {
+        console.error('[Nexus] Strict retry failed:', e.message);
+      }
 
-      if (apiDown) {
-        // Tavily is dead — re-running would waste time and burn quota.
-        // Escalate infrastructure alert immediately.
-        console.error(`[Nexus] Skipping deep re-run — Tavily API is down: ${tavilyDown.reason}`);
-        try {
-          await this.escalateToOwner({
-            subject:  `⚠️ Tavily API down — Orion research blocked`,
-            body:     `Orion tried to research "${instruction.slice(0, 100)}" but Tavily is unavailable: ${tavilyDown.reason}\n\nNo amount of re-running will fix this. Action: check TAVILY_API_KEY on Render (quota, expiry, rotation). Once the key is healthy, re-run this task from the Command Center.`,
-            severity: 'critical',
-            context:  { taskId, instruction: instruction.slice(0, 200), tavilyReason: tavilyDown.reason },
-          });
-        } catch (escErr) {
-          console.warn('[Nexus] Infrastructure escalation failed:', escErr.message);
-        }
-      } else {
-        // API is healthy but content quality was poor — worth re-running deeper
-        console.warn('[Nexus] Research quality too low — re-running Orion at deep depth with expanded web grounding');
-        try {
-          const { researcher } = await import('./researcher.js');
-          const deepResult = await researcher.research({
-            topic:       instruction,
-            forAgent:    'nexus',
-            depth:       'deep',
-            mergeWithKB: true,
-            focusAreas:  ['market data and statistics', 'expert frameworks', 'regional context', 'competitive landscape'],
-          });
-          brief        = deepResult?.brief || brief;
-          tavilyDown   = deepResult?.tavilyDown || tavilyDown;
-          researchMeta = {
-            sources:      deepResult?.sources      || researchMeta.sources,
-            gaps:         deepResult?.gaps         || researchMeta.gaps,
-            coverStats:   deepResult?.coverStats   || researchMeta.coverStats,
-            mergedWithKB: deepResult?.mergedWithKB || researchMeta.mergedWithKB,
-            depth:        'deep',
-          };
-          qScore = scoreResearchBrief({ brief, ...researchMeta });
-        } catch (e) {
-          console.error('[Nexus] Deep re-run failed:', e.message);
-        }
+      // Second failure — stop and wait for a human.
+      if (!qScore.passed) {
+        console.error(`[Nexus] Research failed the quality gate twice (${qScore.score}/100) — waiting for human review`);
+        await notifyFailedResearchBrief({ topic: instruction, qScore });
+        await failResearchDeliverable({
+          taskId, instruction, qualityScore: qScore,
+          reason: `Research brief failed the quality gate twice (${qScore.score}/100) — waiting for human review`,
+          depth: researchMeta.depth, forAgent: 'nexus',
+        });
+        return;
       }
     }
 
-    const apiDown        = tavilyDown && !tavilyDown.ok;
-    const briefGated     = !qScore.passed || !(researchMeta.sources?.length);
+    // ── Never store a too-short brief as a completed research artifact ──
+    const briefLength = String(brief || '').trim().length;
+    if (briefLength < MIN_BRIEF_LENGTH) {
+      console.error(`[Nexus] Research brief too short (${briefLength} chars) — failing task ${taskId}`);
+      await notifyFailedResearchBrief({
+        topic: instruction,
+        qScore,
+        extraReason: `Brief is ${briefLength} characters — shorter than the ${MIN_BRIEF_LENGTH}-character minimum.`,
+      });
+      await failResearchDeliverable({
+        taskId, instruction, qualityScore: qScore,
+        reason: `Research brief shorter than ${MIN_BRIEF_LENGTH} characters — not stored as a completed artifact`,
+        depth: researchMeta.depth, forAgent: 'nexus',
+      });
+      return;
+    }
+
+    const briefGated     = !(researchMeta.sources?.length);
     const rawBriefText   = brief || '';
 
     // ── Show Boss the quality scorecard AND whatever raw content exists ──────
@@ -742,9 +789,7 @@ export class Nexus extends AgentBase {
     // so they can decide whether the partial output is still useful.
     let bossBrief;
     if (briefGated) {
-      const reasonBlock = apiDown
-        ? `⚠️ *Tavily API is currently unavailable:* ${tavilyDown.reason}\nOrion produced whatever it could from cached/internal sources below.`
-        : `Brief withheld — Tavily/Firecrawl returned insufficient sources (${researchMeta.sources?.length || 0}). Check \`TAVILY_API_KEY\` quota on Render, then re-run from Command Center.`;
+      const reasonBlock = `Brief withheld — Tavily/Firecrawl returned insufficient sources (${researchMeta.sources?.length || 0}). Check \`TAVILY_API_KEY\` quota on Render, then re-run from Command Center.`;
 
       bossBrief = [
         formatQualityBadge(qScore),
@@ -784,7 +829,6 @@ export class Nexus extends AgentBase {
       }
     }
 
-    const { completeResearchDeliverable } = await import('../lib/researchDeliverables.js');
     const deliverableResult = await completeResearchDeliverable({
       taskId,
       instruction,
@@ -882,6 +926,11 @@ export class Nexus extends AgentBase {
   }
 
   async orchestrate(instruction, options = {}) {
+    if (await isPaused()) {
+      console.log('[Paused] autonomous task creation suppressed (Nexus orchestrate)');
+      return { type: 'plan', paused: true, parentId: null, tasks: [], plan: [] };
+    }
+
     const { priority = 3, researchBrief = null, nextStep = null } = options;
     const db = getSupabase();
 
@@ -963,8 +1012,9 @@ export class Nexus extends AgentBase {
         };
       }
 
+      let placeholderTaskId = null;
       if (db) {
-        await db.from('tasks').insert({
+        const { data: placeholder } = await db.from('tasks').insert({
           title:       step.title,
           description: `Use the following research brief:\n\n${researchBrief.slice(0, 2000)}`,
           agent_id:    step.agent_id,
@@ -973,13 +1023,15 @@ export class Nexus extends AgentBase {
           priority,
           type:        step.type,
           input:       JSON.stringify({ researchBrief, originalInstruction: instruction }),
-        });
+        }).select('id').single();
+        placeholderTaskId = placeholder?.id || null;
       }
 
       // If BD brief — trigger Atlas immediately
       if (nextStep === 'bd_brief' || nextStep === 'strategy') {
         try {
           const { atlas } = await import('./atlas.js');
+          if (placeholderTaskId) await this.startTask(placeholderTaskId);
           const bdPrompt = `You are Atlas, DigiFusion's BD specialist. Using the research findings below, produce a structured business development strategy brief.
 
 RESEARCH FINDINGS:
@@ -987,6 +1039,7 @@ ${researchBrief.slice(0, 3000)}
 
 Apply the Deal Engine framework: identify the opportunity, the ideal prospect profile, the winning angle, key objections, and recommended next actions. Be specific and actionable.`;
           const brief = await atlas.chat(bdPrompt);
+          if (placeholderTaskId) await this.completeTask(placeholderTaskId, { resultReference: { brief: String(brief || '').slice(0, 4000) } });
           return {
             type:    'bd_brief_ready',
             agent:   'atlas',
@@ -995,6 +1048,7 @@ Apply the Deal Engine framework: identify the opportunity, the ideal prospect pr
           };
         } catch (e) {
           console.error('[Nexus] Atlas dispatch failed:', e.message);
+          if (placeholderTaskId) await this.failTask(placeholderTaskId, e.message);
         }
       }
 
@@ -1002,6 +1056,7 @@ Apply the Deal Engine framework: identify the opportunity, the ideal prospect pr
       if (nextStep === 'automation') {
         try {
           const { nova } = await import('./nova.js');
+          if (placeholderTaskId) await this.startTask(placeholderTaskId);
           const novaPrompt = `You are Nova, DigiFusion's AI & SaaS automation specialist. Using the research findings below, design an AI automation or SaaS solution architecture.
 
 RESEARCH FINDINGS:
@@ -1009,6 +1064,7 @@ ${researchBrief.slice(0, 3000)}
 
 Apply the Automation Velocity Engine (AVE) framework: identify the automation opportunity, map the workflow, recommend the AI/SaaS stack, outline the implementation phases, and estimate the efficiency gain.`;
           const brief = await nova.chat(novaPrompt);
+          if (placeholderTaskId) await this.completeTask(placeholderTaskId, { resultReference: { brief: String(brief || '').slice(0, 4000) } });
           return {
             type:    'automation_brief_ready',
             agent:   'nova',
@@ -1017,6 +1073,50 @@ Apply the Automation Velocity Engine (AVE) framework: identify the automation op
           };
         } catch (e) {
           console.error('[Nexus] Nova dispatch failed:', e.message);
+          if (placeholderTaskId) await this.failTask(placeholderTaskId, e.message);
+        }
+      }
+
+      // If report — dispatch Synthesizer to build an intelligence report
+      if (nextStep === 'report') {
+        try {
+          const { synthesizer } = await import('./synthesizer.js');
+          if (placeholderTaskId) await this.startTask(placeholderTaskId);
+          const report = await synthesizer.synthesize({
+            instruction: `Produce a structured intelligence report from the research findings below. Lead with the most actionable insights and cite sources.\n\nRESEARCH FINDINGS:\n${researchBrief.slice(0, 3000)}`,
+            outputFormat: 'brief',
+          });
+          if (placeholderTaskId) await this.completeTask(placeholderTaskId, { resultReference: { report: String(report || '').slice(0, 4000) } });
+          return {
+            type:    'report_ready',
+            agent:   'synthesizer',
+            message: 'Synthesizer has produced an intelligence report from the research.',
+            content: report,
+          };
+        } catch (e) {
+          console.error('[Nexus] Synthesizer report failed:', e.message);
+          if (placeholderTaskId) await this.failTask(placeholderTaskId, e.message);
+        }
+      }
+
+      // If save — dispatch Synthesizer to absorb findings into the KB
+      if (nextStep === 'save') {
+        try {
+          const { synthesizer } = await import('./synthesizer.js');
+          if (placeholderTaskId) await this.startTask(placeholderTaskId);
+          const summary = await synthesizer.synthesize({
+            instruction: `Absorb and index the following research findings into the knowledge base. Summarise the key facts, frameworks and data points so other agents can retrieve them.\n\nRESEARCH FINDINGS:\n${researchBrief.slice(0, 3000)}`,
+            outputFormat: 'brief',
+          });
+          if (placeholderTaskId) await this.completeTask(placeholderTaskId, { resultReference: { saved: true, summary: String(summary || '').slice(0, 2000) } });
+          return {
+            type:    'saved_to_kb',
+            agent:   'synthesizer',
+            message: 'Findings saved to the knowledge base.',
+          };
+        } catch (e) {
+          console.error('[Nexus] Synthesizer save failed:', e.message);
+          if (placeholderTaskId) await this.failTask(placeholderTaskId, e.message);
         }
       }
 
@@ -1046,6 +1146,10 @@ Return a JSON object with:
 }
 
 No full article. Brief only.`;
+
+          // This branch owns the placeholder task created above — drafting is
+          // its job, so mark it in_progress before Aether is called.
+          if (placeholderTaskId) await this.startTask(placeholderTaskId);
 
           const rawBrief = await aether.chat(outlinePrompt);
           let brief = {};
@@ -1096,6 +1200,20 @@ No full article. Brief only.`;
             },
           });
 
+          // The placeholder's job ends the moment the approval request exists —
+          // complete it with the draft reference so it never lingers as "stuck".
+          if (placeholderTaskId) {
+            await this.completeTask(placeholderTaskId, {
+              draftReference: {
+                approvalId,
+                proposedTitle:     brief.proposedTitle || instruction.slice(0, 80),
+                outline:           brief.outline || [],
+                recommendedTone:   brief.recommendedTone || null,
+                recommendedAuthor: brief.recommendedAuthor || resolvedAuthor?.byline || null,
+              },
+            });
+          }
+
           return {
             type:               'pending_boss_approval',
             stage:              'blog_brief',
@@ -1113,6 +1231,7 @@ No full article. Brief only.`;
           };
         } catch (e) {
           console.error('[Nexus] Aether brief generation failed:', e.message);
+          if (placeholderTaskId) await this.failTask(placeholderTaskId, e.message);
 
           // Even if brief generation fails — still send WhatsApp and wait
           const { approvalId, whatsappSent } = await createApprovalRequest({
@@ -1696,7 +1815,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
   // CHAT — overrides agentBase.chat() to execute real actions, not just talk
   // ══════════════════════════════════════════════════════════════════════════
 
-  async chat(message, history = []) {
+  async chat(message, history = [], surface = 'internal') {
     const lower = message.toLowerCase();
 
     // ── ACTION: Workflow design ────────────────────────────────────────────
@@ -1758,20 +1877,19 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
         return 'Boss, outbound WhatsApp is not configured — set OWNER_PHONE (or WHATSAPP_TO) plus Twilio credentials on the server.';
       }
       try {
-        const { sendImmediate } = await import('../skills/notifier.js');
-        const result = await sendImmediate('Nexus', bodyText, 'whatsapp');
-        const wa = result?.whatsapp;
-        if (wa?.skipped) {
-          const reason = wa.reason === 'no_credentials'
+        const { sendWhatsAppRecorded } = await import('../skills/notifier.js');
+        const result = await sendWhatsAppRecorded('Nexus', bodyText);
+        if (result?.skipped) {
+          const reason = result.reason === 'no_credentials'
             ? 'Twilio/Meta WhatsApp credentials are missing.'
             : 'No WhatsApp recipient is configured.';
           return `Could not send — ${reason}`;
         }
-        const sent = wa?.results?.some((r) => r.sent || r.sid);
+        const sent = result?.results?.some((r) => r.sent || r.sid);
         if (sent) {
           return `Done Boss — sent "${bodyText}" to your WhatsApp. Check your phone; if nothing arrives, verify Twilio sandbox join and OWNER_PHONE.`;
         }
-        const err = wa?.results?.find((r) => r.error)?.error || wa?.error;
+        const err = result?.results?.find((r) => r.error)?.error || result?.error;
         return `WhatsApp send failed${err ? `: ${err}` : ''}. Check Twilio logs and webhook config.`;
       } catch (e) {
         return `WhatsApp send failed — ${e.message}`;
@@ -1780,7 +1898,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
 
     // ── ACTION: Boss YES/NO on pending approval (chat + WhatsApp parity) ───
     try {
-      const approvalResult = await processBossApprovalMessage(message);
+      const approvalResult = await processBossApprovalMessage(message, 'web');
       if (approvalResult.handled && approvalResult.reply) {
         return approvalResult.reply;
       }
@@ -1890,10 +2008,14 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     }
 
     // ── DEFAULT: LLM chat with grounded context ────────────────────────────
-    // Fetch live context to ground the response so Nexus doesn't hallucinate
+    // Fetch live context to ground the response so Nexus doesn't hallucinate.
+    // `surface` is structural: internal (Slack) may see agent names + live state;
+    // external (client email / non-staff WhatsApp / published) gets an
+    // identity-free system prompt and no internal context at all.
+    const external = surface === 'external';
     const db = getSupabase();
     let liveContext = '';
-    if (db) {
+    if (db && !external) {
       const { buildClient360Snapshot } = await import('../skills/client360.js');
       const { computeCurrentUtilization } = await import('../skills/utilization.js');
       const [tasksRes, leadsRes, pendingApproval, clientSnap, util] = await Promise.all([
@@ -1924,9 +2046,11 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       if (util) liveContext += `\nUTILIZATION: ${util.utilizationPct}%${util.alert ? ' — PAUSE NEW INTAKE' : ''}`;
     }
 
-    const episodic = await this.recallEpisodic(3).catch(() => '');
+    const episodic = external ? '' : await this.recallEpisodic(3).catch(() => '');
     const historyBlock = history.slice(-6).map(t =>
-      `${t.role === 'user' ? 'Boss' : 'Nexus'}: ${t.content}`
+      external
+        ? `${t.role === 'user' ? 'You' : 'Assistant'}: ${t.content}`
+        : `${t.role === 'user' ? 'Boss' : 'Nexus'}: ${t.content}`
     ).join('\n');
 
     const fullPrompt = [
@@ -1937,8 +2061,11 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     ].filter(Boolean).join('\n\n');
 
     // Hard honesty enforcement: the LLM can ONLY assert facts visible in LIVE SYSTEM STATE above
-    const chatSystem = `${this.systemPrompt}\n\n${buildHonestyEnforcementBlock()}` +
-      ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about Orion research, cite ORION RESEARCH lines only — deliverables live in PathGuru (tasks.output / Deliverables panel), not Notion by default.';
+    const baseSystem = external ? NEXUS_EXTERNAL_SYSTEM : this.systemPrompt;
+    const chatSystem = `${baseSystem}\n\n${buildHonestyEnforcementBlock()}` +
+      (external
+        ? ' Never mention AI agents, internal systems, internal team names, vendors, pricing, methodology, or client names.'
+        : ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about Orion research, cite ORION RESEARCH lines only — deliverables live in PathGuru (tasks.output / Deliverables panel), not Notion by default.');
 
     const provider = resolveProvider();
     if (!provider) {
@@ -2252,48 +2379,10 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
     }
   }
 
-  // Content calendar — generate and queue sector articles
-  async createContentCalendar({ sectors = ['sme', 'fintech', 'government', 'pharma', 'hospitality'], count = 5 } = {}) {
-    const { putJsonCache, getJsonCache } = await import('../cloudflareR2.js');
-    const prompt = `You are the DigiFusion content strategy director. Generate a ${count}-article content calendar targeting: ${sectors.join(', ')}.
-
-For each article provide:
-- headline: punchy, SEO-ready, under 70 chars
-- sector: target sector
-- topic: full topic description  
-- angle: unique insight or hook
-- keyword: primary SEO keyword
-- audience: target reader
-- scheduledFor: ISO date string, spaced every ${BLOG_CADENCE_DAYS} days starting tomorrow (blog cadence — Boss approves before publish)
-- rationale: why it drives DigiFusion enquiries
-
-Output ONLY a valid JSON array: [{ headline, sector, topic, angle, keyword, audience, scheduledFor, rationale }]
-
-Practitioner-grade topics only. No generic listicles.`;
-
-    const raw = await this._callWithFallback(prompt);
-    let ideas = [];
-    try {
-      const m = raw.match(/\[\s\S]*\]/);
-      ideas = JSON.parse(m?.[0] || '[]');
-    } catch {
-      ideas = [];
-    }
-
-    const existing = (await getJsonCache('cache/content-schedule.json').catch(() => null)) || [];
-    const fresh = ideas.map((a, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + 1 + i * BLOG_CADENCE_DAYS);
-      return {
-        ...a,
-        topic:        a.headline || a.topic,
-        status:       'queued',
-        scheduledFor: a.scheduledFor || d.toISOString(),
-      };
-    });
-    await putJsonCache('cache/content-schedule.json', [...fresh, ...existing].slice(0, 20));
-
-    return { calendar: fresh, totalQueued: fresh.length + existing.length };
+  // Content calendar generation is retired — no agent invents its own topics.
+  // Content is now commissioned by a human (see /api/content/commission).
+  async createContentCalendar() {
+    return { error: 'content is now commissioned, not scheduled — see /api/content/commission' };
   }
 
   // Researcher -> Aether pipeline — approval gate only (never direct publish)
@@ -2328,81 +2417,15 @@ Practitioner-grade topics only. No generic listicles.`;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // NEWSLETTER — weekly topic proposal
+  // NEWSLETTER — commissioned only (no autonomous topic proposal)
   // ══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Propose 3 newsletter topics for the coming week.
-   * Saves them to newsletter_campaigns with status='proposed'.
-   * Called by Pulse weekly sweep (Monday morning) or manually.
-   */
   async proposeNewsletterTopics() {
-    const db = getSupabase();
-    if (!db) return { error: 'Supabase not configured' };
-
-    // Don't propose if there are already pending proposals this week
-    const monday  = _getMondayISO();
-    const { data: existing } = await db.from('newsletter_campaigns')
-      .select('id').eq('week_of', monday).in('status', ['proposed', 'approved', 'curating', 'ready', 'sent'])
-      .limit(1);
-    if (existing?.length) {
-      return { skipped: true, reason: 'Proposals already exist for this week', weekOf: monday };
-    }
-
-    const prompt = `You are Nexus, the strategic coordinator of DigiFusion — a consulting firm specialising in AI automation, business development, and digital media for SMBs and enterprises in Africa.
-
-Propose 3 newsletter topic ideas for this week's subscriber email. Each topic should:
-- Be timely and relevant to Nigerian/African business leaders and entrepreneurs
-- Connect clearly to one of DigiFusion's three pillars: AI Automation, BD/Sales Growth, or Digital Media & Content
-- Have a strong "why now" angle (recent event, trend, or season)
-- Not overlap with generic global tech content — be specific to the African context
-
-Return JSON array only, no markdown:
-[
-  { "topic": "short compelling headline", "angle": "2-sentence explanation of the hook and why it matters now", "pillar": "automation|bd|digital_media" },
-  { "topic": "...", "angle": "...", "pillar": "..." },
-  { "topic": "...", "angle": "...", "pillar": "..." }
-]`;
-
-    let proposals;
-    try {
-      const raw = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, { fallback: true });
-      proposals = JSON.parse(raw.match(/\[[\s\S]*\]/)?.[0] || raw);
-    } catch (e) {
-      console.error('[Nexus] Newsletter topic generation failed:', e.message);
-      return { error: e.message };
-    }
-
-    // Save each proposal
-    const inserted = [];
-    for (const p of (proposals || []).slice(0, 3)) {
-      const { data } = await db.from('newsletter_campaigns').insert({
-        proposed_topic: p.topic,
-        proposed_angle: p.angle,
-        proposed_by:    'nexus',
-        week_of:        monday,
-        status:         'proposed',
-      }).select().single();
-      if (data) inserted.push(data);
-    }
-
-    // Notify team
-    if (inserted.length > 0) {
-      await this.escalateToOwner({
-        subject:  `Newsletter proposals ready — ${inserted.length} topics for your approval`,
-        body:     inserted.map((p, i) => `${i + 1}. ${p.proposed_topic}\n   ${p.proposed_angle}`).join('\n\n'),
-        severity: 'info',
-        context:  { campaignIds: inserted.map(p => p.id) },
-      });
-    }
-
-    return { proposed: inserted.length, weekOf: monday, campaigns: inserted };
+    // Autonomous topic generation is retired — no agent proposes its own topic.
+    // Newsletter topics are now commissioned by a human (see /api/content/commission).
+    return { error: 'content is now commissioned, not scheduled — see /api/content/commission' };
   }
 
-  /**
-   * Approve a newsletter campaign and trigger Aether to curate content.
-   * Called by the PathGuru console when you click "Approve".
-   */
   async approveNewsletter(campaignId) {
     const db = getSupabase();
     if (!db) return { error: 'Supabase not configured' };
@@ -2456,6 +2479,11 @@ Return JSON array only, no markdown:
 export const nexus = new Nexus();
 
 async function _sendWhatsAppDirect(to, message) {
+  if (await isPaused()) {
+    console.log('[Paused] WhatsApp send suppressed');
+    return;
+  }
+
   const sid   = (process.env.TWILIO_ACCOUNT_SID  || '').trim();
   const token = (process.env.TWILIO_AUTH_TOKEN    || '').trim();
   const from  = (process.env.TWILIO_WHATSAPP_FROM || '').trim();

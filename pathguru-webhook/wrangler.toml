@@ -36,9 +36,12 @@ SUPABASE_URL  = "https://vyljyzaesbauuorsonpl.supabase.co"
 # signed differs from the one the Worker sees (redirect, custom domain).
 # TWILIO_WEBHOOK_URL = "https://pathguru-webhooks.YOURNAME.workers.dev/webhooks/whatsapp"
 
-# Safety net so nothing sits in the queue if a wake call fails.
+# Three schedules (see the `scheduled` handler in src/index.js):
+#   */5 * * * *  → wake the backend (safety net so the queue never sits long)
+#   0 6 * * *    → GET /api/cron/morning-digest  (Authorization: Bearer CRON_SECRET)
+#   0 4 * * *    → GET /api/cron/tasks-purge      (Authorization: Bearer CRON_SECRET)
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 6 * * *", "0 4 * * *"]
 
 # ── Custom domain — served on the same account's digitafusion.com zone ────────
 # `custom_domain = true` creates a Worker Custom Domain (auto DNS + cert) rather
@@ -54,3 +57,5 @@ custom_domain = true
 #   INBOUND_WEBHOOK_SECRET   same value as on Render
 #   MAKE_WEBHOOK_TOKEN      shared bearer secret for Make → /webhooks/inbound-email
 #                            and /webhooks/outbound-sent (required — 401 without it)
+#   CRON_SECRET              same value as on Render — authenticates the two daily
+#                            cron jobs (/api/cron/morning-digest, /api/cron/tasks-purge)

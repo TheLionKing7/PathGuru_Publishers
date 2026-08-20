@@ -13,8 +13,8 @@
  * The gate scores the brief and:
  *   - Grade A (80-100) → passes directly to Boss with score attached
  *   - Grade B (65-79)  → passes with warnings flagged
- *   - Grade C (50-64)  → passes but Nexus recommends a re-run
- *   - Grade D (< 50)   → Nexus intercepts, re-runs Orion deeper, does NOT show Boss
+ *   - Grade C (60-64)  → meets the minimum gate; Boss may recommend a deeper run
+ *   - Grade D (< 60)   → FAILS the gate — no writing task, one strict retry, then wait for a human
  *
  * Called by: Nexus after every Orion research call, before presenting to Boss.
  */
@@ -22,6 +22,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCORER
 // ─────────────────────────────────────────────────────────────────────────────
+
+import { getSupabase } from '../supabaseClient.js';
+import { postSlackMessage, recordNotificationAttempt, slackChannelFor } from './slackNotify.js';
+
+/**
+ * Briefs scoring below this value fail the quality gate and must not advance
+ * to a downstream writing task. The threshold is a deliberate product decision,
+ * not an env var — raising it should require a code change.
+ */
+export const QUALITY_GATE_MIN_SCORE = 60;
 
 /**
  * Score a research brief returned by Orion.
@@ -38,8 +48,9 @@
  *   score: number,        // 0-100
  *   grade: string,        // 'A' | 'B' | 'C' | 'D'
  *   gradeLabel: string,   // Human-readable
- *   passed: boolean,      // false = Nexus should re-run before showing Boss
- *   flags: string[],      // List of specific quality signals
+ *   passed: boolean,      // false = below the 60 gate; do not advance to writing
+ *   flags: string[],      // All quality signals (positive, warning, failure)
+ *   failures: string[],   // Only the failure reasons (negative flags)
  *   wordCount: number,
  *   sourceCount: number,
  *   scrapedCount: number,
@@ -153,13 +164,17 @@ export function scoreResearchBrief({ brief = '', sources = [], gaps = [], coverS
   } else if (score >= 65) {
     grade = 'B'; gradeLabel = 'Acceptable'; passed = true;
     recommendation = 'Brief has minor gaps. Present to Boss with warnings highlighted.';
-  } else if (score >= 50) {
+  } else if (score >= QUALITY_GATE_MIN_SCORE) {
     grade = 'C'; gradeLabel = 'Weak'; passed = true;
-    recommendation = 'Brief is thin. Present to Boss but recommend a deeper follow-up run.';
+    recommendation = 'Brief meets the minimum quality gate. Present to Boss but recommend a deeper follow-up run.';
   } else {
     grade = 'D'; gradeLabel = 'Poor'; passed = false;
-    recommendation = 'Brief quality is too low to show Boss. Nexus should re-run Orion at "deep" depth before escalating.';
+    recommendation = `Brief is below the quality gate (${QUALITY_GATE_MIN_SCORE}/100). Do not advance to writing — retry once at deeper depth, then wait for a human.`;
   }
+
+  // Only the negative signals are "failure reasons"; positive/neutral flags stay
+  // informational. These are what get surfaced to Slack and persisted for querying.
+  const failures = flags.filter(f => f.startsWith('❌') || f.startsWith('⚠️'));
 
   return {
     score,
@@ -167,6 +182,7 @@ export function scoreResearchBrief({ brief = '', sources = [], gaps = [], coverS
     gradeLabel,
     passed,
     flags,
+    failures,
     wordCount,
     sourceCount,
     scrapedCount,
@@ -194,4 +210,46 @@ export function formatQualityBadge(qScore) {
       ? `\n💡 *Recommendation:* ${qScore.recommendation}`
       : '',
   ].filter(Boolean).join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FAILED-BRIEF SLACK NOTIFICATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Post a failed research brief to SLACK_OPS_CHANNEL with the grade, the
+ * specific failure reasons the scorer produced, and the topic. A failed brief
+ * must never fail silently — the notice is always attempted and recorded.
+ *
+ * @param {object} opts
+ * @param {string} opts.topic      — research topic / instruction
+ * @param {object} opts.qScore     — return value of scoreResearchBrief()
+ * @param {string} [opts.extraReason] — additional failure note (e.g. length rule)
+ * @returns {Promise<{ ok: boolean, providerId: string|null, error: string|null }>}
+ */
+export async function notifyFailedResearchBrief({ topic, qScore, extraReason = null }) {
+  const reasons = [
+    ...(qScore?.failures || []),
+    ...(extraReason ? [extraReason] : []),
+  ];
+
+  const text = [
+    ':x: *Research brief failed the quality gate*',
+    `*Grade:* ${qScore?.grade || '?'} (${qScore?.score ?? '?'}/100)`,
+    `*Topic:* ${topic}`,
+    reasons.length ? `*Reasons:*\n${reasons.map(r => `• ${r}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n');
+
+  const db = getSupabase();
+  const channel = slackChannelFor('ops');
+  if (!channel) {
+    await recordNotificationAttempt({ db, channel: 'slack', target: '', ok: false, error: 'SLACK_OPS_CHANNEL unset' });
+    console.warn('[ResearchGate] Failed-brief Slack notice skipped — SLACK_OPS_CHANNEL unset');
+    return { ok: false, providerId: null, error: 'SLACK_OPS_CHANNEL unset' };
+  }
+
+  const res = await postSlackMessage({ channel, text });
+  await recordNotificationAttempt({ db, channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
+  if (!res.ok) console.warn('[ResearchGate] Failed-brief Slack notice failed:', res.error);
+  return res;
 }

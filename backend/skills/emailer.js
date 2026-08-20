@@ -10,6 +10,8 @@
  *   EMAIL_REPLY_TO        — reply-to address (optional)
  */
 
+import { isPaused } from './systemFlags.js';
+
 function env(k) { return (process.env[k] || '').trim(); }
 
 const RESEND_API = 'https://api.resend.com/emails';
@@ -19,6 +21,11 @@ const RESEND_API = 'https://api.resend.com/emails';
  * @param {{ to, subject, html, text, replyTo }} opts
  */
 export async function sendEmail({ to, subject, html, text, replyTo }) {
+  if (await isPaused()) {
+    console.log('[Paused] outbound email send suppressed');
+    return { paused: true };
+  }
+
   const apiKey = env('RESEND_API_KEY');
   const from   = env('EMAIL_FROM') || 'DigiFusion <hello@digifusion.com>';
 
@@ -67,6 +74,11 @@ export async function sendEmail({ to, subject, html, text, replyTo }) {
  * @returns {{ sent, failed, batchId }}
  */
 export async function sendNewsletter({ subject, html, text, subscribers }) {
+  if (await isPaused()) {
+    console.log('[Paused] outbound email send suppressed');
+    return { paused: true };
+  }
+
   const apiKey     = env('RESEND_API_KEY');
   const from       = env('EMAIL_FROM') || 'DigiFusion <hello@digifusion.com>';
   const unsubUrl   = env('APP_URL') ? `${env('APP_URL')}/unsubscribe` : 'https://digifusion.com/unsubscribe';

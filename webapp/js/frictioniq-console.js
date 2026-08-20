@@ -86,12 +86,15 @@
   };
 
   let _rows = [];
+  let _deleted = [];   // deleted rows — recovery view, populated only when "Show deleted" is on
   let _stats = null;   // whole-table counts from the server, or null if it timed out
   let _page = null;    // { returned, limit, truncated }
   let _open = null;
   let _detail = {};    // token -> { loading | error | session, touches }
   let _sort = { key: 'created_at', dir: -1 };
   let _timer = null;
+  const _showDeleted = () => $('fiqDeleted')?.checked === true;
+  const sourceRows = () => (_showDeleted() ? _deleted : _rows);
 
   const esc = (s) => String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -123,13 +126,16 @@
     const band = $('fiqBand')?.value || '';
     const stage = $('fiqStage')?.value || '';
     const sector = $('fiqSector')?.value || '';
+    const test = $('fiqTest')?.value || '';
     const days = Number($('fiqSince')?.value || 0);
     const since = days ? Date.now() - days * 86400000 : null;
 
-    let out = _rows.filter((r) => {
+    let out = sourceRows().filter((r) => {
       if (band && String(r.band || '').toLowerCase() !== band) return false;
       if (stage && String(r.stage || 'captured').toLowerCase() !== stage) return false;
       if (sector && r.sector !== sector) return false;
+      if (test === 'test' && !r.is_test) return false;
+      if (test === 'live' && r.is_test) return false;
       if (since) { const t = Date.parse(r.created_at || ''); if (!Number.isFinite(t) || t < since) return false; }
       if (q) {
         const hay = [r.organisation, r.sector, r.role, r.country, r.email, r.band]
@@ -154,6 +160,19 @@
 
   /* ── Summary ───────────────────────────────────────────────────────── */
   function renderSummary(view) {
+    /* Recovery view: deleted rows are listed below for restore only. The tiles
+       and band mix are analytics, and analytics count live rows — showing them
+       over deleted rows would re-inflate the numbers the delete just removed. */
+    if (_showDeleted()) {
+      const host = $('fiqTiles');
+      if (host) host.innerHTML = '<div class="cx-col-12"><div class="cx-empty"><span class="cx-empty-mark"></span>' +
+        'Deleted rows are listed below for recovery only — the tiles, band mix and funnel count live rows, not these.</div></div>';
+      const dist = $('fiqBandMix');
+      if (dist) dist.innerHTML = `<div class="cx-empty"><span class="cx-empty-mark"></span>${_deleted.length} deleted row(s). Restore one to return it to the register.</div>`;
+      const note = $('fiqBandNote');
+      if (note) note.textContent = '';
+      return;
+    }
     const host = $('fiqTiles');
     if (host) {
       // Three columns each, inside the twelve-column grid — an unwrapped tile
@@ -245,10 +264,20 @@
     return `<b>${esc(fmtScore(r))}</b>${cap}${depth}`;
   };
 
+  const rowActions = (r) => {
+    if (r.deleted_at) {
+      return `<button class="cx-btn cx-btn-sm" data-restore-for="${esc(r.token)}" title="Return this row to the register">Restore</button>`;
+    }
+    const test = r.is_test
+      ? `<button class="cx-btn cx-btn-sm" data-test-for="${esc(r.token)}" title="Mark as a real submission">unmark test</button>`
+      : `<button class="cx-btn cx-btn-sm" data-test-for="${esc(r.token)}" title="Mark as a test submission">mark test</button>`;
+    return `${test}<button class="cx-btn cx-btn-danger cx-btn-sm" data-delete-for="${esc(r.token)}" title="Soft-delete this row">Delete</button>`;
+  };
+
   function renderTable(view) {
     const body = $('fiqTableBody');
     if (!body) return;
-    const COLS = 9;
+    const COLS = 10;
     if (!view.length) {
       body.innerHTML = `<tr><td colspan="${COLS}"><div class="cx-empty">
         <span class="cx-empty-mark"></span>No rows match this filter.</div></td></tr>`;
@@ -261,7 +290,7 @@
         <td class="cx-num">${esc(fmtDate(r.created_at))}</td>
         <td class="cx-num">${scoreCell(r)}</td>
         <td>${bandChip(r.band)}</td>
-        <td>${esc(r.organisation || '—')}</td>
+        <td>${esc(r.organisation || '—')}${r.is_test ? '<span class="cx-flag cx-flag-test" title="Marked as a test submission">test</span>' : ''}${r.deleted_at ? '<span class="cx-flag cx-flag-deleted" title="Soft-deleted">deleted</span>' : ''}</td>
         <td>${esc(r.sector || '—')}</td>
         <td>${esc(r.country || '—')}</td>
         <td>${r.email ? esc(r.email) : '<span style="color:var(--text-muted,#4d6280)">no email</span>'}
@@ -269,6 +298,7 @@
         <td class="cx-num">${r.lead_score == null ? '—' : esc(String(r.lead_score))}
             ${hot ? '<span class="cx-flag cx-flag-hot">priority</span>' : ''}</td>
         <td>${stageSelect(r)}</td>
+        <td class="cx-actions">${rowActions(r)}</td>
       </tr>${open ? detailRow(r) : ''}`;
     }).join('');
 
@@ -294,7 +324,7 @@
     const d = _detail[r.token];
     const hot = Number(r.lead_score) >= 70 || String(r.priority || '').toLowerCase() === 'high';
 
-    return `<tr class="cx-detail"><td colspan="9"><div class="cx-detail-inner">
+    return `<tr class="cx-detail"><td colspan="10"><div class="cx-detail-inner">
       <div>
         <div class="cx-detail-block">
           <h4>Outbox</h4>
@@ -398,7 +428,8 @@
     if (d.error || !d.session) return '<div class="cx-empty"><span class="cx-empty-mark"></span>The full record could not be read.</div>';
     const shown = new Set(['token', 'created_at', 'total', 'max', 'depth', 'band', 'capped', 'sector',
       'role', 'headcount_band', 'country', 'email', 'stage', 'organization', 'organisation',
-      'replied', 'replied_at', 'lead_score', 'priority', 'outcome', 'outcome_value', 'outcome_at']);
+      'replied', 'replied_at', 'lead_score', 'priority', 'outcome', 'outcome_value', 'outcome_at',
+      'is_test', 'deleted_at', 'deleted_by', 'delete_reason']);
     const rest = Object.entries(d.session)
       .filter(([k, v]) => !shown.has(k) && v !== null && v !== undefined && v !== '');
     if (!rest.length) return '<div class="cx-empty"><span class="cx-empty-mark"></span>No further fields on this record.</div>';
@@ -444,8 +475,9 @@
   async function refresh() {
     const status = $('fiqStatus');
     if (status) status.textContent = 'loading…';
+    const deleted = _showDeleted();
     try {
-      const data = await api().apiFetch('/api/frictioniq/sessions', { timeoutMs: 15000 });
+      const data = await api().apiFetch(`/api/frictioniq/sessions${deleted ? '?deleted=1' : ''}`, { timeoutMs: 15000 });
       /* The route answers with { sessions, stats, band_distribution, page }.
          `sessions`, not `rows` — reading the wrong key yields undefined and
          renders "no rows match this filter" over a register that is full. */
@@ -459,12 +491,15 @@
          in the cell, the search haystack, the sort key and the CSV header.
          Reconciling it in four places invites the fifth to be missed, so it is
          reconciled once, here, at the boundary. */
-      _rows = raw.map((r) => {
+      const mapped = raw.map((r) => {
         const org = r.organisation ?? r.organization ?? null;
         return { ...r, organisation: org, organization: org };
       });
+      if (deleted) _deleted = mapped; else _rows = mapped;
 
-      if (_page?.truncated) {
+      if (deleted) {
+        if (status) status.textContent = `${_deleted.length} deleted row(s) · recovery view`;
+      } else if (_page?.truncated) {
         if (status) status.textContent = `showing ${_rows.length} of ${_stats?.total ?? '?'} — server capped this page`;
       } else if (status) {
         status.textContent = `${_rows.length} rows · updated ${new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
@@ -474,7 +509,7 @@
     } catch (e) {
       if (status) status.textContent = `error: ${e.message}`;
       const body = $('fiqTableBody');
-      if (body) body.innerHTML = `<tr><td colspan="9"><div class="cx-empty">
+      if (body) body.innerHTML = `<tr><td colspan="10"><div class="cx-empty">
         <span class="cx-empty-mark"></span>Could not read the register — ${esc(e.message)}</div></td></tr>`;
     }
   }
@@ -505,6 +540,49 @@
     }
   }
 
+  /* ── Delete / restore / test ───────────────────────────────────────────── */
+  async function removeRow(token) {
+    const r = sourceRows().find((x) => x.token === token);
+    const org = r?.organisation || 'this row';
+    const date = r?.created_at ? fmtDate(r.created_at) : '';
+    const label = `Delete ${org}${date ? ` (${date})` : ''}?`;
+    /* The confirmation carries the organisation and date so a mis-click cannot
+       remove the wrong row. Soft delete: the row leaves the register and every
+       count and its scheduled touches are stopped, but it can be restored. */
+    if (!window.confirm(`${label}\n\nThe row is soft-deleted — it leaves the register and every count, and its scheduled touches are stopped. It can be restored from the "Show deleted" view.`)) return;
+    try {
+      await api().apiFetch(`/api/frictioniq/session/${encodeURIComponent(token)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'deleted from console' }),
+      });
+      await refresh();
+    } catch (e) {
+      window.pgToast?.(`Delete failed — ${e.message}`, 'error');
+    }
+  }
+
+  async function restoreRow(token) {
+    try {
+      await api().postJson(`/api/frictioniq/session/${encodeURIComponent(token)}/restore`, {});
+      await refresh();
+    } catch (e) {
+      window.pgToast?.(`Restore failed — ${e.message}`, 'error');
+    }
+  }
+
+  async function toggleTest(token) {
+    const r = sourceRows().find((x) => x.token === token);
+    const next = !(r?.is_test === true);
+    try {
+      await api().postJson('/api/frictioniq/sessions/mark-test', { tokens: [token], is_test: next });
+      if (r) r.is_test = next;
+      render();
+    } catch (e) {
+      window.pgToast?.(`Could not update — ${e.message}`, 'error');
+    }
+  }
+
   function render() {
     const view = filtered();
     renderSummary(view);
@@ -513,15 +591,20 @@
 
   /* ── Wiring ────────────────────────────────────────────────────────── */
   function wire() {
-    ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince'].forEach((id) => {
+    ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince', 'fiqTest'].forEach((id) => {
       const el = $(id);
       if (!el) return;
       el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', render);
     });
     $('fiqRefresh')?.addEventListener('click', refresh);
     $('fiqExport')?.addEventListener('click', exportCsv);
+    $('fiqDeleted')?.addEventListener('change', () => {
+      _open = null; _detail = {};
+      refresh();
+    });
     $('fiqClear')?.addEventListener('click', () => {
-      ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince'].forEach((id) => { const e = $(id); if (e) e.value = ''; });
+      ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince', 'fiqTest'].forEach((id) => { const e = $(id); if (e) e.value = ''; });
+      const del = $('fiqDeleted'); if (del) del.checked = false;
       render();
     });
 
@@ -546,6 +629,12 @@
         const value = outcome === 'won' && Number.isFinite(num) && num > 0 ? num : null;
         return patch(token, { outcome, outcome_value: value }, save);
       }
+      const del = e.target.closest('[data-delete-for]');
+      if (del) return removeRow(del.dataset.deleteFor);
+      const restore = e.target.closest('[data-restore-for]');
+      if (restore) return restoreRow(restore.dataset.restoreFor);
+      const testToggle = e.target.closest('[data-test-for]');
+      if (testToggle) return toggleTest(testToggle.dataset.testFor);
       const tr = e.target.closest('#module-frictioniq tr[data-token]');
       if (tr && !e.target.closest('select,input,button,a,label')) {
         const token = tr.dataset.token;

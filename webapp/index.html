@@ -1285,6 +1285,14 @@
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
             </select>
+            <select id="fiqTest" class="cx-select">
+              <option value="">All rows</option>
+              <option value="test">Test rows</option>
+              <option value="live">Live rows</option>
+            </select>
+            <label class="cx-check" title="Show soft-deleted rows so they can be restored">
+              <input type="checkbox" id="fiqDeleted"> Show deleted
+            </label>
             <button id="fiqClear" class="cx-btn">Clear</button>
             <button id="fiqRefresh" class="cx-btn">Refresh</button>
             <button id="fiqExport" class="cx-btn cx-btn-primary">Export CSV</button>
@@ -1327,6 +1335,7 @@
                         <th data-sort="email">Email</th>
                         <th data-sort="lead_score" title="Server-computed lead score. Sort by this to answer &quot;who first?&quot;">Lead</th>
                         <th>Stage</th>
+                        <th class="cx-th-actions">Actions</th>
                       </tr>
                     </thead>
                     <tbody id="fiqTableBody"></tbody>
@@ -1433,6 +1442,7 @@
               <option value="failed">Failed</option>
             </select>
             <button class="btn-secondary btn-sm" id="tasksRefreshBtn">Refresh</button>
+            <button class="btn-danger btn-sm" id="tasksPurgeBtn">Purge Old…</button>
             <button class="btn-primary btn-sm" id="tasksNewBtn">+ New Task</button>
           </div>
         </header>

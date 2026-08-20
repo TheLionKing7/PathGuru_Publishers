@@ -8,6 +8,9 @@
  */
 
 import { getSupabase } from '../supabaseClient.js';
+import { isPaused } from './systemFlags.js';
+import { normaliseAddress } from './inboundEmail.js';
+import { recordSend } from './outboundRate.js';
 
 const MAX_PER_DRAIN = 25;
 const MAX_ATTEMPTS = 5;
@@ -76,10 +79,8 @@ async function dispatchWebhook(row) {
   const contentType = row.content_type || '';
 
   if (row.kind === 'slack') {
-    const { parseSlackPayload, handleSlackBlockAction } = await import('./slackApprovals.js');
-    const payload = parseSlackPayload(rawBody, contentType);
-    if (!payload || typeof payload !== 'object') throw new Error('slack payload could not be parsed');
-    await handleSlackBlockAction(payload);
+    const { handleSlackWebhook } = await import('./slackApprovals.js');
+    await handleSlackWebhook({ rawBody, contentType });
     return 'done';
   }
 
@@ -108,6 +109,13 @@ async function dispatchWebhook(row) {
     let payload;
     try { payload = JSON.parse(rawBody || '{}'); } catch { throw new Error('outbound_sent payload could not be parsed'); }
     return await handleOutboundSent(row, payload);
+  }
+
+  if (row.kind === 'whatsapp_status') {
+    const form = Object.fromEntries(new URLSearchParams(rawBody));
+    const { handleWhatsAppStatusCallback } = await import('./whatsappStatus.js');
+    await handleWhatsAppStatusCallback(form);
+    return 'done';
   }
 
   throw new Error(`Unknown webhook kind: ${row.kind}`);
@@ -139,7 +147,7 @@ async function handleOutboundSent(row, payload) {
       send_claimed_at:     null,
     })
     .eq('id', id)
-    .select('id');
+    .select('id, from_addr');
 
   if (error) throw error;
 
@@ -150,6 +158,14 @@ async function handleOutboundSent(row, payload) {
     return 'failed';
   }
 
+  // Record the confirmed send so the rate cap sees it on the next hand-out.
+  const toAddr = (normaliseAddress(data[0].from_addr) || '').toLowerCase() || null;
+  if (toAddr) {
+    await recordSend(db, { toAddr, inboundMessageId: id }).catch((e) => {
+      console.warn('[Outbound] failed to record send:', e.message);
+    });
+  }
+
   return 'done';
 }
 
@@ -157,11 +173,26 @@ async function handleOutboundSent(row, payload) {
  * Drain the queue: reap stale claims, claim up to 25 pending rows, dispatch each
  * by kind, and record done/failed. Returns a per-kind count summary.
  */
-export async function drainWebhookQueue() {
-  const db = getSupabase();
+export async function drainWebhookQueue({ db = getSupabase() } = {}) {
+  // Global pause — stop dispatching handlers, but never stop the queue itself
+  // from accepting rows. Rows already pending stay pending and are processed
+  // after resume; nothing is lost.
+  if (await isPaused({ db })) {
+    console.log('[Paused] webhook queue dispatch suppressed');
+    return {
+      paused:       true,
+      reaped:       0,
+      reapedFailed: 0,
+      drained:      0,
+      succeeded:    0,
+      failed:       0,
+      byKind:       { slack: 0, whatsapp: 0, whatsapp_status: 0, inbound_email: 0, outbound_sent: 0 },
+    };
+  }
+
   if (!db) throw new Error('Supabase not configured');
 
-  const reaped = await reapStaleWebhooks();
+  const reaped = await reapStaleWebhooks({ db });
 
   const { data: pending } = await db.from('webhook_queue')
     .select('*')
@@ -176,7 +207,7 @@ export async function drainWebhookQueue() {
     drained: 0,
     succeeded: 0,
     failed: 0,
-    byKind: { slack: 0, whatsapp: 0, inbound_email: 0, outbound_sent: 0 },
+    byKind: { slack: 0, whatsapp: 0, whatsapp_status: 0, inbound_email: 0, outbound_sent: 0 },
   };
 
   for (const row of rows) {

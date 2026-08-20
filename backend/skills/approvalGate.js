@@ -16,10 +16,17 @@
  *   - Nexus fires WhatsApp and WAITS — no auto-proceed on timeout
  */
 
-import { getSupabase }   from '../supabaseClient.js';
-import { sendImmediate } from './notifier.js';
+import { getSupabase } from '../supabaseClient.js';
 
 const APPROVAL_TASK_TYPE = 'pending_approval';
+
+function safeParseJson(value) {
+  if (value == null) return {};
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return {}; }
+  }
+  return value;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE
@@ -67,40 +74,45 @@ export async function createApprovalRequest({ approvalType, subject, detail, pay
     }
   }
 
-  // Build WhatsApp message — concise, action-oriented
-  const shortId  = approvalId ? approvalId.slice(0, 8) : 'N/A';
-  const waTitle  = `⏸ Nexus — Approval Required`;
-  const waBody   = [
-    `*${subject}*`,
-    ``,
-    detail,
-    ``,
-    `Reply *YES* to approve or *NO* to reject.`,
-    `_(Ref: ${shortId})_`,
-  ].join('\n');
-
-  let whatsappSent = false;
-  try {
-    const result = await sendImmediate(waTitle, waBody, 'whatsapp');
-    whatsappSent = !result?.whatsapp?.skipped && !result?.whatsapp?.error;
-    console.log(`[ApprovalGate] WhatsApp sent for approval ${shortId}:`, JSON.stringify(result).slice(0, 120));
-  } catch (e) {
-    console.error('[ApprovalGate] WhatsApp dispatch failed:', e.message);
-  }
-
-  // ── Slack approval surface ───────────────────────────────────────────────
-  // Post a Block Kit message (draft + Approve/Reject/Edit) to the Slack Incoming
-  // Webhook whenever an approval is created. Fire-and-forget, never blocks, and
-  // never logs secrets.
+  // ── Slack is the PRIMARY approval surface ─────────────────────────────────
+  // Post a Block Kit message (draft + Approve/Reject/Edit) to SLACK_APPROVAL_CHANNEL
+  // via the bot token. The attempt is recorded in notification_attempt.
+  let slackOk = false;
   if (approvalId) {
     try {
       const { postSlackApproval } = await import('./slackApprovals.js');
-      postSlackApproval({ approvalId, subject, detail, draftBody: payload?.draftBody })
-        .catch((e) => console.warn('[ApprovalGate] Slack notify failed:', e.message));
-    } catch { /* Slack not configured or import failed — non-fatal */ }
+      const slack = await postSlackApproval({ approvalId, subject, detail, approvalType, payload });
+      slackOk = slack?.ok === true;
+    } catch (e) {
+      console.warn('[ApprovalGate] Slack notify failed:', e.message);
+    }
   }
 
-  return { approvalId, whatsappSent };
+  // ── WhatsApp fallback — only when Slack failed (approvals are high-priority) ──
+  const shortId = approvalId ? approvalId.slice(0, 8) : 'N/A';
+  let whatsappSent = false;
+  if (!slackOk) {
+    const waTitle = `⏸ Nexus — Approval Required`;
+    const waBody  = [
+      `*${subject}*`,
+      ``,
+      detail,
+      ``,
+      `Reply *YES* to approve or *NO* to reject.`,
+      `_(Ref: ${shortId})_`,
+    ].join('\n');
+
+    try {
+      const { sendWhatsAppRecorded } = await import('./notifier.js');
+      const result = await sendWhatsAppRecorded(waTitle, waBody);
+      whatsappSent = result?.ok === true;
+      console.log(`[ApprovalGate] WhatsApp fallback for approval ${shortId}:`, whatsappSent ? 'sent' : 'not sent');
+    } catch (e) {
+      console.error('[ApprovalGate] WhatsApp fallback failed:', e.message);
+    }
+  }
+
+  return { approvalId, slackSent: slackOk, whatsappSent };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,7 +232,7 @@ function approvedWithoutLead(raw) {
  * @param {string} [feedback] — Boss's raw reply text
  * @returns {object|null} Updated task row
  */
-export async function resolveApproval(approvalId, decision, feedback = '') {
+export async function resolveApproval(approvalId, decision, feedback = '', metadata = {}, event = {}) {
   const db = getSupabase();
   if (!db) return null;
 
@@ -229,7 +241,7 @@ export async function resolveApproval(approvalId, decision, feedback = '') {
   const { data, error } = await db.from('tasks')
     .update({
       status:     newStatus,
-      output:     { decision, feedback, resolvedAt: new Date().toISOString() },
+      output:     { decision, feedback, resolvedAt: new Date().toISOString(), ...metadata },
       completed_at: new Date().toISOString(),
     })
     .eq('id', approvalId)
@@ -240,6 +252,23 @@ export async function resolveApproval(approvalId, decision, feedback = '') {
     console.error('[ApprovalGate] resolveApproval error:', error.message);
     return null;
   }
+
+  /* The decision is persisted on the task above; now record it as a queryable
+     row so "who approved what" is one query, not a blob read. Best-effort — an
+     audit insert must never block the decision it is recording. */
+  const input = safeParseJson(data?.input);
+  const { recordApprovalEvent } = await import('./approvalEvent.js');
+  await recordApprovalEvent({
+    approvalId,
+    approvalType:  input.approvalType || null,
+    subject:       input.subject || data.title || null,
+    decision:      decision === 'approved' ? 'approved' : 'rejected',
+    feedback:      feedback || null,
+    slackUserId:   event.slackUserId || null,
+    slackUsername: event.slackUsername || null,
+    channel:       event.channel || null,
+    surface:       event.surface || null,
+  });
 
   console.log(`[ApprovalGate] Approval ${approvalId.slice(0,8)} → ${decision}`);
   return data;
@@ -262,7 +291,7 @@ export async function resolveApproval(approvalId, decision, feedback = '') {
  *   feedback: string
  * }}
  */
-export async function handleApprovalReply(replyText) {
+export async function handleApprovalReply(replyText, surface = 'whatsapp') {
   const refPrefix = extractApprovalRef(replyText);
   const pending = await findPendingApproval(refPrefix);
   if (!pending) return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText };
@@ -272,7 +301,7 @@ export async function handleApprovalReply(replyText) {
     return { handled: false, decision: null, approvalType: null, payload: null, feedback: replyText, caveats: [] };
   }
 
-  await resolveApproval(pending.id, decision, feedback);
+  await resolveApproval(pending.id, decision, feedback, {}, { surface, channel: surface });
 
   const input = typeof pending.input === 'string' ? JSON.parse(pending.input) : (pending.input || {});
   const payload = {

@@ -13,6 +13,9 @@ import { isR2Enabled } from '../cloudflareR2.js';
 const MANIFEST_KEY = 'research_deliverables/manifest.json';
 const MAX_MANIFEST = 200;
 
+/** Briefs shorter than this (in characters) are never stored as completed artifacts. */
+export const MIN_BRIEF_LENGTH = 400;
+
 function slugify(text) {
   return String(text || '')
     .toLowerCase()
@@ -42,13 +45,21 @@ function buildMarkdown({ instruction, brief, sources, gaps, qualityScore, depth,
     `**Task ID:** ${taskId}`,
     `**Depth:** ${depth || 'standard'}`,
     qualityScore ? `**Quality:** ${qualityScore.grade} (${qualityScore.score}/100)` : '',
+  ];
+
+  if (qualityScore?.failures?.length) {
+    lines.push('', '## Quality flags');
+    for (const f of qualityScore.failures) lines.push(`- ${f}`);
+  }
+
+  lines.push(
     ``,
     `## Instruction`,
     instruction,
     ``,
     `## Brief`,
     brief || '_No brief generated._',
-  ];
+  );
 
   if (sources?.length) {
     lines.push('', '## Sources');
@@ -99,6 +110,8 @@ export async function persistResearchDeliverable({
     sources,
     gaps,
     qualityScore,
+    qualityGrade: qualityScore?.grade || null,
+    failureReasons: qualityScore?.failures || [],
     depth,
     forAgent,
     mergedWithKB,
@@ -142,6 +155,8 @@ export async function persistResearchDeliverable({
         sources,
         gaps,
         qualityScore,
+        qualityGrade: qualityScore?.grade || null,
+        failureReasons: qualityScore?.failures || [],
         qualityBadge,
         nextSteps,
         depth,
@@ -161,15 +176,63 @@ export async function persistResearchDeliverable({
 }
 
 /**
+ * Fail a research task without storing a brief. Persists the grade and the
+ * failure reasons on the task row so the history stays queryable (not just
+ * logged to console). No brief is written — a failed task is never a
+ * completed research artifact.
+ */
+export async function failResearchDeliverable({
+  taskId,
+  instruction,
+  qualityScore = null,
+  reason = 'Research brief failed the quality gate',
+  depth = 'standard',
+  forAgent = 'nexus',
+}) {
+  const db = getSupabase();
+  const now = new Date().toISOString();
+
+  if (db && taskId) {
+    await db.from('tasks').update({
+      status:       'failed',
+      error:        reason,
+      completed_at: now,
+      output: {
+        type:           'research_failed',
+        instruction,
+        briefGated:     true,
+        qualityScore,
+        qualityGrade:   qualityScore?.grade || null,
+        failureReasons: qualityScore?.failures || [],
+        depth,
+        forAgent,
+        failedAt:       now,
+      },
+    }).eq('id', taskId);
+  }
+
+  return { ok: true, taskId };
+}
+
+/**
  * Persist deliverable + log to Notion via Nexus bridge (verified pageId).
  * Use this instead of persistResearchDeliverable at all completion paths.
  */
 export async function completeResearchDeliverable(params) {
-  const stored = await persistResearchDeliverable(params);
-
-  if (!params.brief || String(params.brief).trim().length < 20) {
-    return { ...stored, notionPageId: null, notionOk: false };
+  // Never store a too-short brief as a completed research artifact — fail instead.
+  if (!params.brief || String(params.brief).trim().length < MIN_BRIEF_LENGTH) {
+    await failResearchDeliverable({
+      taskId:       params.taskId,
+      instruction:  params.instruction,
+      qualityScore: params.qualityScore,
+      reason:       `Research brief shorter than ${MIN_BRIEF_LENGTH} characters — not stored as a completed artifact`,
+      depth:        params.depth,
+      forAgent:     params.forAgent,
+    });
+    return { shortCircuit: true, notionPageId: null, notionOk: false, notionReason: 'brief_too_short' };
   }
+
+  const stored = await persistResearchDeliverable(params);
 
   const { logResearchDeliverableToNotion, attachNotionPageToResearchTask } =
     await import('../skills/nexusNotionOps.js');
@@ -221,7 +284,8 @@ export async function listResearchDeliverables({ limit = 30, offset = 0 } = {}) 
         status:       row.status,
         brief:        out.brief || null,
         sources:      out.sources || [],
-        qualityGrade: out.qualityScore?.grade || null,
+        qualityGrade: out.qualityGrade || out.qualityScore?.grade || null,
+        failureReasons: out.failureReasons || out.qualityScore?.failures || [],
         depth:        out.depth || 'standard',
         notionPageId: out.notionPageId || out.deliverable?.notionPageId || null,
         createdAt:    row.created_at,
@@ -260,6 +324,8 @@ export async function getResearchDeliverable(taskId) {
     sources:      out.sources || r2Record?.sources || [],
     gaps:         out.gaps || r2Record?.gaps || [],
     qualityScore: out.qualityScore || r2Record?.qualityScore || null,
+    qualityGrade: out.qualityGrade || r2Record?.qualityGrade || out.qualityScore?.grade || r2Record?.qualityScore?.grade || null,
+    failureReasons: out.failureReasons || r2Record?.failureReasons || out.qualityScore?.failures || r2Record?.qualityScore?.failures || [],
     notionPageId: out.notionPageId || out.deliverable?.notionPageId || null,
     deliverable:  out.deliverable || null,
     r2Record,

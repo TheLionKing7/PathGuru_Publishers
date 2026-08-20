@@ -3024,6 +3024,30 @@
     }
   }
 
+  /* Purge old terminal tasks — operator-gated; dry-run count shown before deleting */
+  async function purgeOldTasks () {
+    const btn  = $('tasksPurgeBtn');
+    const body = { statuses: ['completed', 'cancelled'] };
+    if (btn) { btn.disabled = true; btn.textContent = 'Counting…'; }
+    try {
+      const preview = await apiFetch('/api/tasks/purge', { method: 'POST', body: JSON.stringify({ ...body, dryRun: true }) });
+      const n = preview.wouldRemove ?? preview.removed ?? 0;
+      if (!n) { alert('Nothing to purge — no completed or cancelled tasks older than 30 days.'); return; }
+      const ok = confirm(
+        `Permanently delete ${n} task${n === 1 ? '' : 's'} (completed & cancelled, older than 30 days)?\n\n` +
+        'This cannot be undone. Detached agent memories and sub-tasks are kept.'
+      );
+      if (!ok) return;
+      const res = await apiFetch('/api/tasks/purge', { method: 'POST', body: JSON.stringify(body) });
+      alert(`Removed ${res.removed ?? 0} task${(res.removed ?? 0) === 1 ? '' : 's'}.`);
+      await loadTasks();
+    } catch (e) {
+      alert(`Purge failed: ${e.message}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Purge Old…'; }
+    }
+  }
+
   /* Task output drawer */
   function openTaskDrawer (task) {
     const drawer  = $('taskOutputDrawer');
@@ -3189,6 +3213,7 @@
     $('tasksRefreshBtn')?.addEventListener('click', loadTasks);
     $('tasksAgentFilter')?.addEventListener('change', loadTasks);
     $('tasksStatusFilter')?.addEventListener('change', loadTasks);
+    $('tasksPurgeBtn')?.addEventListener('click', purgeOldTasks);
 
     /* ── New Task modal ── */
     const newTaskOverlay  = $('newTaskOverlay');
