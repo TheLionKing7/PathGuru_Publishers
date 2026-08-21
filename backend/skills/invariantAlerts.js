@@ -2,7 +2,9 @@
  * DigiFusion Intelligence Network — Invariant alerts
  * ===================================================
  * These are invariants, not metrics: each one means something is broken right
- * now. They alert to SLACK_OPS_CHANNEL at most once per hour per condition.
+ * now. They alert to SLACK_OPS_CHANNEL at most once per hour per condition —
+ * except `queue_failed`, which re-alerts only when the *set* of failed row ids
+ * changes (so the same rows don't nag every hour).
  *
  *   1. a webhook_queue row pending >10 minutes
  *   2. any webhook_queue row in failed
@@ -11,7 +13,8 @@
  *   5. a send refused by the rate cap
  *   6. a publish failed
  *
- * Cooldown lives in public.invariant_state so it survives the free-tier sleep.
+ * Cooldown and the last-reported `queue_failed` row-id set both live in
+ * public.invariant_state so they survive the free-tier sleep.
  */
 
 import { getSupabase } from '../supabaseClient.js';
@@ -29,6 +32,24 @@ async function getState(db, key) {
 
 async function setState(db, key, value) {
   await db.from('invariant_state').upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+}
+
+function sameSet(a, b) {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  return sa.every((x, i) => x === sb[i]);
+}
+
+async function getStateJson(db, key) {
+  const raw = await getState(db, key);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 async function postAlert(text) {
@@ -68,9 +89,26 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
     {
       key: 'queue_failed',
       title: 'webhook rows in failed',
+      setBased: true,
       async check() {
-        const { data } = await db.from('webhook_queue').select('id').eq('status', 'failed').limit(1);
-        return { triggered: (data || []).length > 0, detail: `${(data || []).length}+ row(s) failed` };
+        const { data } = await db.from('webhook_queue')
+          .select('id, kind, last_error')
+          .eq('status', 'failed')
+          .order('created_at', { ascending: true });
+        const rows = data || [];
+        if (!rows.length) return { triggered: false, ids: [], detail: '' };
+
+        const ids = rows.map((r) => r.id).sort();
+        const lastIds = await getStateJson(db, 'alert:queue_failed:rows');
+        if (sameSet(ids, lastIds)) return { triggered: false, ids, detail: '' };
+
+        const shown = rows.slice(0, 3);
+        const lines = shown.map((r) => {
+          const err = String(r.last_error || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+          return `• \`${r.kind}\` \`${r.id}\`${err ? ` — ${err}` : ''}`;
+        });
+        const more = rows.length > 3 ? `\n+${rows.length - 3} more` : '';
+        return { triggered: true, ids, detail: `${rows.length} failed row(s):\n${lines.join('\n')}${more}` };
       },
     },
     {
@@ -119,13 +157,20 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
 
   const alerted = [];
   for (const cond of conditions) {
-    const last = await getState(db, `alert:${cond.key}`);
-    if (last && (nowMs - new Date(last).getTime()) < COOLDOWN_MS) continue;
+    if (!cond.setBased) {
+      const last = await getState(db, `alert:${cond.key}`);
+      if (last && (nowMs - new Date(last).getTime()) < COOLDOWN_MS) continue;
+    }
 
     const result = await cond.check();
     if (!result.triggered) continue;
 
-    await setState(db, `alert:${cond.key}`, now.toISOString());
+    if (cond.setBased) {
+      await setState(db, `alert:${cond.key}:rows`, JSON.stringify(result.ids || []));
+    } else {
+      await setState(db, `alert:${cond.key}`, now.toISOString());
+    }
+
     await postAlert(`${cond.title}: ${result.detail}`);
     alerted.push(cond.key);
   }

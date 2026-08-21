@@ -1,8 +1,9 @@
 /**
  * Run:  node backend/skills/invariantAlerts.test.mjs
  *
- * Verifies the drain heartbeat is recorded and that each broken invariant
- * alerts to Slack at most once per hour.
+ * Verifies the drain heartbeat is recorded, that each broken invariant alerts
+ * to Slack at most once per hour, and that `queue_failed` reports row detail
+ * (kind, id, last_error) and only re-alerts when the failed-row set changes.
  * No framework, no dependency, exits non-zero on failure.
  */
 import { sweepInvariants, recordDrainAuthorised } from './invariantAlerts.js';
@@ -46,11 +47,14 @@ function makeDb(seed = {}) {
 }
 
 const origFetch = globalThis.fetch;
-let slackPosts = 0;
+const slackPosts = [];
 process.env.SLACK_OPS_CHANNEL = 'C-OPS';
 process.env.SLACK_BOT_TOKEN = 'xoxb-test';
-globalThis.fetch = async (url) => {
-  if (String(url).includes('slack.com/api/chat.postMessage')) { slackPosts++; return { ok: true, status: 200, json: async () => ({ ok: true, ts: 'ts' }) }; }
+globalThis.fetch = async (url, init) => {
+  if (String(url).includes('slack.com/api/chat.postMessage')) {
+    slackPosts.push(JSON.parse(init?.body || '{}').text || '');
+    return { ok: true, status: 200, json: async () => ({ ok: true, ts: 'ts' }) };
+  }
   return { ok: false, status: 500, json: async () => ({}) };
 };
 
@@ -62,29 +66,49 @@ try {
     t('heartbeat recorded', db.tables.invariant_state.some((r) => r.key === 'last_drain_authorised_at'));
   }
 
-  console.log('— queue_failed alerts once per hour —');
+  console.log('— queue_failed reports detail and re-alerts only on set change —');
   {
-    slackPosts = 0;
+    slackPosts.length = 0;
+    const longErr = 'boom ' + 'x'.repeat(200) + ' tail';
     const db = makeDb({
-      webhook_queue: [{ id: 'w1', status: 'failed', created_at: new Date().toISOString() }],
+      webhook_queue: [
+        { id: 'w1', kind: 'slack', status: 'failed', last_error: longErr, created_at: '2024-01-01T00:00:00Z' },
+        { id: 'w2', kind: 'whatsapp', status: 'failed', last_error: null, created_at: '2024-01-01T00:01:00Z' },
+        { id: 'w3', kind: 'inbound_email', status: 'failed', last_error: 'err3', created_at: '2024-01-01T00:02:00Z' },
+        { id: 'w4', kind: 'slack', status: 'failed', last_error: 'err4', created_at: '2024-01-01T00:03:00Z' },
+      ],
       invariant_state: [{ key: 'last_drain_authorised_at', value: new Date().toISOString() }],
     });
+
     const r1 = await sweepInvariants({ db });
     t('alerts queue_failed', r1.alerted.includes('queue_failed'));
-    t('exactly one alert', slackPosts === 1);
+    t('exactly one alert', slackPosts.length === 1);
+    const text1 = slackPosts[0] || '';
+    t('includes kinds', ['slack', 'whatsapp', 'inbound_email'].every((k) => text1.includes(k)));
+    t('includes row ids', ['w1', 'w2', 'w3'].every((id) => text1.includes(id)));
+    t('includes last_error', text1.includes('boom'));
+    t('truncates last_error to 120 chars', !text1.includes('tail'));
+    t('reports +1 more beyond 3 rows', text1.includes('+1 more'));
 
     const r2 = await sweepInvariants({ db });
-    t('cooldown suppresses repeat', !r2.alerted.includes('queue_failed'));
-    t('still one slack post', slackPosts === 1);
+    t('same set suppressed', !r2.alerted.includes('queue_failed'));
+    t('still one slack post', slackPosts.length === 1);
+
+    // A new failed row changes the set → re-alert (with the higher count).
+    db.tables.webhook_queue.push({ id: 'w5', kind: 'slack', status: 'failed', last_error: 'err5', created_at: '2024-01-01T00:04:00Z' });
+    const r3 = await sweepInvariants({ db });
+    t('new failed row re-alerts', r3.alerted.includes('queue_failed'));
+    t('second slack post', slackPosts.length === 2);
+    t('second alert reflects higher count', (slackPosts[1] || '').includes('5 failed row(s)'));
   }
 
   console.log('— drain_stale alerts when never recorded —');
   {
-    slackPosts = 0;
+    slackPosts.length = 0;
     const db = makeDb({});
     const r = await sweepInvariants({ db });
     t('alerts drain_stale', r.alerted.includes('drain_stale'));
-    t('slack posted', slackPosts === 1);
+    t('slack posted', slackPosts.length === 1);
   }
 } finally {
   globalThis.fetch = origFetch;
