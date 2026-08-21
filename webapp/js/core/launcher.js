@@ -1,6 +1,6 @@
 /**
- * Product launcher — choose PathGuru Publisher or DigiFusion Command.
- * Both share backend URL + resources via pg_settings.
+ * Product launcher — DigiFusion Command.
+ * Shares backend URL + resources via pg_settings.
  */
 (function () {
   'use strict';
@@ -45,7 +45,7 @@
   }
 
   function applyProductBodyClass(productId) {
-    document.body.classList.remove('pg-product-publisher', 'pg-product-digifusion', 'pg-product-full');
+    document.body.classList.remove('pg-product-digifusion', 'pg-product-full');
     if (productId) document.body.classList.add(`pg-product-${productId}`);
   }
 
@@ -82,12 +82,6 @@
     });
     const fullBtn = document.getElementById('productFullSuiteBtn');
     if (fullBtn) fullBtn.hidden = !enabled.has('full');
-    const publisherCard = document.querySelector('[data-product-id="publisher"]');
-    const digifusionCard = document.querySelector('[data-product-id="digifusion"]');
-    if (publisherCard?.hidden && digifusionCard && !digifusionCard.hidden) {
-      const brand = document.querySelector('.pg-launcher-brand p');
-      if (brand) brand.textContent = 'DigiFusion Command — CMS, agents & firm operations';
-    }
   }
 
   function navigateToProduct(productId) {
@@ -100,7 +94,6 @@
     setStoredProductId(productId);
     applyProductBodyClass(productId);
     hideLauncher();
-    updateProductBadge(productId);
     scheduleDeptNavigation(product);
 
     document.dispatchEvent(new CustomEvent('pg:product-ready', {
@@ -113,26 +106,10 @@
       btn.addEventListener('click', () => navigateToProduct(btn.dataset.productId));
     });
 
-    const switchBtn = document.getElementById('productSwitchBtn');
-    if (switchBtn) {
-      switchBtn.addEventListener('click', () => {
-        showLauncher();
-      });
-    }
-
     const fullBtn = document.getElementById('productFullSuiteBtn');
     if (fullBtn) {
       fullBtn.addEventListener('click', () => navigateToProduct('full'));
     }
-  }
-
-  function updateProductBadge(productId) {
-    const product = PRODUCTS[productId];
-    const badge = document.getElementById('productBadge');
-    if (!badge || !product) return;
-    badge.hidden = false;
-    badge.querySelector('[data-product-name]').textContent = product.shortName;
-    badge.querySelector('[data-product-tag]').textContent = product.tagline;
   }
 
   async function init() {

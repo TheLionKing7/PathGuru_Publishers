@@ -6,7 +6,6 @@
 :root {
   --sidebar-w-expanded: 232px;
   --workspace-head-h:   52px;
-  --dept-publisher:     #c9a84c;
   --dept-intelligence:  #4ecdc4;
   --dept-products:      #7c8cff;
   --dept-network:       #a78bfa;
@@ -81,10 +80,6 @@ html.pg-desktop #productLauncher {
   display: none !important;
 }
 
-html.pg-desktop .pg-product-badge {
-  display: none !important;
-}
-
 body.pg-shell-v3 .sidebar-nav {
   flex: 1;
   overflow-y: auto;
@@ -136,14 +131,12 @@ body.pg-shell-v3 .nav-btn .nav-icon-wrap {
   flex-shrink: 0;
 }
 
-body.pg-shell-v3 .nav-btn[data-dept="publisher"] .nav-icon-wrap   { background: rgba(201,168,76,.15);  color: var(--dept-publisher); }
 body.pg-shell-v3 .nav-btn[data-dept="intelligence"] .nav-icon-wrap { background: rgba(78,205,196,.15); color: var(--dept-intelligence); }
 body.pg-shell-v3 .nav-btn[data-dept="products"] .nav-icon-wrap  { background: rgba(124,140,255,.15); color: var(--dept-products); }
 body.pg-shell-v3 .nav-btn[data-dept="network"] .nav-icon-wrap     { background: rgba(167,139,250,.15); color: var(--dept-network); }
 body.pg-shell-v3 .nav-btn[data-dept="analytics"] .nav-icon-wrap   { background: rgba(56,189,248,.15);  color: var(--dept-analytics); }
 body.pg-shell-v3 .nav-btn[data-dept="frictioniq"] .nav-icon-wrap  { background: rgba(244,114,182,.15); color: var(--dept-frictioniq); }
 
-body.pg-shell-v3 .nav-btn.active[data-dept="publisher"]   { border-color: rgba(201,168,76,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="intelligence"] { border-color: rgba(78,205,196,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="products"]  { border-color: rgba(124,140,255,.35); }
 body.pg-shell-v3 .nav-btn.active[data-dept="network"]     { border-color: rgba(167,139,250,.35); }
@@ -192,7 +185,7 @@ body.pg-shell-v3 .nav-badge {
   padding: 2px 6px;
   border-radius: 4px;
   background: rgba(201,168,76,.2);
-  color: var(--dept-publisher);
+  color: var(--gold, #c9a84c);
   flex-shrink: 0;
 }
 
@@ -364,54 +357,6 @@ body.pg-shell-v3 .chrome-backend {
   white-space: nowrap;
 }
 
-/* ── Publisher welcome strip ── */
-.publisher-welcome {
-  margin: 0 0 20px;
-  padding: 16px 20px;
-  border-radius: var(--radius);
-  border: 1px solid rgba(201,168,76,.25);
-  background: linear-gradient(135deg, rgba(201,168,76,.08), transparent 60%);
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.publisher-welcome h2 {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.publisher-welcome p {
-  font-size: 13px;
-  color: var(--text-secondary);
-  max-width: 520px;
-  line-height: 1.5;
-}
-
-.publisher-welcome-steps {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-  flex-wrap: wrap;
-}
-
-.publisher-step {
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-
-.publisher-step strong {
-  color: var(--dept-publisher);
-}
-
 /* ── Intelligence studio banner ── */
 .intel-pipeline-banner {
   margin-bottom: 20px;
@@ -472,11 +417,10 @@ body.pg-shell-v3 .chrome-backend {
 }
 
 /* ── Module header eyebrow uses dept color ── */
-body.pg-shell-v3 [data-module="publishing"].module-shell.active .panel-eyebrow  { color: var(--dept-publisher); }
 body.pg-shell-v3 [data-module="agents"].module-shell.active .panel-eyebrow[data-intel],
 body.pg-shell-v3 #tab-agents-ip.active ~ * .panel-eyebrow { color: var(--dept-intelligence); }
 
-/* ── Intelligence route nav — same row as title (Publisher reference layout) ── */
+/* ── Intelligence route nav — same row as title ── */
 .dept-route-nav {
   display: none;
 }

@@ -122,6 +122,11 @@
 }
 .cx-empty-mark { width:14px; height:2px; background:currentColor; opacity:.6; flex:0 0 auto; }
 
+/* The register's empty state is centred, not left-anchored like the inline
+   notes above — it is the only content in the panel. Same muted ink and mark;
+   no new tokens or colours. */
+.cx-empty--center { justify-content:center; min-height:132px; }
+
 /* ── Bar list ────────────────────────────────────────────────────────────── */
 .cx-row { display:grid; grid-template-columns:minmax(0,1fr) 108px 56px 44px;
           align-items:center; gap:11px; padding:7px 0;

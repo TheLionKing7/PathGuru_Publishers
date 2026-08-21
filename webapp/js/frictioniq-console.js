@@ -173,6 +173,20 @@
       if (note) note.textContent = '';
       return;
     }
+    const tilesRow = $('fiqTilesRow');
+    const bandPanel = $('fiqBandPanel');
+    if (!view.length) {
+      /* Zero rows on screen: the tiles and band mix are analytics over nothing.
+         Four zeros and an empty distribution read as a load failure, and a
+         filtered-to-zero register would otherwise show whole-table counts above
+         a table that says "no rows". Suppress both; the register panel carries
+         the single centred empty state. */
+      if (tilesRow) tilesRow.style.display = 'none';
+      if (bandPanel) bandPanel.style.display = 'none';
+      return;
+    }
+    if (tilesRow) tilesRow.style.display = '';
+    if (bandPanel) bandPanel.style.display = '';
     const host = $('fiqTiles');
     if (host) {
       // Three columns each, inside the twelve-column grid — an unwrapped tile
@@ -274,13 +288,30 @@
     return `${test}<button class="cx-btn cx-btn-danger cx-btn-sm" data-delete-for="${esc(r.token)}" title="Soft-delete this row">Delete</button>`;
   };
 
+  /* One centred empty state inside the register panel. The two situations read
+     differently: a register with no sessions at all, versus a register whose
+     current filter has excluded everything. Only the second is recoverable in
+     place, so only it carries the clear control. */
+  function emptyStateHtml() {
+    const noData = !_showDeleted() && !_rows.length;
+    const noDeleted = _showDeleted() && !_deleted.length;
+    const msg = noData
+      ? 'No sessions yet — FrictionIQ results will appear here as they are submitted.'
+      : noDeleted
+        ? 'No deleted rows — nothing to recover.'
+        : 'No rows match the current filter.';
+    const clear = (noData || noDeleted)
+      ? ''
+      : '<button type="button" class="cx-btn cx-btn-sm" data-clear-filters>Clear filters</button>';
+    return `<div class="cx-empty cx-empty--center">\n        <span class="cx-empty-mark"></span><span>${msg}</span>${clear}\n      </div>`;
+  }
+
   function renderTable(view) {
     const body = $('fiqTableBody');
     if (!body) return;
     const COLS = 10;
     if (!view.length) {
-      body.innerHTML = `<tr><td colspan="${COLS}"><div class="cx-empty">
-        <span class="cx-empty-mark"></span>No rows match this filter.</div></td></tr>`;
+      body.innerHTML = `<tr><td colspan="${COLS}">${emptyStateHtml()}</td></tr>`;
       return;
     }
     body.innerHTML = view.map((r) => {
@@ -514,13 +545,18 @@
     }
   }
 
+  /* The filter bar is static markup — search, band, stage, sector and date are
+     always present in index.html. The sector options are the one part derived
+     from data, and they must never be locked by a first empty load: repopulate
+     from the current rows on every refresh, keeping the operator's selection. */
   function populateSectors() {
     const sel = $('fiqSector');
-    if (!sel || sel.dataset.filled) return;
+    if (!sel) return;
+    const current = sel.value;
     const seen = [...new Set(_rows.map((r) => r.sector).filter(Boolean))].sort();
     sel.innerHTML = '<option value="">All sectors</option>' +
       seen.map((s) => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    sel.dataset.filled = '1';
+    if (seen.includes(current)) sel.value = current;
   }
 
   async function patch(token, body, btn) {
@@ -583,6 +619,12 @@
     }
   }
 
+  function clearFilters() {
+    ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince', 'fiqTest'].forEach((id) => { const e = $(id); if (e) e.value = ''; });
+    const del = $('fiqDeleted'); if (del) del.checked = false;
+    render();
+  }
+
   function render() {
     const view = filtered();
     renderSummary(view);
@@ -602,13 +644,11 @@
       _open = null; _detail = {};
       refresh();
     });
-    $('fiqClear')?.addEventListener('click', () => {
-      ['fiqSearch', 'fiqBand', 'fiqStage', 'fiqSector', 'fiqSince', 'fiqTest'].forEach((id) => { const e = $(id); if (e) e.value = ''; });
-      const del = $('fiqDeleted'); if (del) del.checked = false;
-      render();
-    });
+    $('fiqClear')?.addEventListener('click', clearFilters);
 
     document.addEventListener('click', (e) => {
+      const clear = e.target.closest('[data-clear-filters]');
+      if (clear) return clearFilters();
       const th = e.target.closest('#module-frictioniq th[data-sort]');
       if (th) {
         const k = th.dataset.sort;

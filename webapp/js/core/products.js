@@ -66,7 +66,7 @@
         });
       }
     }
-    if (!config.publisherEnabled && PRODUCTS.full) {
+    if (PRODUCTS.full) {
       PRODUCTS.full.departments = PRODUCTS.digifusion.departments;
       PRODUCTS.full.tagline = 'All Command departments';
     }
@@ -97,9 +97,8 @@
   }
 
   function isDeptVisible(deptId) {
-    if (deptId === 'publisher') return false;
     const product = getActiveProduct();
-    if (!product) return deptId !== 'publisher';
+    if (!product) return true;
     return product.departments.includes(deptId);
   }
 
