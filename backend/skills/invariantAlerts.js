@@ -13,17 +13,22 @@
  *   5. a send refused by the rate cap
  *   6. a publish failed
  *
- * Cooldown and the last-reported `queue_failed` row-id set both live in
+ * When the estate is paused, `queue_pending` is a *normal* consequence (the
+ * queue keeps accepting but the drain stops dispatching), so it is suppressed
+ * and replaced by a single 6-hourly "System paused — N rows held in queue"
+ * notice. Cooldown and the last-reported `queue_failed` row-id set both live in
  * public.invariant_state so they survive the free-tier sleep.
  */
 
 import { getSupabase } from '../supabaseClient.js';
+import { isPaused } from './systemFlags.js';
 import { postSlackMessage, recordNotificationAttempt, slackChannelFor } from './slackNotify.js';
 
 const COOLDOWN_MS        = 60 * 60 * 1000;   // 1 hour
 const PENDING_STUCK_MS   = 10 * 60 * 1000;   // 10 minutes
 const DRAIN_STALE_MS     = 15 * 60 * 1000;   // 15 minutes
 const APPROVAL_STALE_MS  = 24 * 3600 * 1000; // 24 hours
+const PAUSED_NOTICE_MS   = 6 * 3600 * 1000;  // 6 hours
 
 async function getState(db, key) {
   const { data } = await db.from('invariant_state').select('value').eq('key', key).maybeSingle();
@@ -63,6 +68,18 @@ async function postAlert(text) {
   if (!res.ok) console.warn('[Invariant] alert post failed:', res.error);
 }
 
+/** Post the paused-backlog notice — informational, never an "invariant broken". */
+async function postPausedNotice(count) {
+  const channel = slackChannelFor('ops');
+  if (!channel) {
+    console.warn('[Invariant] SLACK_OPS_CHANNEL unset — paused notice skipped');
+    return;
+  }
+  const res = await postSlackMessage({ channel, text: `System paused — ${count} rows held in queue` });
+  await recordNotificationAttempt({ db: getSupabase(), channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
+  if (!res.ok) console.warn('[Invariant] paused notice post failed:', res.error);
+}
+
 /** Record the drain heartbeat — called by the authorised /api/queue/drain route. */
 export async function recordDrainAuthorised(db = getSupabase()) {
   if (!db) return;
@@ -74,10 +91,26 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
   if (!db) return { alerted: [], error: 'no_db' };
   const nowMs = now.getTime();
 
+  // Pause is a normal operating state, not a fault. When paused the queue keeps
+  // accepting rows but the drain stops dispatching, so pending rows accumulate by
+  // design. Suppress the pending invariant and instead surface the backlog once
+  // per 6 hours — visible without crying wolf.
+  const paused = await isPaused({ db });
+  if (paused) {
+    const { data } = await db.from('webhook_queue').select('id').eq('status', 'pending');
+    const held = (data || []).length;
+    const lastNotice = await getState(db, 'alert:paused_backlog');
+    if (!lastNotice || (nowMs - new Date(lastNotice).getTime()) >= PAUSED_NOTICE_MS) {
+      await setState(db, 'alert:paused_backlog', now.toISOString());
+      await postPausedNotice(held);
+    }
+  }
+
   const conditions = [
     {
       key: 'queue_pending',
       title: 'webhook rows stuck pending >10m',
+      suppressWhenPaused: true,
       async check() {
         const { data } = await db.from('webhook_queue')
           .select('id').eq('status', 'pending')
@@ -114,6 +147,7 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
     {
       key: 'drain_stale',
       title: 'drain not authorised in 15m',
+      suppressWhenPaused: true,
       async check() {
         const last = await getState(db, 'last_drain_authorised_at');
         const stale = !last || (nowMs - new Date(last).getTime()) > DRAIN_STALE_MS;
@@ -157,6 +191,7 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
 
   const alerted = [];
   for (const cond of conditions) {
+    if (paused && cond.suppressWhenPaused) continue;
     if (!cond.setBased) {
       const last = await getState(db, `alert:${cond.key}`);
       if (last && (nowMs - new Date(last).getTime()) < COOLDOWN_MS) continue;

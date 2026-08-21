@@ -3494,7 +3494,13 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       if (!body.topic) { err(res, 'topic is required', 400); return; }
       json(res, await AGENTS.nexus.dispatchResearch(body));
-    } catch (e) { err(res, e.message, 500); }
+    } catch (e) {
+      if (e.code === 'RESEARCH_GATED') {
+        json(res, { error: e.message, code: e.code, grade: e.grade, failures: e.failures }, 422);
+      } else {
+        err(res, e.message, 500);
+      }
+    }
     return;
   }
 

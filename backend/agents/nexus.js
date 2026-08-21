@@ -32,13 +32,12 @@ import { createBudget, consumeBudget, BudgetExceededError } from '../harness/bud
 import { checkPermission } from '../harness/perimeter.js';
 import { createApprovalRequest }               from '../skills/approvalGate.js';
 import { scoreResearchBrief, formatQualityBadge, notifyFailedResearchBrief } from '../skills/researchQualityGate.js';
+import { assertBlogCommissionApproved } from '../skills/blogOriginationGate.js';
 import { buildNexusCeoPromptBlock, resolveCeoModule, BLOG_CADENCE_DAYS } from '../skills/nexusCeoDoctrine.js';
 import { scoreCeoOutput, formatCeoQualityBadge } from '../skills/ceoQualityGate.js';
 import {
   buildOpsSnapshot,
   syncNotionCeoDashboard,
-  processDueScheduledContent,
-  checkContentCadence,
   loadOpsContext,
 } from '../skills/nexusCeoOps.js';
 import { runIpFactory } from '../skills/ipFactory.js';
@@ -229,16 +228,37 @@ export class Nexus extends AgentBase {
       const { researcher } = await import('./researcher.js');
       const result = await researcher.research({ topic, forAgent, context, focusAreas, depth, mergeWithKB: true });
 
+      // Grade at the door — dispatchResearch must never hand out an ungraded
+      // brief. A D-grade brief is withheld so no caller can turn it into content.
+      const qScore = scoreResearchBrief({
+        brief:        result?.brief || '',
+        sources:      result?.sources || [],
+        gaps:         result?.gaps || [],
+        coverStats:   result?.coverStats || [],
+        mergedWithKB: result?.mergedWithKB || false,
+        depth,
+      });
+      const graded = { ...result, grade: qScore.grade, score: qScore.score, passed: qScore.passed };
+
       await this.rememberEpisodic({
-        summary:    `Research dispatched: "${topic}" for ${forAgent}`,
-        content:    { topic, forAgent, sources: result.sources?.length, mergedWithKB: result.mergedWithKB },
+        summary:    `Research dispatched: "${topic}" for ${forAgent} (grade ${qScore.grade})`,
+        content:    { topic, forAgent, sources: result.sources?.length, mergedWithKB: result.mergedWithKB, grade: qScore.grade },
         type:       'task_result',
         tags:       ['research_dispatch', forAgent],
         importance: 3,
       });
 
-      return result;
+      if (!qScore.passed) {
+        console.warn(`[Nexus] Research gated (${qScore.grade}) for "${topic}" — brief withheld`);
+        const error = new Error(`Research brief gated at grade ${qScore.grade}`);
+        error.code = 'RESEARCH_GATED';
+        error.grade = qScore.grade;
+        error.failures = qScore.failures;
+        throw error;
+      }
+      return graded;
     } catch (e) {
+      if (e.code === 'RESEARCH_GATED') throw e;
       console.error('[Nexus] Research dispatch failed:', e.message);
       return { brief: '', sources: [], error: e.message };
     }
@@ -278,6 +298,10 @@ export class Nexus extends AgentBase {
         filled++;
         console.log(`[Nexus] Gap filled for task "${task.title}" → ${task.agent_id}`);
       } catch (e) {
+        if (e.code === 'RESEARCH_GATED') {
+          console.warn(`[Nexus] Gap fill gated for task ${task.id} (grade ${e.grade}):`, e.failures);
+          continue;
+        }
         console.warn(`[Nexus] Gap fill failed for task ${task.id}:`, e.message);
       }
     }
@@ -932,7 +956,7 @@ export class Nexus extends AgentBase {
     }
 
     const { priority = 3, researchBrief = null, nextStep = null } = options;
-    const db = getSupabase();
+    const db = options.db || getSupabase();
 
     // ── IP Factory: synthesize original framework from resource pool ─────────
     if (options.ipFactory || this._isIpFactoryIntent(instruction)) {
@@ -980,6 +1004,11 @@ export class Nexus extends AgentBase {
 
     // ── PHASE 2: User has chosen what to do with research results ────────────
     if (researchBrief && nextStep) {
+      // Single chokepoint guard: blog origination requires an approved commission.
+      // This closes every surface at once (generic run route, orchestrate, etc.).
+      if (nextStep === 'blog') {
+        await assertBlogCommissionApproved(options.commissionId, db, instruction);
+      }
       console.log(`[Nexus] Phase 2 — routing research result to: ${nextStep}`);
       const stepMap = {
         blog:       { agent_id: 'aether',      title: 'Write blog article from Orion research',               type: 'content'  },
@@ -1721,14 +1750,6 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     return { spec, quality, delegatedTo: 'nova', framework: ceoModule.framework, notionPageId, novaQueued };
   }
 
-  async processDueScheduledContent() {
-    return processDueScheduledContent(this);
-  }
-
-  async runContentCadenceCheck() {
-    return checkContentCadence(this);
-  }
-
   async syncCeoNotionDashboard(period = 'manual') {
     const ops = await buildOpsSnapshot();
     return syncNotionCeoDashboard({ period, snap: ops });
@@ -2356,16 +2377,10 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
         return this.escalateToOwner(payload);
       case 'check_escalations':
         return { escalations: await this.checkEscalationTriggers() };
-      case 'publish_sector_article':
-        return this.publishSectorArticle(payload);
       case 'create_content_calendar':
         return this.createContentCalendar(payload);
       case 'design_workflow':
         return this.designWorkflow(payload);
-      case 'content_cadence_check':
-        return this.runContentCadenceCheck();
-      case 'process_scheduled_content':
-        return this.processDueScheduledContent();
       case 'process_orchestration':
         return this.processOrchestrationCampaigns(payload);
       case 'ceo_ops':
@@ -2375,7 +2390,8 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
       case 'sync_notion_ceo':
         return this.syncCeoNotionDashboard(payload?.period || 'manual');
       default:
-        return this.orchestrate(JSON.stringify(task));
+        // Unknown actions are an error, never an implicit orchestration request.
+        return { type: 'unknown_action', action, error: `unknown action: ${action}` };
     }
   }
 
@@ -2383,37 +2399,6 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
   // Content is now commissioned by a human (see /api/content/commission).
   async createContentCalendar() {
     return { error: 'content is now commissioned, not scheduled — see /api/content/commission' };
-  }
-
-  // Researcher -> Aether pipeline — approval gate only (never direct publish)
-  async publishSectorArticle({ sector, topic, angle }) {
-    if (!topic) throw new Error('topic is required');
-
-    const research = await this.dispatchResearch({
-      topic, forAgent: 'aether',
-      focusAreas: [sector].filter(Boolean),
-      depth: 'standard',
-    });
-
-    if (!research?.brief) {
-      return { topic, sector, error: 'Research failed — no brief produced' };
-    }
-
-    const orch = await this.orchestrate(topic, {
-      researchBrief: research.brief,
-      nextStep:      'blog',
-      priority:      4,
-    });
-
-    return {
-      topic,
-      sector,
-      type:       orch.type,
-      approvalId: orch.approvalId,
-      message:    orch.type === 'pending_boss_approval'
-        ? `Blog brief sent for Boss approval via WhatsApp. Nothing publishes until you reply YES.`
-        : orch.message || 'Pipeline completed',
-    };
   }
 
   // ══════════════════════════════════════════════════════════════════════════

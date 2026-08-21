@@ -239,8 +239,16 @@
   }
 
   /* ══ STAT TILE — a number is meaningless without its comparison ═══════ */
-  function stat(host, { value, label, prev, unit, hint }) {
+  function stat(host, { value, label, prev, unit, hint, empty }) {
     if (!host) return;
+    if (empty) {
+      /* Nothing measured yet: an em dash says "nothing to measure" where a 0
+         would claim a measurement. Muted ink, one short caption. */
+      host.innerHTML = `<div class="cx-stat-value cx-stat-value--empty">—</div>
+        <div class="cx-stat-label">${esc(label)}</div>
+        <div class="cx-stat-hint">no sessions recorded yet</div>`;
+      return;
+    }
     const cur = Number(value) || 0;
     let delta = '';
     if (prev != null && Number(prev) > 0) {

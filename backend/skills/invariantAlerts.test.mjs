@@ -7,6 +7,7 @@
  * No framework, no dependency, exits non-zero on failure.
  */
 import { sweepInvariants, recordDrainAuthorised } from './invariantAlerts.js';
+import { _invalidateCache } from './systemFlags.js';
 
 let pass = 0, fail = 0;
 const t = (name, cond) => { cond ? (pass++, console.log('  PASS', name)) : (fail++, console.log('  FAIL', name)); };
@@ -109,6 +110,30 @@ try {
     const r = await sweepInvariants({ db });
     t('alerts drain_stale', r.alerted.includes('drain_stale'));
     t('slack posted', slackPosts.length === 1);
+  }
+
+  console.log('— paused suppresses expected backlog and drain state —');
+  {
+    slackPosts.length = 0;
+    const db = makeDb({
+      system_flag: [{ key: 'agents_paused', value: true }],
+      webhook_queue: [
+        { id: 'pending-1', status: 'pending', created_at: '2024-01-01T00:00:00Z' },
+        { id: 'pending-2', status: 'pending', created_at: '2024-01-01T00:01:00Z' },
+      ],
+    });
+    _invalidateCache();
+    const now = new Date('2024-01-01T01:00:00Z');
+    const r1 = await sweepInvariants({ db, now });
+    t('paused backlog notice posted', slackPosts[0] === 'System paused — 2 rows held in queue');
+    t('pending invariant suppressed', !r1.alerted.includes('queue_pending'));
+    t('drain invariant suppressed', !r1.alerted.includes('drain_stale'));
+
+    const r2 = await sweepInvariants({ db, now: new Date(now.getTime() + 5 * 60 * 60 * 1000) });
+    t('paused notice remains within six-hour cooldown', slackPosts.length === 1 && !r2.alerted.includes('queue_pending'));
+
+    await sweepInvariants({ db, now: new Date(now.getTime() + 6 * 60 * 60 * 1000) });
+    t('paused notice repeats after six hours', slackPosts.length === 2);
   }
 } finally {
   globalThis.fetch = origFetch;

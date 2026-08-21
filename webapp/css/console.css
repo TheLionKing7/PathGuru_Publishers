@@ -104,6 +104,8 @@
   font-family:var(--font-display,'Playfair Display',Georgia,serif);
   font-size:31px; line-height:1.05; color:var(--blue,#4d9fff); letter-spacing:-.01em;
 }
+/* The empty-register value: muted ink, no invented measurement. */
+.cx-stat-value--empty { color:var(--text-muted,#4d6280); }
 .cx-stat-unit  { font-size:13px; color:var(--text-secondary,#8fa3c0); margin-left:5px; font-family:inherit; }
 .cx-stat-label { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
                  color:var(--text-secondary,#8fa3c0); margin-top:5px; }

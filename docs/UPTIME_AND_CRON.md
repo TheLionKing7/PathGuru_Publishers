@@ -55,8 +55,11 @@ Times below are **UTC**. Lagos (WAT) = UTC+1 → 7:00 Lagos = **06:00 UTC**, 18:
 |---|---|---|
 | Morning briefing + WhatsApp | `0 6 * * *` | `GET .../api/cron/morning-briefing?secret=...` |
 | Evening briefing + WhatsApp | `0 17 * * *` | `GET .../api/cron/evening-briefing?secret=...` |
-| Blog cadence check | `0 */12 * * *` | `GET .../api/cron/content-cadence?secret=...` |
-| Due scheduled content → approval | `0 */6 * * *` | `GET .../api/cron/process-scheduled-content?secret=...` |
+
+> **Retired — delete these cron-job.org jobs if still configured.** `content-cadence` and
+> `process-scheduled-content` now return **410 Gone**. Content is commissioned by a human
+> (`POST /api/content/commission`), not scheduled. They have no fallback route and will only
+> 410 — remove them.
 
 Example full URL (replace `{token}` with the value from Render):
 
@@ -83,7 +86,7 @@ For guaranteed CEO ops: **Render Starter ($7/mo)** always-on **or** external cro
 curl -s https://pathguru-publishers.onrender.com/ping
 
 # CEO ops (after CRON_SECRET set on Render — pass ?secret={token})
-curl -s "https://pathguru-publishers.onrender.com/api/cron/content-cadence?secret={token}"
+curl -s "https://pathguru-publishers.onrender.com/api/cron/morning-briefing?secret={token}"
 ```
 
 ---

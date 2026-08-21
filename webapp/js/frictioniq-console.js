@@ -171,22 +171,15 @@
       if (dist) dist.innerHTML = `<div class="cx-empty"><span class="cx-empty-mark"></span>${_deleted.length} deleted row(s). Restore one to return it to the register.</div>`;
       const note = $('fiqBandNote');
       if (note) note.textContent = '';
+      const warn = $('fiqBandWarn');
+      if (warn) warn.hidden = true;
       return;
     }
-    const tilesRow = $('fiqTilesRow');
-    const bandPanel = $('fiqBandPanel');
-    if (!view.length) {
-      /* Zero rows on screen: the tiles and band mix are analytics over nothing.
-         Four zeros and an empty distribution read as a load failure, and a
-         filtered-to-zero register would otherwise show whole-table counts above
-         a table that says "no rows". Suppress both; the register panel carries
-         the single centred empty state. */
-      if (tilesRow) tilesRow.style.display = 'none';
-      if (bandPanel) bandPanel.style.display = 'none';
-      return;
-    }
-    if (tilesRow) tilesRow.style.display = '';
-    if (bandPanel) bandPanel.style.display = '';
+    /* Nothing is suppressed at zero rows: the tile row and Band Mix panel stay
+       put. When the register has no rows at all, each tile shows an em dash in
+       muted ink — a zero would assert a measurement that does not exist yet. A
+       filtered-to-zero register is different: those numbers are real. */
+    const empty = _rows.length === 0;
     const host = $('fiqTiles');
     if (host) {
       // Three columns each, inside the twelve-column grid — an unwrapped tile
@@ -208,6 +201,7 @@
         value: _stats?.total ?? _rows.length,
         label: _stats ? 'Whole register' : `Register${capped ? ' — page only' : ''}`,
         hint: view.length !== _rows.length ? `${view.length} match the current filter` : null,
+        empty,
       });
 
       /* The delta is derived from rows, so it is only honest while the page
@@ -221,12 +215,13 @@
         label: 'Last 7 days',
         prev: reachesBack ? _rows.filter((r) => inRange(r, prevWk, wk)).length : null,
         hint: reachesBack ? null : 'no prior week to compare — the register page is capped',
+        empty,
       });
 
       const withEmail = _stats?.with_email ?? _rows.filter((r) => r.email).length;
       const emailDenom = _stats?.total ?? _rows.length;
       CX().stat($('fiqT3'), { value: withEmail, label: 'Reached capture',
-        hint: emailDenom ? `${((withEmail / emailDenom) * 100).toFixed(0)}% gave an email` : null });
+        hint: emailDenom ? `${((withEmail / emailDenom) * 100).toFixed(0)}% gave an email` : null, empty });
 
       /* This tile is the point of the console. It counts rows with a RECORDED
          outcome — not rows at stage "engaged" — because a stage is where the
@@ -238,22 +233,38 @@
         hint: decided < MIN_BENCHMARK_N
           ? `${MIN_BENCHMARK_N - decided} more before the declared priors can be replaced by measurements`
           : `${won} won of ${decided} decided — enough to retire the guessed conversion rate`,
+        empty,
       });
     }
 
     const dist = $('fiqBandMix');
+    const note = $('fiqBandNote');
+    const warn = $('fiqBandWarn');
     if (dist) {
       const counts = BANDS.map((b) => ({
         label: b, color: BAND_COLOUR[b],
         value: view.filter((r) => String(r.band || '').toLowerCase() === b).length,
       })).filter((r) => r.value > 0);
-      CX().distribution(dist, counts, { empty: 'No rows in the current filter.' });
-      const note = $('fiqBandNote');
-      if (note) {
-        note.textContent = view.length < MIN_BENCHMARK_N
-          ? `Sample of ${view.length}. Below ${MIN_BENCHMARK_N} this is a sample, not a benchmark — do not quote it to a client.`
-          : `Sample of ${view.length} rows on this screen.`;
-        note.className = view.length < MIN_BENCHMARK_N ? 'cx-sample' : 'cx-panel-sub';
+      /* At zero rows the distribution collapses to a single muted line, and the
+         sample-size warning is suppressed — a warning that a sample of 0 is too
+         small to quote is noise. */
+      CX().distribution(dist, counts, {
+        empty: empty ? 'No sessions recorded yet.' : 'No rows in the current filter.',
+      });
+      if (!view.length) {
+        if (note) note.textContent = '';
+        if (warn) warn.hidden = true;
+      } else if (view.length < MIN_BENCHMARK_N) {
+        /* The sample-size warning is its own line beneath the title, not a rival
+           on the title's baseline. */
+        if (note) note.textContent = '';
+        if (warn) {
+          warn.hidden = false;
+          warn.textContent = `Sample of ${view.length}. Below ${MIN_BENCHMARK_N} this is a sample, not a benchmark — do not quote it to a client.`;
+        }
+      } else {
+        if (warn) warn.hidden = true;
+        if (note) note.textContent = `Sample of ${view.length} rows on this screen.`;
       }
     }
   }

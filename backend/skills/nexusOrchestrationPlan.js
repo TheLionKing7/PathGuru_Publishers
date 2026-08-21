@@ -9,11 +9,7 @@
  */
 
 import { getSupabase, supabaseWrite } from '../supabaseClient.js';
-import { callAiProvider, resolveProvider } from '../aiProviders.js';
-import { enqueueC2cCalendar } from './c2cGrowthEngine.js';
 import { BLOG_CADENCE_DAYS } from './nexusCeoDoctrine.js';
-
-const SCHEDULE_CACHE_KEY = 'cache/content-schedule.json';
 
 /** Parse blog cadence + synthesizer intent from natural language. */
 export function parseWorkflowSignals(instruction) {
@@ -50,55 +46,6 @@ export function parseWorkflowSignals(instruction) {
   };
 }
 
-/** LLM: derive blog post titles from an Orion research brief. */
-async function deriveBlogTopicsFromBrief(brief, count, sector) {
-  const prompt = `From this research brief, propose exactly ${count} distinct blog article titles for DigiFusion (sector: ${sector}).
-Each title should target a specific SME pain point found in the research. African business context preferred.
-
-RESEARCH BRIEF:
-${String(brief || '').slice(0, 3500)}
-
-Return ONLY a JSON array of strings — article titles. Example: ["Title one", "Title two"]`;
-
-  try {
-    const raw = await callAiProvider(resolveProvider(), prompt, null, { fallback: true });
-    const match = raw.match(/\[[\s\S]*\]/);
-    const arr = match ? JSON.parse(match[0]) : [];
-    return (Array.isArray(arr) ? arr : []).map(String).filter(Boolean).slice(0, count);
-  } catch {
-    return Array.from({ length: count }, (_, i) => `SME pain point insight ${i + 1} — ${sector.replace(/_/g, ' ')}`);
-  }
-}
-
-/** Push blog items into the CEO content schedule (approval pipeline picks them up). */
-async function enqueueBlogScheduleItems({ topics, intervalDays, sector, campaignId, researchTaskId }) {
-  const { getJsonCache, putJsonCache } = await import('../cloudflareR2.js');
-  const schedule = (await getJsonCache(SCHEDULE_CACHE_KEY).catch(() => null)) || [];
-  const start = new Date();
-  start.setDate(start.getDate() + 1);
-
-  const items = topics.map((topic, i) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + i * intervalDays);
-    return {
-      id:            `sched-${campaignId?.slice(0, 8) || Date.now()}-${i}`,
-      topic,
-      sector,
-      type:          'cluster',
-      stdcStage:     'think',
-      scheduledFor:  d.toISOString(),
-      status:        'queued',
-      frameworkId:   'c2c',
-      campaignId,
-      researchTaskId,
-      linksToPillar: true,
-    };
-  });
-
-  await putJsonCache(SCHEDULE_CACHE_KEY, [...items, ...schedule].slice(0, 40));
-  return items;
-}
-
 /** Create parent campaign + child orchestration steps in Supabase. */
 export async function createCampaignFromResearch(nexus, {
   instruction,
@@ -122,17 +69,6 @@ export async function createCampaignFromResearch(nexus, {
       agent_id:    'synthesizer',
       due_at:      now.toISOString(),
       offsetDays:  0,
-    });
-  }
-
-  if (sig.wantsContentCampaign) {
-    steps.push({
-      action:     'content_calendar',
-      title:      `Build ${sig.postCount}-post content calendar (every ${sig.intervalDays}d)`,
-      agent_id:   'nexus',
-      due_at:     new Date(now.getTime() + 60_000).toISOString(),
-      offsetDays: 0,
-      meta:       { postCount: sig.postCount, intervalDays: sig.intervalDays, sector: sig.sector },
     });
   }
 
@@ -227,45 +163,6 @@ export async function executeOrchestrationStep(nexus, taskRow) {
           priority:      taskRow.priority || 3,
         });
         output = { type: 'report_queued', orch };
-        break;
-      }
-      case 'content_calendar': {
-        const meta = input.meta || {};
-        const topics = await deriveBlogTopicsFromBrief(brief, meta.postCount || 5, meta.sector || 'sme');
-        const scheduled = await enqueueBlogScheduleItems({
-          topics,
-          intervalDays:   meta.intervalDays || BLOG_CADENCE_DAYS,
-          sector:         meta.sector || 'sme',
-          campaignId:     taskRow.parent_task_id || taskRow.id,
-          researchTaskId: input.researchTaskId,
-        });
-
-        let c2c = null;
-        try {
-          const plan = {
-            id:        `campaign-${taskRow.parent_task_id || taskRow.id}`,
-            sector:    meta.sector || 'sme',
-            pillar:    { title: topics[0] || instruction.slice(0, 80), stdcStage: 'think' },
-            clusters:  topics.slice(1).map((title, i) => ({
-              title,
-              stdcStage:          'think',
-              scheduledOffsetDays: (i + 1) * (meta.intervalDays || BLOG_CADENCE_DAYS),
-              linksToPillar:      true,
-            })),
-            researchBrief: brief.slice(0, 3000),
-          };
-          c2c = await enqueueC2cCalendar(plan, { startDate: new Date(Date.now() + 86400000) });
-        } catch (e) {
-          console.warn('[Nexus Campaign] C2C enqueue skipped:', e.message);
-        }
-
-        output = {
-          type:          'content_calendar',
-          topics,
-          scheduledCount: scheduled.length,
-          scheduleItems: scheduled.map(s => ({ topic: s.topic, scheduledFor: s.scheduledFor })),
-          c2c,
-        };
         break;
       }
       default:
