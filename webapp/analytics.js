@@ -92,11 +92,17 @@
     const reg = register.status === 'fulfilled' ? normaliseRegister(register.value) : null;
 
     if (!data) {
+      /* One failure, stated once. The previous version wrote the same sentence
+         into all six hosts, so a single 403 rendered as six identical
+         paragraphs down the page — which reads as six problems, and buries the
+         one instruction that matters. The explanation goes at the top where
+         the numbers would have been; the panels below get a short marker. */
       const why = cur.reason?.message === 'NO_BACKEND'
-        ? 'Set the backend URL in Settings, then refresh.'
+        ? 'No backend configured — set the backend URL in Settings, then refresh.'
         : `Analytics endpoint unavailable — ${CX().esc(cur.reason?.message || 'unknown error')}`;
-      ['anTiles', 'anDaily', 'anFunnel', 'anPages', 'anReferrers', 'anSources'].forEach((id) => {
-        const el = $(id); if (el) CX().emptyState(el, why);
+      CX().emptyState($('anTiles'), why);
+      ['anDaily', 'anFunnel', 'anPages', 'anReferrers', 'anSources'].forEach((id) => {
+        const el = $(id); if (el) CX().emptyState(el, 'Unavailable');
       });
       finish(btn); return;
     }

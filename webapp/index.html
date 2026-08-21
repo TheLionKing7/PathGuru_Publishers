@@ -1149,7 +1149,7 @@
       </div><!-- /.module-topnav -->
 
       <div class="module-body">
-        <section class="tab-panel active" id="tab-analytics" aria-label="Site Analytics">
+        <section class="tab-panel active cx-console" id="tab-analytics" aria-label="Site Analytics">
           <!-- The range select and Refresh button stay in the panel header
                above; they are NOT repeated here. Two elements sharing an id is
                why the old page appeared to ignore the range picker —
@@ -1250,7 +1250,7 @@
       </div><!-- /.module-topnav -->
 
       <div class="module-body">
-        <section class="tab-panel active" id="tab-frictioniq" aria-label="FrictionIQ Operator Console">
+        <section class="tab-panel active cx-console" id="tab-frictioniq" aria-label="FrictionIQ Operator Console">
           <div class="cx-filters">
             <input id="fiqSearch" class="cx-input cx-search" type="search"
                    placeholder="Search organisation, sector, role, country, email…">
@@ -1286,10 +1286,12 @@
             <label class="cx-check" title="Show soft-deleted rows so they can be restored">
               <input type="checkbox" id="fiqDeleted"> Show deleted
             </label>
-            <button id="fiqClear" class="cx-btn">Clear</button>
-            <button id="fiqRefresh" class="cx-btn">Refresh</button>
-            <button id="fiqExport" class="cx-btn cx-btn-primary">Export CSV</button>
-            <span class="cx-chip" id="fiqStatus"></span>
+            <div class="cx-filter-actions">
+              <button id="fiqClear" class="cx-btn">Clear</button>
+              <button id="fiqRefresh" class="cx-btn">Refresh</button>
+              <button id="fiqExport" class="cx-btn cx-btn-primary">Export CSV</button>
+              <span class="cx-chip" id="fiqStatus"></span>
+            </div>
           </div>
 
           <div class="cx-grid" id="fiqTilesRow" style="margin-bottom:14px">

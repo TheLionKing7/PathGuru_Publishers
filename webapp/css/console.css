@@ -59,13 +59,42 @@
                            and page notes — honesty affordances share an ink */
 }
 
+/* ── The console page itself ─────────────────────────────────────────────
+   departments.css sets `.module-body > .tab-panel.active { padding: 0 }` for
+   every module, on the assumption that each module's own body class supplies
+   its inset — .nexus-ops-body, .agents-tasks-body and the rest all do. The
+   console had no such class, so it inherited the zero and ran edge to edge:
+   the filter bar sat against the header, the tiles bled off both margins, and
+   the register's last column was clipped by the viewport rather than by its
+   own scroller.
+
+   20px horizontal is not an arbitrary choice — it is the same inset as
+   `.panel-header.active` above it, so the filter bar's left edge lines up with
+   the page title rather than floating free of it. */
+.cx-console { padding:18px 20px 26px; }
+@media (max-width:640px) { .cx-console { padding:14px 14px 20px; } }
+
+/* `hidden` is an attribute, not a display value: any rule setting display on
+   the element wins and the element stays on screen. #fiqBandWarn is `hidden`
+   until there is a sample caveat to report, but .cx-sample sets display:flex —
+   so an empty warning rendered as a stray amber dot beside the band bar. */
+.cx-console [hidden] { display:none !important; }
+
+/* Buttons travel together. Left to themselves they wrapped one at a time, so
+   "Clear" finished one row and "Refresh"/"Export CSV" began the next. */
+.cx-filter-actions { display:flex; align-items:center; gap:9px; margin-left:auto; }
+@media (max-width:900px) { .cx-filter-actions { margin-left:0; } }
+
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 .cx-grid   { display:grid; gap:var(--spacing-md,16px); grid-template-columns:repeat(12,1fr); align-items:start; }
-.cx-col-3  { grid-column:span 3; }
-.cx-col-4  { grid-column:span 4; }
-.cx-col-6  { grid-column:span 6; }
-.cx-col-8  { grid-column:span 8; }
-.cx-col-12 { grid-column:span 12; }
+/* min-width:0 on every track. A grid item defaults to min-width:auto, which
+   refuses to shrink below its content — so one wide table inside a panel would
+   push its column past the viewport and take the whole page with it. */
+.cx-col-3  { grid-column:span 3;  min-width:0; }
+.cx-col-4  { grid-column:span 4;  min-width:0; }
+.cx-col-6  { grid-column:span 6;  min-width:0; }
+.cx-col-8  { grid-column:span 8;  min-width:0; }
+.cx-col-12 { grid-column:span 12; min-width:0; }
 @media (max-width:1100px){ .cx-col-3,.cx-col-4{grid-column:span 6;} .cx-col-6,.cx-col-8{grid-column:span 12;} }
 @media (max-width:640px) { .cx-col-3,.cx-col-4,.cx-col-6,.cx-col-8{grid-column:span 12;} }
 
@@ -230,7 +259,12 @@
 .cx-check input { accent-color:var(--gold,#c9a84c); cursor:pointer; width:auto; }
 
 /* ── Register table ──────────────────────────────────────────────────────── */
-.cx-table { width:100%; border-collapse:collapse; font-size:12.5px; }
+/* min-width, not just width:100%. Ten columns squeezed into the panel made the
+   auto layout compress the narrow ones until "21 Aug 2026" broke onto three
+   lines and every row grew to match. Below this width the table stops
+   compressing and .cx-scroll scrolls it, which is the honest trade: a scrollbar
+   is legible, a three-line date is not. */
+.cx-table { width:100%; min-width:1060px; border-collapse:collapse; font-size:12.5px; }
 .cx-table th {
   text-align:left; font-size:10px; letter-spacing:.12em; text-transform:uppercase;
   color:var(--text-secondary,#8fa3c0); font-weight:600; padding:10px 11px;
@@ -241,9 +275,16 @@
 .cx-table th[data-sort]:hover { color:var(--text-primary,#f0f4ff); }
 .cx-table th[aria-sort] { color:var(--gold,#c9a84c); }
 .cx-th-actions { width:1%; text-align:right; }
-.cx-actions { display:inline-flex; gap:6px; justify-content:flex-end; white-space:nowrap; }
+/* This was `display:inline-flex` — on a <td>. That takes the cell out of the
+   table layout model entirely, which is why the Actions column rendered
+   detached from its row and the row rules stopped short beneath it. A table
+   cell keeps display:table-cell; the buttons are inline-block and space
+   themselves. */
+.cx-actions { text-align:right; white-space:nowrap; }
+.cx-actions .cx-btn + .cx-btn { margin-left:6px; }
 .cx-table td { padding:10px 11px; border-bottom:1px solid var(--border,#263047);
                color:var(--text-primary,#f0f4ff); vertical-align:middle; }
+.cx-table td.cx-num:first-child { white-space:nowrap; }
 .cx-table tbody tr[data-token] { cursor:pointer; }
 .cx-table tbody tr[data-token]:hover { background:var(--surface-2,#1a2236); }
 .cx-table tbody tr.cx-open { background:var(--surface-2,#1a2236); }

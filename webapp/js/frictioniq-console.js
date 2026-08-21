@@ -202,6 +202,7 @@
         label: _stats ? 'Whole register' : `Register${capped ? ' — page only' : ''}`,
         hint: view.length !== _rows.length ? `${view.length} match the current filter` : null,
         empty,
+        emptyHint: 'no sessions recorded yet',
       });
 
       /* The delta is derived from rows, so it is only honest while the page

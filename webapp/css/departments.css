@@ -492,6 +492,23 @@ body.pg-dept-intelligence #module-agents .dept-network-only { display: none !imp
 body.pg-shell-v3 .module-body > .tab-panel.active {
   padding: 0;
 }
+
+/* …except the operator consoles. The zero above assumes every module supplies
+   its own inset through a body class — .nexus-ops-body, .agents-tasks-body and
+   the rest all do. The FrictionIQ and Analytics consoles had no such class, so
+   they inherited the zero and rendered edge to edge: the filter bar against the
+   header, tiles bleeding off both margins, and the register's last column
+   clipped by the viewport instead of by its own scroller.
+   20px matches .panel-header.active above, so the filter bar's left edge lines
+   up with the page title. */
+body.pg-shell-v3 .module-body > .tab-panel.active.cx-console {
+  padding: 18px 20px 26px;
+}
+@media (max-width: 640px) {
+  body.pg-shell-v3 .module-body > .tab-panel.active.cx-console {
+    padding: 14px 14px 20px;
+  }
+}
 .nexus-ops-body,
 .nexus-workflow-body,
 .activity-journal-body,

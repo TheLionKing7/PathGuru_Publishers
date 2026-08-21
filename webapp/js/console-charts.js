@@ -72,8 +72,17 @@
     return Math.ceil(max / mag) * mag;
   };
 
+  /* An empty state has to survive being dropped into a grid. #anTiles and
+     #fiqTiles are twelve-column grids, so a bare div landed in ONE column and
+     the sentence rendered a word per line down the left margin — which read as
+     a broken page rather than as an explanation. Span the full row when the
+     host is a grid; behave exactly as before when it is not. */
   function emptyState(host, msg) {
-    host.innerHTML = `<div class="cx-empty"><span class="cx-empty-mark"></span>${esc(msg)}</div>`;
+    if (!host) return;
+    let isGrid = false;
+    try { isGrid = getComputedStyle(host).display.includes('grid'); } catch (_) {}
+    const body = `<div class="cx-empty"><span class="cx-empty-mark"></span>${esc(msg)}</div>`;
+    host.innerHTML = isGrid ? `<div class="cx-col-12">${body}</div>` : body;
   }
 
   /* ── Tooltip: one per document, moved rather than recreated ───────────── */
@@ -239,14 +248,17 @@
   }
 
   /* ══ STAT TILE — a number is meaningless without its comparison ═══════ */
-  function stat(host, { value, label, prev, unit, hint, empty }) {
+  function stat(host, { value, label, prev, unit, hint, empty, emptyHint }) {
     if (!host) return;
     if (empty) {
       /* Nothing measured yet: an em dash says "nothing to measure" where a 0
-         would claim a measurement. Muted ink, one short caption. */
+         would claim a measurement.
+         The caption is opt-in. Every tile printing "no sessions recorded yet"
+         stated one fact four times across one row — the em dashes already say
+         it, and the register below says it again in full. */
       host.innerHTML = `<div class="cx-stat-value cx-stat-value--empty">—</div>
         <div class="cx-stat-label">${esc(label)}</div>
-        <div class="cx-stat-hint">no sessions recorded yet</div>`;
+        ${emptyHint ? `<div class="cx-stat-hint">${esc(emptyHint)}</div>` : ''}`;
       return;
     }
     const cur = Number(value) || 0;
