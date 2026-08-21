@@ -35,11 +35,11 @@ const eq = (a,b,m) => { if (a!==b) throw new Error(`${m}: got ${a}, want ${b}`);
 console.log('Slack');
 await t('valid block_actions is queued', async () => {
   inserted=[];
-  const body = 'payload=' + encodeURIComponent(JSON.stringify({type:'block_actions',actions:[{action_id:'approve',value:'task-1'}]}));
+  const body = 'payload=' + encodeURIComponent(JSON.stringify({type:'block_actions',trigger_id:'Trig456',actions:[{action_id:'approve',value:'task-1'}]}));
   const ts = String(now());
   const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
   const r = await run('/webhooks/slack', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/x-www-form-urlencoded'});
-  eq(r.status,200,'status'); eq(inserted.length,1,'inserted'); eq(inserted[0].kind,'slack','kind');
+  eq(r.status,200,'status'); eq(inserted.length,1,'inserted'); eq(inserted[0].kind,'slack','kind'); eq(inserted[0].dedupe_key,'Trig456','trigger dedupe');
   const j = await r.json(); if(!/Received/.test(j.text)) throw new Error('no interim text');
 });
 await t('url_verification answers challenge inline, not queued', async () => {
@@ -47,22 +47,61 @@ await t('url_verification answers challenge inline, not queued', async () => {
   const body = JSON.stringify({type:'url_verification',challenge:'abc123'});
   const ts = String(now());
   const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
-  const r = await run('/webhooks/slack-events', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
+  const r = await run('/webhooks/slack', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
   eq((await r.json()).challenge,'abc123','challenge'); eq(inserted.length,0,'must not queue');
 });
-await t('slack-events app_mention queued with event id dedupe', async () => {
+await t('slash command is queued after an immediate ephemeral ack', async () => {
+  inserted=[];
+  const body = 'command=%2Fpause&trigger_id=Trig123&user_id=U123';
+  const ts = String(now());
+  const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
+  const r = await run('/webhooks/slack', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/x-www-form-urlencoded'});
+  const j = await r.json();
+  eq(r.status,200,'status'); eq(j.response_type,'ephemeral','response type');
+  if (!/Working on it/.test(j.text)) throw new Error('no immediate acknowledgement');
+  eq(inserted[0].dedupe_key,'Trig123','trigger dedupe');
+  eq(inserted[0].raw_body,body,'raw body preserved');
+  eq(inserted[0].content_type,'application/x-www-form-urlencoded','content type preserved');
+});
+await t('event callback queued with event id dedupe', async () => {
   inserted=[];
   const body = JSON.stringify({type:'event_callback',event_id:'Ev12345',event:{type:'app_mention',channel:'C1',ts:'1700000000.000001',text:'<https://example.com/post> please'}});
   const ts = String(now());
   const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
-  const r = await run('/webhooks/slack-events', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
+  const r = await run('/webhooks/slack', body, {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'});
   eq(r.status,200,'status'); eq(inserted.length,1,'inserted'); eq(inserted[0].kind,'slack','kind'); eq(inserted[0].dedupe_key,'Ev12345','dedupe');
   eq(await r.text(),'','empty 200 body');
+});
+await t('retried event callback returns 200 without a second queue row', async () => {
+  let attempts = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('/rest/v1/webhook_queue')) {
+      attempts++;
+      return attempts === 1 ? new Response('', {status:201}) : new Response('duplicate', {status:409});
+    }
+    return saved(url, opts);
+  };
+  const body = JSON.stringify({type:'event_callback',event_id:'Retry123',event:{type:'app_mention',channel:'C1',ts:'1700000000.000002',text:'hello'}});
+  const ts = String(now());
+  const sig = 'v0=' + hex(await hmac('SHA-256','slack-secret',`v0:${ts}:${body}`));
+  const headers = {'x-slack-request-timestamp':ts,'x-slack-signature':sig,'content-type':'application/json'};
+  const first = await run('/webhooks/slack', body, headers);
+  const second = await run('/webhooks/slack', body, headers);
+  eq(first.status,200,'first status'); eq(second.status,200,'retry status'); eq(attempts,2,'dedupe insert attempts');
+  globalThis.fetch = saved;
 });
 await t('bad signature rejected, nothing queued', async () => {
   inserted=[];
   const r = await run('/webhooks/slack','payload=x',{'x-slack-request-timestamp':String(now()),'x-slack-signature':'v0=deadbeef'});
   eq(r.status,401,'status'); eq(inserted.length,0,'queued');
+});
+await t('missing signing secret fails closed', async () => {
+  const saved = env.SLACK_SIGNING_SECRET;
+  delete env.SLACK_SIGNING_SECRET;
+  const r = await run('/webhooks/slack','payload=x',{'x-slack-request-timestamp':String(now()),'x-slack-signature':'v0=anything'});
+  eq(r.status,401,'status');
+  env.SLACK_SIGNING_SECRET = saved;
 });
 await t('stale timestamp rejected', async () => {
   const ts = String(now()-600); const body='payload=x';

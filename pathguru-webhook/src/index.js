@@ -66,8 +66,8 @@ const toHex = (bytes) =>
 const toBase64 = (bytes) => btoa(String.fromCharCode(...bytes));
 
 /* Constant-time string comparison. `===` on a signature leaks its prefix
-   through timing; the length check leaks only the length, which is public. */
-function safeEqual(a, b) {
+  through timing; the length check leaks only the length, which is public. */
+function timingSafeEqual(a, b) {
   const x = enc.encode(String(a ?? ''));
   const y = enc.encode(String(b ?? ''));
   if (x.length !== y.length) return false;
@@ -90,7 +90,7 @@ async function verifySlack(rawBody, headers, secret) {
   if (!ts || !sig) return { ok: false, why: 'missing Slack signature headers' };
   if (!fresh(ts))  return { ok: false, why: 'Slack timestamp outside 5-minute window' };
   const expected = `v0=${toHex(await hmac('SHA-256', secret, `v0:${ts}:${rawBody}`))}`;
-  return safeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'Slack signature mismatch' };
+  return timingSafeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'Slack signature mismatch' };
 }
 
 /* ── Twilio: HMAC-SHA1 over the full URL + params sorted by key ──────────
@@ -111,7 +111,7 @@ async function verifyTwilio(rawBody, request, env, urlOverride) {
   for (const k of keys) payload += k + params.get(k);
 
   const expected = toBase64(await hmac('SHA-1', token, payload));
-  return safeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'Twilio signature mismatch' };
+  return timingSafeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'Twilio signature mismatch' };
 }
 
 /* ── Make / inbound email: our own HMAC-SHA256 over the raw body, OR a bearer
@@ -123,7 +123,7 @@ async function verifyInbound(rawBody, headers, hmacSecret, bearerSecret) {
   const auth = headers.get('authorization');
   if (auth) {
     const m = auth.match(/^Bearer\s+(.+)$/i);
-    if (m?.[1] && bearerSecret && safeEqual(m[1].trim(), bearerSecret)) return { ok: true };
+    if (m?.[1] && bearerSecret && timingSafeEqual(m[1].trim(), bearerSecret)) return { ok: true };
     // Wrong/missing token falls through to HMAC — a stray Authorization header
     // must not break a caller that authenticates by signature.
   }
@@ -135,7 +135,7 @@ async function verifyInbound(rawBody, headers, hmacSecret, bearerSecret) {
   if (!ts || !sig) return { ok: false, why: 'missing x-signature / x-timestamp' };
   if (!fresh(ts))  return { ok: false, why: 'timestamp outside 5-minute window' };
   const expected = toHex(await hmac('SHA-256', hmacSecret, rawBody));
-  return safeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'signature mismatch' };
+  return timingSafeEqual(expected, sig) ? { ok: true } : { ok: false, why: 'signature mismatch' };
 }
 
 /* ── Make / outbound-sent: bearer token only (MAKE_WEBHOOK_TOKEN, falling back
@@ -146,7 +146,7 @@ async function verifyBearer(headers, bearerSecret) {
   const auth = headers.get('authorization');
   const m = auth ? auth.match(/^Bearer\s+(.+)$/i) : null;
   if (!m?.[1]) return { ok: false, why: 'missing bearer token' };
-  return safeEqual(m[1].trim(), bearerSecret) ? { ok: true } : { ok: false, why: 'bearer token mismatch' };
+  return timingSafeEqual(m[1].trim(), bearerSecret) ? { ok: true } : { ok: false, why: 'bearer token mismatch' };
 }
 
 /* ── Supabase: one INSERT, via the REST API ─────────────────────────────── */
@@ -232,29 +232,35 @@ export default {
 
     let kind, verdict, dedupeKey = null;
 
-    if (pathname === '/webhooks/slack-events') {
+    if (pathname === '/webhooks/slack') {
+      // Slack sends Events API payloads as JSON and interactivity/slash commands
+      // as form data. Verify the raw body before parsing either representation.
       kind = 'slack';
       verdict = await verifySlack(rawBody, request.headers, env.SLACK_SIGNING_SECRET);
 
-      /* Events API posts JSON. Branch on content type before parsing: the
-         url_verification handshake is answered inline; real events queue with
-         their event id as the dedupe key so a Slack retry becomes a 409. */
       if (verdict.ok) {
-        const ct = (request.headers.get('content-type') || '').toLowerCase();
-        if (ct.includes('application/json')) {
+        const contentType = (request.headers.get('content-type') || '').toLowerCase();
+        if (contentType.includes('application/json')) {
           try {
-            const probe = JSON.parse(rawBody);
-            if (probe.type === 'url_verification') return json({ challenge: probe.challenge });
-            dedupeKey = probe.event_id || (probe.event && (probe.event.ts || probe.event.event_ts)) || null;
-          } catch { /* not json after all — queue without a dedupe key */ }
+            const payload = JSON.parse(rawBody);
+            // Slack's verification handshake must never wait for Render.
+            if (payload.type === 'url_verification') return json({ challenge: payload.challenge });
+            if (payload.type === 'event_callback') dedupeKey = payload.event_id || null;
+          } catch { /* queue malformed JSON only after signature verification */ }
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
+          const form = new URLSearchParams(rawBody);
+          if (form.get('command')) {
+            dedupeKey = form.get('trigger_id') || null;
+          } else {
+            try {
+              const payload = JSON.parse(form.get('payload') || '');
+              if (payload.type === 'block_actions' || payload.type === 'view_submission') {
+                dedupeKey = payload.trigger_id || null;
+              }
+            } catch { /* queue malformed payload only after signature verification */ }
+          }
         }
       }
-    } else if (pathname === '/webhooks/slack') {
-      // Interactivity + slash commands. block_actions arrive form-encoded as
-      // `payload=<json>`; slash commands as `command=/name`. Queued raw — the
-      // backend branches on content type before parsing.
-      kind = 'slack';
-      verdict = await verifySlack(rawBody, request.headers, env.SLACK_SIGNING_SECRET);
     } else if (pathname === '/webhooks/whatsapp') {
       kind = 'whatsapp';
       verdict = await verifyTwilio(rawBody, request, env);
@@ -307,30 +313,29 @@ export default {
 
     wakeBackend(env, ctx);
 
-    /* Events API wants a plain 2xx — Slack retries anything else. No interim
-       message: an app_mention or DM is not an interactive card. */
-    if (pathname === '/webhooks/slack-events') {
-      return new Response('', { status: 200 });
-    }
-
-    /* Interactivity + slash commands get a visible, honest interim state.
-       view_submission (modal submit) needs a modal ack, not a message card. */
+    /* All Slack deliveries get an immediate acknowledgement. Slash commands
+       and interactive actions receive a visible response; Events API callbacks
+       only need an empty 200. The raw delivery is already queued for Render. */
     if (kind === 'slack') {
       const ct = (request.headers.get('content-type') || '').toLowerCase();
       if (ct.includes('application/x-www-form-urlencoded')) {
-        const field = new URLSearchParams(rawBody).get('payload');
+        const form = new URLSearchParams(rawBody);
+        if (form.get('command')) {
+          return json({ response_type: 'ephemeral', text: 'Working on it...' });
+        }
+        const field = form.get('payload');
         if (field) {
           try {
-            const p = JSON.parse(field);
-            if (p.type === 'view_submission') return json({ response_action: 'clear' });
+            if (JSON.parse(field).type === 'view_submission') return json({ response_action: 'clear' });
           } catch { /* not json */ }
         }
+        return json({
+          response_type: 'ephemeral',
+          replace_original: false,
+          text: ':hourglass_flowing_sand: Received — Nexus is applying your decision. The card will update in a moment.',
+        });
       }
-      return json({
-        response_type: 'ephemeral',
-        replace_original: false,
-        text: ':hourglass_flowing_sand: Received — Nexus is applying your decision. The card will update in a moment.',
-      });
+      return new Response('', { status: 200 });
     }
 
     // Twilio wants an empty 200 or TwiML; anything else appears as an error.

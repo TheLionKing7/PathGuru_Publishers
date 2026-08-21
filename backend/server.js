@@ -305,7 +305,7 @@ const server = createServer(async (req, res) => {
    * file grows.
    */
   if (!isPublicPath(path)) {
-    if (!verifyOperator(req)) { operatorAuthFail(res, err); return; }
+    if (!verifyOperator(req)) { operatorAuthFail(res, err, req.method, path); return; }
   }
 
   /* ── Auth routes ─────────────────────────────────────────────────────── */

@@ -41,7 +41,7 @@ All five flags must be `true`.
 
 | Sender | New URL |
 |---|---|
-| Slack app → Events API → Request URL | `https://…workers.dev/webhooks/slack-events` |
+| Slack app → Events API → Request URL | `https://…workers.dev/webhooks/slack` |
 | Slack app → Interactivity → Request URL | `https://…workers.dev/webhooks/slack` |
 | Twilio → Sandbox settings → When a message comes in | `https://…workers.dev/webhooks/whatsapp` |
 | Twilio → WhatsApp senders → Status callback URL | `https://webhooks.digitafusion.com/webhooks/whatsapp-status` |
@@ -51,7 +51,11 @@ Slack Events API: subscribe to `app_mention` and `message.im` (the bot must be i
 the relevant channels). The backend ignores `bot_id`/`subtype` so Nexus never
 answers its own messages.
 
-Nothing points at Render any more except the Worker itself.
+The Worker is the only Slack entry point in production. Render's
+`POST /api/webhooks/slack` route remains in place for local testing, but Slack
+must point to the Worker because Render cold starts exceed Slack's three-second
+acknowledgement window. The Worker answers URL verification and slash commands
+synchronously, and queues events/interactions for the shared backend handlers.
 
 The status-callback URL is also the backend default: `TWILIO_STATUS_CALLBACK_URL`
 on Render, falling back to `https://webhooks.digitafusion.com/webhooks/whatsapp-status`.

@@ -33,7 +33,13 @@ async function cmsRequest (method, path, body, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const res  = await fetch(url, opts);
-      const data = await res.json().catch(() => ({}));
+      const rawText = await res.text();
+      let data = {};
+      try { data = JSON.parse(rawText); } catch { /* preserve non-JSON response text for diagnostics */ }
+
+      if (!res.ok) {
+        console.warn(`[CMS] ${res.status} ${path} content-type=${res.headers.get('content-type') || 'unknown'} body=${rawText.slice(0, 300)}`);
+      }
 
       // Retry on 5xx (server-side transient errors)
       if (res.status >= 500 && attempt < retries) {

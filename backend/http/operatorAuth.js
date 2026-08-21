@@ -265,11 +265,12 @@ export function isPublicPath(path) {
   return PUBLIC_PREFIXES.some((p) => path.startsWith(p));
 }
 
-export function operatorAuthFail(res, errFn) {
+export function operatorAuthFail(res, errFn, method = 'UNKNOWN', path = 'UNKNOWN') {
   if (!isOperatorAuthConfigured()) {
     errFn(res, 'Operator auth is not configured. Set PATHGURU_OPERATOR_PASSWORD.', 503);
     return;
   }
+  console.warn(`[PathGuru] Unauthorized — operator session required: ${method} ${path}`);
   errFn(res, 'Unauthorized — operator session required', 401);
 }
 

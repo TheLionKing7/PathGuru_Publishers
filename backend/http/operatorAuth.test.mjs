@@ -54,13 +54,23 @@ console.log('— the allowlist —');
 const mustBePublic = ['/ping','/health','/api/cron/ping','/api/platform/config','/api/auth/login',
   '/api/auth/status','/api/agents/status','/api/webhooks/whatsapp','/api/bookings/calendly-webhook',
   '/api/newsletter/unsubscribe','/api/cron/nurture','/index.html','/js/core/shell.js','/css/style.css','/',
-  '/api/queue/drain','/api/outbound/approved','/api/outbound/abc-123/sent'];
+  '/api/webhooks/slack','/api/queue/drain','/api/outbound/approved','/api/outbound/abc-123/sent'];
 for (const p of mustBePublic) t(`public: ${p}`, A.isPublicPath(p));
 
 const mustBeGated = ['/api/frictioniq/sessions','/api/frictioniq/session','/api/clients','/api/invoices',
   '/api/purchases','/api/agents/leads','/api/shop/orders','/api/blog','/api/posts','/api/engagements',
-  '/api/funnel/capture','/api/media/upload','/api/agents/nexus/orchestrate'];
+  '/api/funnel/capture','/api/media/upload','/api/agents/nexus/orchestrate','/api/webhooks/slack/extra'];
 for (const p of mustBeGated) t(`gated: ${p}`, !A.isPublicPath(p));
+
+console.log('— refusal context —');
+const refusal = [];
+const warnings = [];
+const originalWarn = console.warn;
+console.warn = (message) => warnings.push(message);
+A.operatorAuthFail({}, (_res, message, status) => refusal.push({ message, status }), 'POST', '/api/private');
+console.warn = originalWarn;
+t('refusal includes method and path in log', warnings[0] === '[PathGuru] Unauthorized — operator session required: POST /api/private');
+t('refusal response remains vague', refusal[0]?.message === 'Unauthorized — operator session required' && refusal[0]?.status === 401);
 
 console.log('— fail closed —');
 delete process.env.PATHGURU_OPERATOR_PASSWORD;
