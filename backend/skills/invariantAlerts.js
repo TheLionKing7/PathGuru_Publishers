@@ -2,9 +2,8 @@
  * DigiFusion Intelligence Network — Invariant alerts
  * ===================================================
  * These are invariants, not metrics: each one means something is broken right
- * now. They alert to SLACK_OPS_CHANNEL at most once per hour per condition —
- * except `queue_failed`, which re-alerts only when the *set* of failed row ids
- * changes (so the same rows don't nag every hour).
+ * now. They re-alert only when the set of affected identifiers changes, so the
+ * same condition does not nag every hour.
  *
  *   1. a webhook_queue row pending >10 minutes
  *   2. any webhook_queue row in failed
@@ -16,15 +15,14 @@
  * When the estate is paused, `queue_pending` is a *normal* consequence (the
  * queue keeps accepting but the drain stops dispatching), so it is suppressed
  * and replaced by a single 6-hourly "System paused — N rows held in queue"
- * notice. Cooldown and the last-reported `queue_failed` row-id set both live in
- * public.invariant_state so they survive the free-tier sleep.
+ * notice. The last-alerted identifier set for each invariant lives in
+ * public.invariant_state so it survives the free-tier sleep.
  */
 
 import { getSupabase } from '../supabaseClient.js';
 import { isPaused } from './systemFlags.js';
 import { postSlackMessage, recordNotificationAttempt, slackChannelFor } from './slackNotify.js';
 
-const COOLDOWN_MS        = 60 * 60 * 1000;   // 1 hour
 const PENDING_STUCK_MS   = 10 * 60 * 1000;   // 10 minutes
 const DRAIN_STALE_MS     = 15 * 60 * 1000;   // 15 minutes
 const APPROVAL_STALE_MS  = 24 * 3600 * 1000; // 24 hours
@@ -86,6 +84,22 @@ export async function recordDrainAuthorised(db = getSupabase()) {
   await setState(db, 'last_drain_authorised_at', new Date().toISOString());
 }
 
+function safeJson(value) {
+  if (value == null) return {};
+  if (typeof value === 'string') {
+    try { return JSON.parse(value); } catch { return {}; }
+  }
+  return value;
+}
+
+function waitLabel(createdAt, nowMs) {
+  const minutes = Math.max(0, Math.floor((nowMs - new Date(createdAt).getTime()) / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+  return days ? `${days}d ${hours}h` : `${hours}h ${mins}m`;
+}
+
 /** Check every invariant; alert any that are broken and off-cooldown. */
 export async function sweepInvariants({ db = getSupabase(), now = new Date() } = {}) {
   if (!db) return { alerted: [], error: 'no_db' };
@@ -115,25 +129,23 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
         const { data } = await db.from('webhook_queue')
           .select('id').eq('status', 'pending')
           .lt('created_at', new Date(nowMs - PENDING_STUCK_MS).toISOString())
-          .limit(1);
-        return { triggered: (data || []).length > 0, detail: `${(data || []).length}+ row(s) pending >10m` };
+          .limit(100);
+        const rows = data || [];
+        return { triggered: rows.length > 0, identifiers: rows.map((r) => r.id), detail: `${rows.length}+ row(s) pending >10m` };
       },
     },
     {
       key: 'queue_failed',
       title: 'webhook rows in failed',
-      setBased: true,
       async check() {
         const { data } = await db.from('webhook_queue')
           .select('id, kind, last_error')
           .eq('status', 'failed')
           .order('created_at', { ascending: true });
         const rows = data || [];
-        if (!rows.length) return { triggered: false, ids: [], detail: '' };
+        if (!rows.length) return { triggered: false, identifiers: [], detail: '' };
 
         const ids = rows.map((r) => r.id).sort();
-        const lastIds = await getStateJson(db, 'alert:queue_failed:rows');
-        if (sameSet(ids, lastIds)) return { triggered: false, ids, detail: '' };
 
         const shown = rows.slice(0, 3);
         const lines = shown.map((r) => {
@@ -141,7 +153,7 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
           return `• \`${r.kind}\` \`${r.id}\`${err ? ` — ${err}` : ''}`;
         });
         const more = rows.length > 3 ? `\n+${rows.length - 3} more` : '';
-        return { triggered: true, ids, detail: `${rows.length} failed row(s):\n${lines.join('\n')}${more}` };
+        return { triggered: true, identifiers: ids, detail: `${rows.length} failed row(s):\n${lines.join('\n')}${more}` };
       },
     },
     {
@@ -154,7 +166,7 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
         const detail = last
           ? `last drain ${Math.round((nowMs - new Date(last).getTime()) / 60000)}m ago`
           : 'drain never recorded';
-        return { triggered: stale, detail };
+        return { triggered: stale, identifiers: stale ? ['stale'] : [], detail };
       },
     },
     {
@@ -162,18 +174,29 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
       title: 'approval pending >24h',
       async check() {
         const { data } = await db.from('tasks')
-          .select('id').eq('type', 'pending_approval').eq('status', 'pending')
+          .select('id, input, title, created_at').eq('type', 'pending_approval').eq('status', 'pending')
           .lt('created_at', new Date(nowMs - APPROVAL_STALE_MS).toISOString())
-          .limit(1);
-        return { triggered: (data || []).length > 0, detail: `${(data || []).length}+ approval(s) pending >24h` };
+          .limit(100);
+        const rows = data || [];
+        const lines = rows.map((row) => {
+          const input = safeJson(row.input);
+          const subject = String(input.subject || row.title || row.id).replace(/\s+/g, ' ').trim();
+          return `• ${subject} — waiting ${waitLabel(row.created_at, nowMs)}`;
+        });
+        return {
+          triggered: rows.length > 0,
+          identifiers: rows.map((row) => row.id),
+          detail: `${rows.length} approval(s) pending >24h${lines.length ? `:\n${lines.join('\n')}` : ''}`,
+        };
       },
     },
     {
       key: 'rate_cap',
       title: 'send refused by rate cap',
       async check() {
-        const { data } = await db.from('inbound_message').select('id').eq('status', 'send_blocked').limit(1);
-        return { triggered: (data || []).length > 0, detail: `${(data || []).length}+ send(s) refused` };
+        const { data } = await db.from('inbound_message').select('id').eq('status', 'send_blocked').limit(100);
+        const rows = data || [];
+        return { triggered: rows.length > 0, identifiers: rows.map((row) => row.id), detail: `${rows.length}+ send(s) refused` };
       },
     },
     {
@@ -183,8 +206,9 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
         const { data } = await db.from('tasks')
           .select('id').eq('type', 'pending_approval')
           .eq('output->publishState', 'publish_failed')
-          .limit(1);
-        return { triggered: (data || []).length > 0, detail: `${(data || []).length}+ publish failure(s)` };
+          .limit(100);
+        const rows = data || [];
+        return { triggered: rows.length > 0, identifiers: rows.map((row) => row.id), detail: `${rows.length}+ publish failure(s)` };
       },
     },
   ];
@@ -192,19 +216,20 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
   const alerted = [];
   for (const cond of conditions) {
     if (paused && cond.suppressWhenPaused) continue;
-    if (!cond.setBased) {
-      const last = await getState(db, `alert:${cond.key}`);
-      if (last && (nowMs - new Date(last).getTime()) < COOLDOWN_MS) continue;
-    }
 
     const result = await cond.check();
-    if (!result.triggered) continue;
+    const stateKey = `alert:${cond.key}:identifiers`;
+    const identifiers = (result.identifiers || []).map(String).sort();
+    const lastIdentifiers = await getStateJson(db, stateKey);
 
-    if (cond.setBased) {
-      await setState(db, `alert:${cond.key}:rows`, JSON.stringify(result.ids || []));
-    } else {
-      await setState(db, `alert:${cond.key}`, now.toISOString());
+    if (!result.triggered) {
+      if (lastIdentifiers.length) await setState(db, stateKey, JSON.stringify([]));
+      continue;
     }
+
+    if (sameSet(identifiers, lastIdentifiers)) continue;
+
+    await setState(db, stateKey, JSON.stringify(identifiers));
 
     await postAlert(`${cond.title}: ${result.detail}`);
     alerted.push(cond.key);

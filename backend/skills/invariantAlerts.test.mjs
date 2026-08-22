@@ -1,9 +1,9 @@
 /**
  * Run:  node backend/skills/invariantAlerts.test.mjs
  *
- * Verifies the drain heartbeat is recorded, that each broken invariant alerts
- * to Slack at most once per hour, and that `queue_failed` reports row detail
- * (kind, id, last_error) and only re-alerts when the failed-row set changes.
+ * Verifies the drain heartbeat is recorded, that invariant alerts include
+ * identifying detail, and that each invariant only re-alerts when its
+ * affected-identifier set changes.
  * No framework, no dependency, exits non-zero on failure.
  */
 import { sweepInvariants, recordDrainAuthorised } from './invariantAlerts.js';
@@ -101,6 +101,36 @@ try {
     t('new failed row re-alerts', r3.alerted.includes('queue_failed'));
     t('second slack post', slackPosts.length === 2);
     t('second alert reflects higher count', (slackPosts[1] || '').includes('5 failed row(s)'));
+  }
+
+  console.log('— approval_stale reports subject, age, and set changes —');
+  {
+    slackPosts.length = 0;
+    const db = makeDb({
+      tasks: [
+        { id: 'approval-1', type: 'pending_approval', status: 'pending', input: { subject: 'Approve homepage launch' }, title: '[APPROVAL] fallback', created_at: '2023-12-31T00:00:00Z' },
+      ],
+      invariant_state: [{ key: 'last_drain_authorised_at', value: '2024-01-03T00:00:00.000Z' }],
+    });
+    const now = new Date('2024-01-02T12:00:00.000Z');
+    const r1 = await sweepInvariants({ db, now });
+    t('alerts stale approval', r1.alerted.includes('approval_stale'));
+    t('approval alert names subject', (slackPosts[0] || '').includes('Approve homepage launch'));
+    t('approval alert names wait', (slackPosts[0] || '').includes('waiting 2d 12h'));
+
+    const r2 = await sweepInvariants({ db, now: new Date(now.getTime() + 60 * 60 * 1000) });
+    t('unchanged approval suppressed', !r2.alerted.includes('approval_stale') && slackPosts.length === 1);
+
+    db.tables.tasks.push({ id: 'approval-2', type: 'pending_approval', status: 'pending', input: { subject: 'Approve pricing page' }, title: '[APPROVAL] fallback', created_at: '2023-12-31T00:00:00Z' });
+    const r3 = await sweepInvariants({ db, now: new Date(now.getTime() + 2 * 60 * 60 * 1000) });
+    t('new approval re-alerts', r3.alerted.includes('approval_stale'));
+    t('new approval appears in alert', (slackPosts[1] || '').includes('Approve pricing page'));
+
+    db.tables.tasks = [];
+    await sweepInvariants({ db, now: new Date(now.getTime() + 3 * 60 * 60 * 1000) });
+    db.tables.tasks.push({ id: 'approval-1', type: 'pending_approval', status: 'pending', input: { subject: 'Approve homepage launch' }, title: '[APPROVAL] fallback', created_at: '2023-12-31T00:00:00Z' });
+    const r4 = await sweepInvariants({ db, now: new Date(now.getTime() + 4 * 60 * 60 * 1000) });
+    t('resolved approval can alert again', r4.alerted.includes('approval_stale'));
   }
 
   console.log('— drain_stale alerts when never recorded —');
