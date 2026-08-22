@@ -35,10 +35,17 @@ services:
       - key: AI_MAX_TOKENS
         value: "65536"
 
+      # Gemini is now IN the fallback chain (position 4, after cerebras). It was
+      # previously unreachable — absent from the chain, and AI_PROVIDER=gemini
+      # was rewritten back to deepseek. Set GEMINI_API_KEY to activate it; with
+      # no key the chain simply skips it.
+      # gemini-2.5-flash still resolves but is a generation behind; 3.5-flash is
+      # current and stable. gemini-3.7-flash is the strongest if throughput
+      # matters less than quality.
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-2.5-flash
+        value: gemini-3.5-flash
 
       - key: CLAUDE_API_KEY
         sync: false
@@ -52,8 +59,16 @@ services:
 
       - key: GROQ_API_KEY
         sync: false
+      # llama-3.3-70b-versatile was decommissioned for free/developer tier on
+      # 16 Aug 2026 and now returns 404 model_not_found — it surfaced as "Blog
+      # publish failed after approval". Groq names openai/gpt-oss-120b and
+      # qwen/qwen3.6-27b as replacements; the larger is used because this
+      # provider does research synthesis under JSON mode.
+      # A pinned model name is a dependency on someone else's retirement
+      # schedule. When this one goes, the 404 will name it and the fix is here
+      # plus the fallback in backend/aiProviders.js.
       - key: GROQ_MODEL
-        value: llama-3.3-70b-versatile
+        value: openai/gpt-oss-120b
 
       - key: CEREBRAS_API_KEY
         sync: false
@@ -100,7 +115,8 @@ services:
         sync: false
 
       # ── DigiFusion CMS integration ────────────────
-      # The public hostname, deliberately. It resolves Cloudflare → Vercel.
+      # The public hostname. Its DNS record is DNS-ONLY (grey cloud) and
+      # resolves straight to Vercel — see the second trap below.
       #
       # Two traps live here, both cost a morning to find:
       #
@@ -110,14 +126,18 @@ services:
       #   Renaming either to match the other breaks it — requireCmsToken finds
       #   nothing and every call returns 503 CMS_NOT_CONFIGURED.
       #
-      #   CLOUDFLARE BOT FIGHT MODE CHALLENGES THIS CALLER. Server-to-server
-      #   requests arrive from a datacenter ASN with user agent "node" and no
-      #   JavaScript, so Cloudflare served a "Just a moment..." interstitial and
-      #   the fetch saw 403 — with nothing in Security Events, because free-plan
-      #   Bot Fight Mode does not log there. Fixed by allowing this service's
-      #   outbound IPs in Cloudflare → Security → WAF → Tools → IP Access Rules.
-      #   IF THIS SERVICE'S OUTBOUND IPs EVER CHANGE, that allowlist must change
-      #   with them or the CMS goes dark again. Render → Connect → Outbound IPs.
+      #   CLOUDFLARE BOT FIGHT MODE CHALLENGED THIS CALLER. While the record was
+      #   proxied, server-to-server requests — datacenter ASN, user agent "node",
+      #   no JavaScript — were served a "Just a moment..." interstitial and the
+      #   fetch saw 403, with nothing in Security Events, because free-plan Bot
+      #   Fight Mode does not log there.
+      #   FIXED BY GREY-CLOUDING THIS RECORD. Do not re-enable the proxy on it:
+      #   Bot Fight Mode ignores IP Access Rules and cannot be skipped by WAF
+      #   rules on the free plan, so allowlisting the outbound IPs does NOT work
+      #   — that was tried and failed. Vercel supplies CDN, TLS and DDoS at its
+      #   own edge, so nothing is lost.
+      #   webhooks.digitafusion.com MUST stay proxied (orange) — it is a Worker
+      #   custom domain and will not resolve otherwise.
       - key: DIGIFUSION_API_URL
         value: https://www.digitafusion.com
       - key: DIGIFUSION_CMS_TOKEN

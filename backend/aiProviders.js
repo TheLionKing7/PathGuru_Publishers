@@ -3,14 +3,22 @@
  * Book/KDP pipeline lives in TheScribe (aiPipeline.js).
  */
 
-/** Firm default: DeepSeek primary, Groq fallback. Gemini is never auto-used. */
+/* Firm default: DeepSeek primary, then the fallback chain in order.
+   Gemini was previously excluded — it sat in the registry, fully implemented,
+   but was absent from the chain AND `AI_PROVIDER=gemini` was silently rewritten
+   back to deepseek, so it could not be selected by any means. That exclusion is
+   now lifted at the owner's instruction. No reason for the original decision was
+   recorded; if it was cost or quota, this is where to reverse it.
+
+   Chain order: the three OpenAI-compatible providers first, then Gemini (a
+   different API shape with native JSON via responseMimeType), then Claude and
+   Perplexity, which are the metered ones. A provider absent from the
+   environment is skipped, so the chain degrades rather than breaks. */
 const DEFAULT_PROVIDER_NAME = 'deepseek';
-const PROVIDER_FALLBACK_CHAIN = ['deepseek', 'groq', 'cerebras', 'claude', 'perplexity'];
+const PROVIDER_FALLBACK_CHAIN = ['deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity'];
 
 function _effectiveProviderName() {
-  const raw = (process.env.AI_PROVIDER || DEFAULT_PROVIDER_NAME).toLowerCase();
-  if (raw === 'gemini') return DEFAULT_PROVIDER_NAME;
-  return raw;
+  return (process.env.AI_PROVIDER || DEFAULT_PROVIDER_NAME).toLowerCase();
 }
 
 function _buildProviderRegistry() {
@@ -21,11 +29,18 @@ function _buildProviderRegistry() {
       baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
       model:   process.env.DEEPSEEK_MODEL || 'deepseek-chat',
     } : null,
+    /* Groq decommissioned llama-3.3-70b-versatile for free and developer-tier
+       accounts on 16 August 2026 — it returns 404 model_not_found, which
+       surfaced here as "Blog publish failed after approval". The model was
+       withdrawn under us; nothing in this codebase changed.
+       A hard-coded model name is a dependency on someone else's roadmap. When
+       this one is retired in turn, the symptom will again be a 404 naming the
+       model, and the fix is again here plus GROQ_MODEL in render.yaml. */
     groq: process.env.GROQ_API_KEY ? {
       name:    'groq',
       apiKey:  process.env.GROQ_API_KEY,
       baseUrl: 'https://api.groq.com/openai/v1',
-      model:   process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      model:   process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
     } : null,
     cerebras: process.env.CEREBRAS_API_KEY ? {
       name:    'cerebras',
@@ -44,10 +59,13 @@ function _buildProviderRegistry() {
       baseUrl: 'https://api.perplexity.ai',
       model:   process.env.PERPLEXITY_MODEL || 'sonar-pro',
     } : null,
+    /* gemini-2.5-flash still resolves, but it is a generation behind and its
+       line has been under deprecation discussion. Defaulting to a current
+       stable model instead — same lesson as the Groq entry above. */
     gemini: process.env.GEMINI_API_KEY ? {
       name:   'gemini',
       apiKey: process.env.GEMINI_API_KEY,
-      model:  process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model:  process.env.GEMINI_MODEL || 'gemini-3.5-flash',
     } : null,
   };
 }
@@ -198,4 +216,72 @@ async function callOpenAiCompatible(provider, prompt, systemHint, json = true) {
   const text = payload.choices?.[0]?.message?.content?.trim();
   if (!text) throw new Error(`${provider.name} returned an empty response.`);
   return text;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PROVIDER HEALTH CHECK
+
+   Every AI failure this estate has had was a provider problem wearing a
+   different costume: Groq retiring a model under us surfaced as "Blog publish
+   failed after approval"; a dead Tavily key surfaced as six weeks of two-word
+   research briefs. In both cases the key or the model was wrong for days and
+   nothing said so, because the fallback chain quietly moved on and the symptom
+   appeared somewhere else entirely.
+
+   This sends one trivial prompt to each CONFIGURED provider and reports what
+   came back. It never throws — a provider that fails is a result, not an error.
+   Providers with no key are reported as 'absent', which is a normal state, not
+   a fault.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const HEALTH_PROMPT = 'Reply with the single word: ok';
+
+export async function checkProviders() {
+  const registry = _buildProviderRegistry();
+  const names = ['deepseek', 'groq', 'cerebras', 'gemini', 'claude', 'perplexity'];
+  const results = [];
+
+  for (const name of names) {
+    const provider = registry[name];
+    if (!provider) { results.push({ name, status: 'absent', model: null, detail: 'no API key set' }); continue; }
+
+    const started = Date.now();
+    try {
+      /* fallback:false is essential — with the chain enabled a broken provider
+         would be silently answered by a working one and reported healthy. */
+      const text = await callAiProvider(provider, HEALTH_PROMPT, 'You are a health check.', { json: false, fallback: false });
+      results.push({
+        name, status: 'ok', model: provider.model,
+        ms: Date.now() - started,
+        detail: String(text || '').slice(0, 40),
+      });
+    } catch (e) {
+      results.push({
+        name, status: 'failed', model: provider.model,
+        ms: Date.now() - started,
+        detail: String(e.message || e).slice(0, 200),
+      });
+    }
+  }
+
+  const ok      = results.filter(r => r.status === 'ok').map(r => r.name);
+  const failed  = results.filter(r => r.status === 'failed');
+  const absent  = results.filter(r => r.status === 'absent').map(r => r.name);
+  return { results, ok, failed, absent, healthy: ok.length > 0 };
+}
+
+/** One line per provider, for the boot log. Never throws. */
+export async function logProviderHealth() {
+  try {
+    const { results, ok } = await checkProviders();
+    for (const r of results) {
+      if (r.status === 'ok')      console.log(`[AI] ${r.name.padEnd(10)} OK      ${r.model} (${r.ms}ms)`);
+      else if (r.status === 'absent') console.log(`[AI] ${r.name.padEnd(10)} absent  no API key set`);
+      else                        console.error(`[AI] ${r.name.padEnd(10)} FAILED  ${r.model} — ${r.detail}`);
+    }
+    if (!ok.length) console.error('[AI] NO WORKING PROVIDER — every configured provider failed. Agents cannot generate.');
+    else console.log(`[AI] working providers: ${ok.join(', ')}`);
+  } catch (e) {
+    console.error(`[AI] provider health check errored: ${e.message}`);
+  }
 }

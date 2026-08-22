@@ -3264,6 +3264,24 @@ const server = createServer(async (req, res) => {
   }
 
   // GET /api/cron/morning-digest — 07:00 WAT ops digest → SLACK_OPS_CHANNEL
+  /* GET /api/cron/provider-health — which AI keys actually work, right now.
+     Every AI fault this estate has had was a provider problem in disguise: a
+     retired Groq model surfaced as "blog publish failed", a dead Tavily key as
+     six weeks of two-word briefs. The fallback chain hides the cause by design,
+     so there has to be one place that asks each provider directly. Same boot
+     check runs at startup; this route re-runs it without a redeploy. */
+  if (req.method === 'GET' && path === '/api/cron/provider-health') {
+    if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
+    try {
+      const { checkProviders } = await import('./aiProviders.js');
+      json(res, await checkProviders());
+    } catch (e) {
+      console.error('[AI] provider-health failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && path === '/api/cron/morning-digest') {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
     try {
@@ -4387,6 +4405,16 @@ researcher._healthCheckTavily()
     else console.error(`[Researcher] Tavily health check at boot FAILED: ${health.reason}`);
   })
   .catch((e) => console.error(`[Researcher] Tavily health check at boot errored: ${e.message}`));
+
+// ── Startup: ping every configured AI provider, for the same reason. The
+// fallback chain is designed to hide a broken provider, so without this the
+// first symptom of a dead key is a downstream failure that names something
+// else entirely. One line per provider; absent keys are reported, not treated
+// as faults. Never throws — a health check that can crash the server is worse
+// than no health check ────────────────────────────────────────────────────────
+import('./aiProviders.js')
+  .then(({ logProviderHealth }) => logProviderHealth())
+  .catch((e) => console.error(`[AI] provider health check could not run: ${e.message}`));
 
 server.listen(PORT, () => {
   console.log(`
