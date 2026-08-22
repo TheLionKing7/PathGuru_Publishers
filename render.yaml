@@ -2,6 +2,13 @@ services:
   - type: web
     name: pathguru-publishers-api
     runtime: node
+    # A free web service spins down after 15 minutes idle and takes ~1 minute to
+    # wake. The Cloudflare Worker's */5 cron keeps it warm — but that consumes
+    # roughly 730 of the 750 free instance-hours granted per WORKSPACE per
+    # calendar month. One always-warm free service fits; two do not, and the
+    # second one takes every free service in the workspace down with it around
+    # mid-month. If a second free service is ever added here, move this one to a
+    # paid plan first.
     plan: free
     # pandoc: system binary for DOCX/PDF generation from markdown (consulting docs)
     buildCommand: apt-get install -y pandoc && npm install && npx playwright install --with-deps chromium
@@ -93,6 +100,24 @@ services:
         sync: false
 
       # ── DigiFusion CMS integration ────────────────
+      # The public hostname, deliberately. It resolves Cloudflare → Vercel.
+      #
+      # Two traps live here, both cost a morning to find:
+      #
+      #   THE NAMES DIFFER ON PURPOSE. This service sends DIGIFUSION_CMS_TOKEN;
+      #   the CMS reads PATHGURU_CMS_TOKEN (digifusion/lib/cms/auth.ts). Each is
+      #   named for the other party. The VALUES must match, the KEYS must not.
+      #   Renaming either to match the other breaks it — requireCmsToken finds
+      #   nothing and every call returns 503 CMS_NOT_CONFIGURED.
+      #
+      #   CLOUDFLARE BOT FIGHT MODE CHALLENGES THIS CALLER. Server-to-server
+      #   requests arrive from a datacenter ASN with user agent "node" and no
+      #   JavaScript, so Cloudflare served a "Just a moment..." interstitial and
+      #   the fetch saw 403 — with nothing in Security Events, because free-plan
+      #   Bot Fight Mode does not log there. Fixed by allowing this service's
+      #   outbound IPs in Cloudflare → Security → WAF → Tools → IP Access Rules.
+      #   IF THIS SERVICE'S OUTBOUND IPs EVER CHANGE, that allowlist must change
+      #   with them or the CMS goes dark again. Render → Connect → Outbound IPs.
       - key: DIGIFUSION_API_URL
         value: https://www.digitafusion.com
       - key: DIGIFUSION_CMS_TOKEN
@@ -107,9 +132,18 @@ services:
         sync: false
 
       # ── Notifications ─────────────────────────────
-      # Slack is the primary approval + conversation surface. All four are
-      # required; a missing var is logged at boot ([Slack] DISABLED) and the
-      # health endpoint reports slackConfigured:false. Set in the dashboard.
+      # Slack is the primary approval + conversation surface. A missing var is
+      # logged at boot ([Slack] DISABLED) and the health endpoint reports
+      # slackConfigured:false — it never fails silently, because weeks of
+      # approvals once went nowhere while postSlackApproval returned {skipped}.
+      #
+      # Slack REACHES us through the Cloudflare Worker, not here: Slack demands
+      # a 3-second ack and a cold instance on the free plan takes about a
+      # minute. The Worker verifies the v0 signature, answers url_verification
+      # and slash commands synchronously, and queues the rest. SLACK_SIGNING_
+      # SECRET is therefore set in BOTH places — the Worker verifies inbound,
+      # this service verifies the legacy /api/webhooks/slack route kept for
+      # local testing.
       - key: SLACK_BOT_TOKEN
         sync: false
       - key: SLACK_SIGNING_SECRET
@@ -117,6 +151,11 @@ services:
       - key: SLACK_APPROVAL_CHANNEL
         sync: false
       - key: SLACK_OPS_CHANNEL
+        sync: false
+      # The workspace member id permitted to run /pause and /resume. Slack has
+      # no per-command permission setting, so this guard lives in code and is
+      # the only thing between "halt the estate" and anyone in the workspace.
+      - key: SLACK_OWNER_USER_ID
         sync: false
       - key: ONESIGNAL_APP_ID
         sync: false
@@ -136,10 +175,22 @@ services:
         sync: false
       - key: META_PHONE_NUMBER_ID
         sync: false
+      # Shared with the Cloudflare Worker, which signs its wake calls to
+      # /api/queue/drain with it. The two values must be identical or the drain
+      # 401s every five minutes and the queue fills silently.
       - key: INBOUND_WEBHOOK_SECRET
         sync: false
+      # Make → this service, for the outbound-draft routes.
       - key: MAKE_OUTBOUND_TOKEN
         sync: false
+
+      # ── NOT declared here, deliberately ───────────
+      # These live on the Cloudflare Worker (wrangler secret put), not on this
+      # service. Listed so nobody hunts for them in this file:
+      #   MAKE_WEBHOOK_TOKEN   — Make → Worker bearer, both webhook routes
+      #   SLACK_SIGNING_SECRET — also on the Worker; see the note above
+      #   CRON_SECRET          — also on the Worker, for the digest/purge crons
+      #   SUPABASE_URL + anon key — the Worker inserts to webhook_queue only
 
       # ── Vektor ───────────────────────────────────
       - key: VEKTOR_ADMIN_KEY

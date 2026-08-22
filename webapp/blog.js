@@ -12,6 +12,25 @@
     return window.PathGuruBackend?.getBackendUrl?.() || window.location.origin.replace(/\/$/, '');
   }
 
+  /* Was referenced at the dashboard-search listener and never defined anywhere
+     in this codebase — not here, not in js/core, not on window. It threw a
+     ReferenceError inside init()'s forEach, which aborted the whole loop: the
+     search box never got its listener, and neither did anything registered
+     after that line. A page whose init throws halfway is a page where half the
+     controls silently do nothing, which is why the Blog Room felt inert rather
+     than broken.
+
+     Trailing-edge: the timer restarts on every keystroke and the call fires
+     once the typing stops, so a search box issues one request instead of one
+     per character. */
+  function debounce(fn, wait = 300) {
+    let timer;
+    return function debounced(...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), wait);
+    };
+  }
+
   function blogToast(msg, type = 'info') {
     let c = document.querySelector('.toast-container');
     if (!c) { c = document.createElement('div'); c.className = 'toast-container'; document.body.appendChild(c); }

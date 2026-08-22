@@ -14,6 +14,15 @@
 const BASE  = (process.env.DIGIFUSION_API_URL  || '').replace(/\/$/, '');
 const TOKEN = process.env.DIGIFUSION_CMS_TOKEN || '';
 
+/* Node's fetch sends `node` as its user agent, which is how this caller
+   appeared in Cloudflare's bot log the day Bot Fight Mode began serving it a
+   "Just a moment..." challenge and the backend reported an unexplained 403.
+   Naming ourselves does not defeat bot protection and is not meant to — the
+   fix for that was an IP allow rule. It means this traffic is identifiable in
+   every log it passes through, instead of being one of a million anonymous
+   `node` clients. */
+const USER_AGENT = 'PathGuru/1.0 (+https://pathguru-publishers.onrender.com)';
+
 /* ── Core request helper ─────────────────────────────────── */
 async function cmsRequest (method, path, body, retries = 2) {
   if (!BASE)  throw new Error('DIGIFUSION_API_URL is not configured in .env');
@@ -25,6 +34,7 @@ async function cmsRequest (method, path, body, retries = 2) {
     headers: {
       'Content-Type':  'application/json',
       'Authorization': `Bearer ${TOKEN}`,
+      'User-Agent':    USER_AGENT,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   };
