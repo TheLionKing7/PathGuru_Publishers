@@ -174,23 +174,44 @@ async function handleOutboundSent(row, payload) {
  * by kind, and record done/failed. Returns a per-kind count summary.
  */
 export async function drainWebhookQueue({ db = getSupabase() } = {}) {
-  // Global pause — stop dispatching handlers, but never stop the queue itself
-  // from accepting rows. Rows already pending stay pending and are processed
-  // after resume; nothing is lost.
-  if (await isPaused({ db })) {
-    console.log('[Paused] webhook queue dispatch suppressed');
-    return {
-      paused:       true,
-      reaped:       0,
-      reapedFailed: 0,
-      drained:      0,
-      succeeded:    0,
-      failed:       0,
-      byKind:       { slack: 0, whatsapp: 0, whatsapp_status: 0, inbound_email: 0, outbound_sent: 0 },
-    };
-  }
-
+  /* THE PAUSE IS NOT APPLIED HERE, AND THAT IS DELIBERATE.
+   *
+   * This function used to return early when the estate was paused. The comment
+   * said "nothing is lost", and strictly that was true — rows stayed pending.
+   * What was lost was the KNOWING. A live prospect replied while the estate was
+   * paused, his mail sat in this queue as an untouched row, and because
+   * invariantAlerts suppresses queue_pending while paused, nothing said so. The
+   * estate looked calm because it had stopped listening.
+   *
+   * 0032_system_flags.sql states the intent plainly: paused means the system
+   * "still generates, drafts and queues, but never sends, posts or publishes."
+   * That is an OUTBOUND gate. This is the INBOUND path, and every kind it
+   * dispatches is capture or bookkeeping — not one of them reaches a prospect:
+   *
+   *   inbound_email    nexus.processInboundEmail — "the draft is written onto
+   *                    the inbound_message row; Nexus never sends it"
+   *   outbound_sent    Make's send confirmation. This one is worse than
+   *                    useless to block: it stamps sent_at, which is the
+   *                    at-most-once guarantee. Hold it and a send made just
+   *                    before the pause stays eligible for resending — the
+   *                    exact shape of the five duplicate emails.
+   *   whatsapp         persists an inbound message; the TwiML reply happens at
+   *                    the webhook layer, never in this replay
+   *   whatsapp_status  delivery receipts, pure bookkeeping
+   *   slack            the operator's own workspace — answering the person who
+   *                    paused it is not "acting on the world"
+   *
+   * The pause still holds where it belongs and is unchanged: listApprovedDrafts()
+   * hands out nothing, and the publish path refuses. If a future kind DOES reach
+   * the outside world, gate that kind's send function — not this loop. Gating
+   * the drain gates the eyes, not the hands.
+   */
   if (!db) throw new Error('Supabase not configured');
+
+  const paused = await isPaused({ db });
+  if (paused) {
+    console.log('[Paused] outbound sends remain suppressed; inbound capture continues');
+  }
 
   const reaped = await reapStaleWebhooks({ db });
 
@@ -202,6 +223,9 @@ export async function drainWebhookQueue({ db = getSupabase() } = {}) {
 
   const rows = pending || [];
   const summary = {
+    // Reported, not acted on — callers and the health endpoint still want to
+    // know the estate is paused, they just no longer infer "nothing happened".
+    paused,
     reaped:       reaped.requeued,   // stale claimed rows returned to pending
     reapedFailed: reaped.failed,     // stale claimed rows parked as failed (attempts >= MAX_ATTEMPTS)
     drained: 0,

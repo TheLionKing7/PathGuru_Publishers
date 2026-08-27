@@ -142,7 +142,7 @@ try {
     t('slack posted', slackPosts.length === 1);
   }
 
-  console.log('— paused suppresses expected backlog and drain state —');
+  console.log('— paused: notice still posts, but a backlog is no longer excused —');
   {
     slackPosts.length = 0;
     const db = makeDb({
@@ -155,15 +155,20 @@ try {
     _invalidateCache();
     const now = new Date('2024-01-01T01:00:00Z');
     const r1 = await sweepInvariants({ db, now });
-    t('paused backlog notice posted', slackPosts[0] === 'System paused — 2 rows held in queue');
-    t('pending invariant suppressed', !r1.alerted.includes('queue_pending'));
-    t('drain invariant suppressed', !r1.alerted.includes('drain_stale'));
+    t('paused notice posted, and says which half is stopped',
+      slackPosts[0] === 'System paused — outbound sends are held. Inbound is still being captured; 2 row(s) pending.');
 
-    const r2 = await sweepInvariants({ db, now: new Date(now.getTime() + 5 * 60 * 60 * 1000) });
-    t('paused notice remains within six-hour cooldown', slackPosts.length === 1 && !r2.alerted.includes('queue_pending'));
+    /* These two rows are an hour old and still pending. That used to be
+       "expected while paused" and was silenced. It is not expected any more:
+       the drain dispatches while paused, so a row sitting for an hour means
+       something is stuck, and the alert must fire. This is the assertion that
+       would have named the prospect reply nobody saw. */
+    t('pending invariant fires even while paused', r1.alerted.includes('queue_pending'));
+    t('drain invariant still suppressed while paused', !r1.alerted.includes('drain_stale'));
 
-    await sweepInvariants({ db, now: new Date(now.getTime() + 6 * 60 * 60 * 1000) });
-    t('paused notice repeats after six hours', slackPosts.length === 2);
+    await sweepInvariants({ db, now: new Date(now.getTime() + 5 * 60 * 60 * 1000) });
+    t('paused notice itself stays on its six-hour cooldown',
+      slackPosts.filter((p) => String(p).startsWith('System paused')).length === 1);
   }
 } finally {
   globalThis.fetch = origFetch;

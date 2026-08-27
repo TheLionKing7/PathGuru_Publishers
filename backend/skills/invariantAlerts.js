@@ -73,7 +73,13 @@ async function postPausedNotice(count) {
     console.warn('[Invariant] SLACK_OPS_CHANNEL unset — paused notice skipped');
     return;
   }
-  const res = await postSlackMessage({ channel, text: `System paused — ${count} rows held in queue` });
+  /* "held in queue" was the old wording and it was read, reasonably, as "the
+     estate is safely holding things for you." It was not — inbound was not
+     being looked at either. The wording now says which half is stopped. */
+  const res = await postSlackMessage({
+    channel,
+    text: `System paused — outbound sends are held. Inbound is still being captured; ${count} row(s) pending.`,
+  });
   await recordNotificationAttempt({ db: getSupabase(), channel: 'slack', target: channel, ok: res.ok, providerId: res.providerId, error: res.error });
   if (!res.ok) console.warn('[Invariant] paused notice post failed:', res.error);
 }
@@ -105,10 +111,18 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
   if (!db) return { alerted: [], error: 'no_db' };
   const nowMs = now.getTime();
 
-  // Pause is a normal operating state, not a fault. When paused the queue keeps
-  // accepting rows but the drain stops dispatching, so pending rows accumulate by
-  // design. Suppress the pending invariant and instead surface the backlog once
-  // per 6 hours — visible without crying wolf.
+  /* Pause is a normal operating state, not a fault — but it no longer explains
+     a backlog. The drain now dispatches while paused (see webhookQueue.js: the
+     pause is an outbound gate, and every kind the drain handles is capture or
+     bookkeeping), so pending rows piling up means something is genuinely stuck,
+     paused or not.
+     
+     This block used to suppress queue_pending on the reasoning that a backlog
+     was expected while paused. That reasoning is what let a live prospect's
+     reply sit unseen: the row was pending, the alert was suppressed, and the
+     six-hourly notice reported a number nobody reads as an emergency. The
+     periodic notice stays — knowing the estate is paused is worth a line — but
+     it no longer buys silence for the invariant. */
   const paused = await isPaused({ db });
   if (paused) {
     const { data } = await db.from('webhook_queue').select('id').eq('status', 'pending');
@@ -124,7 +138,9 @@ export async function sweepInvariants({ db = getSupabase(), now = new Date() } =
     {
       key: 'queue_pending',
       title: 'webhook rows stuck pending >10m',
-      suppressWhenPaused: true,
+      // Was suppressWhenPaused: true. A pending row is now abnormal in either
+      // state, and this is the alert that should have named Noah's reply.
+      suppressWhenPaused: false,
       async check() {
         const { data } = await db.from('webhook_queue')
           .select('id').eq('status', 'pending')

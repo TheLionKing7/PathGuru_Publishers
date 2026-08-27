@@ -95,10 +95,17 @@ function buildFactsMarkdown(approvalType, payload) {
  * in a quoted section, then Approve / Reject / Edit.
  */
 export async function postSlackApproval({ approvalId, subject, detail, approvalType, payload, channel: targetChannel, threadTs }) {
-  if (await isPaused()) {
-    console.log('[Paused] Slack post suppressed');
-    return { ok: false, error: 'paused' };
-  }
+  /* NOT gated on the pause, and the distinction is the whole point of the
+     switch. An approval card is the system ASKING THE HUMAN. It is the opposite
+     of autonomous action — suppressing it is how a paused estate goes quiet
+     about a live prospect while looking healthy. What the pause stops is the
+     send that would follow an approval, and that gate lives in
+     listApprovedDrafts(), untouched.
+     
+     The card says so on its face, so nobody approves expecting an immediate
+     send. Approving while paused is legitimate: it clears the decision, and the
+     send goes the moment the estate resumes. */
+  const paused = await isPaused();
 
   const channel = targetChannel || slackChannelFor('approval');
   if (!channel) {
@@ -110,6 +117,18 @@ export async function postSlackApproval({ approvalId, subject, detail, approvalT
   const blocks = [
     { type: 'section', text: { type: 'mrkdwn', text: `*${mrkdwn(kindLabel)} approval required*` } },
   ];
+
+  /* Say it on the card rather than in a runbook. Somebody approving at 6am
+     needs to know why nothing left the building. */
+  if (paused) {
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: ':double_vertical_bar: The estate is paused. Approve if it is right — nothing sends until you `/resume`.',
+      }],
+    });
+  }
 
   const facts = buildFactsMarkdown(approvalType, payload);
   if (facts) blocks.push({ type: 'section', text: { type: 'mrkdwn', text: facts } });

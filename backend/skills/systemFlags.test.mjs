@@ -101,14 +101,23 @@ t('listApprovedDrafts returns empty + paused', draftsRes.paused === true && Arra
 t('outbound send suppressed in log', draftsLogs.some((l) => l.includes('[Paused] outbound email send suppressed')));
 t('inbound_message never touched while paused', !db.calls.tables.includes('inbound_message'));
 
-console.log('— paused: inbound webhook still queued (drain dispatches nothing) —');
+console.log('— paused: inbound capture CONTINUES (the pause is an outbound gate) —');
+
+/* This block asserted the opposite until a prospect's reply sat unread in the
+   queue through a pause. The drain handles capture and bookkeeping only —
+   nothing it dispatches reaches the outside world — so pausing it bought no
+   safety and cost the estate its eyes. The gate that matters is the one
+   asserted above: listApprovedDrafts hands out nothing. */
 
 _invalidateCache();
 db = makeFlagDb(true);
 const { result: drainRes, logs: drainLogs } = await captureLogs(() => drainWebhookQueue({ db }));
-t('drain reports paused and drains nothing', drainRes.paused === true && drainRes.drained === 0 && drainRes.succeeded === 0);
-t('queue dispatch suppressed in log', drainLogs.some((l) => l.includes('[Paused] webhook queue dispatch suppressed')));
-t('webhook_queue never touched while paused', !db.calls.tables.includes('webhook_queue'));
+t('drain still reports paused', drainRes.paused === true);
+t('drain reads the queue while paused', db.calls.tables.includes('webhook_queue'));
+t('log says sends are suppressed, not capture',
+  drainLogs.some((l) => l.includes('[Paused] outbound sends remain suppressed')));
+t('no "dispatch suppressed" line — that behaviour is gone',
+  !drainLogs.some((l) => l.includes('webhook queue dispatch suppressed')));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
