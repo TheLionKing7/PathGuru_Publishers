@@ -4225,6 +4225,66 @@ Write the full article now.`;
        forced the client to hardcode /24, which mislabels every deep assessment.
   ── */
 
+  /* ── GET /api/frictioniq/gates — the three-question readiness gate ────────
+     A SEPARATE ROUTE because it is a separate register. readiness_gate holds a
+     three-answer instrument with its own verdicts; folding it into
+     /sessions would mean every band count above silently mixed two
+     instruments. See supabase/migrations/0022 in the digifusion repo.
+
+     The list worth reading is the declines. A decline names what the market is
+     missing, and the same test fails most of the time — which is a finding
+     about demand, not about any one prospect. */
+  if (req.method === 'GET' && path === '/api/frictioniq/gates') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+
+      const limit = Math.min(Number(url.searchParams.get('limit')) || 200, 500);
+      const verdict = url.searchParams.get('verdict');   // ready | qualified | not-yet
+
+      let q = db
+        .from('readiness_gate')
+        .select('token,created_at,verdict,total,blocked,soft,sector,headcount_band,revenue_band,role,booked_at,ip_country')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (verdict) q = q.eq('verdict', verdict);
+
+      const { data: rows, error: dbErr } = await q;
+      if (dbErr) { err(res, dbErr.message, 500); return; }
+
+      const list = rows || [];
+      const byVerdict = { ready: 0, qualified: 0, 'not-yet': 0 };
+      /* Which of the three fails most often. Counted across every declined row,
+         because the first column of a decline is almost always the same one and
+         naming it is the only way that becomes actionable. */
+      const byBlocked = {};
+      let booked = 0;
+
+      for (const r of list) {
+        if (byVerdict[r.verdict] !== undefined) byVerdict[r.verdict] += 1;
+        if (r.booked_at) booked += 1;
+        for (const b of r.blocked || []) byBlocked[b] = (byBlocked[b] || 0) + 1;
+      }
+
+      const passed = byVerdict.ready + byVerdict.qualified;
+
+      json(res, {
+        total: list.length,
+        byVerdict,
+        byBlocked,
+        booked,
+        /* Null rather than 0 when nothing has passed yet. A conversion rate
+           with no denominator is not zero percent, it is unknown, and printing
+           0% would be a claim the data cannot support. */
+        bookedRateOfPassed: passed ? Math.round((booked / passed) * 100) : null,
+        gates: list,
+      });
+    } catch (e) {
+      console.error('[FrictionIQ] gates failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── GET /api/frictioniq/sessions ──────────────────────────────────────────
   if (req.method === 'GET' && path === '/api/frictioniq/sessions') {
     try {

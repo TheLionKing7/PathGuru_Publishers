@@ -514,6 +514,95 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  /* ── The readiness gate ────────────────────────────────────────────────
+     Its own register, its own fetch, its own failure. If the gate endpoint is
+     unavailable — an older backend, or the table not yet migrated — the panel
+     stays hidden and the twelve-question register below is untouched. A new
+     instrument must not be able to take the old one off the air. */
+
+  const GATE_TESTS = {
+    cadence:   'A process that repeats',
+    measure:   'A number that would move',
+    authority: 'Someone who can decide',
+  };
+
+  async function loadGates() {
+    const row = $('fiqGateRow');
+    if (!row) return;
+    try {
+      const d = await api().apiFetch('/api/frictioniq/gates?limit=200', { timeoutMs: 15000 });
+      const gates = Array.isArray(d?.gates) ? d.gates : [];
+      if (!gates.length) { row.hidden = true; return; }
+      row.hidden = false;
+
+      const v = d.byVerdict || {};
+      const passed = (v.ready || 0) + (v.qualified || 0);
+
+      const note = $('fiqGateNote');
+      if (note) {
+        note.textContent = d.bookedRateOfPassed === null
+          ? `${d.total} taken · nobody has passed yet`
+          : `${d.booked} of ${passed} who passed went on to book — ${d.bookedRateOfPassed}%`;
+      }
+
+      const tile = (n, label, tone) =>
+        `<div style="flex:1 1 120px"><div class="cx-tile-value" style="${tone ? `color:${tone}` : ''}">${n}</div>
+         <div class="cx-tile-label">${esc(label)}</div></div>`;
+
+      /* Which test declines most often, named. The count is the point: "eleven
+         of fourteen declines were the number nobody tracks" is a sentence you
+         can act on; "some declines" is not. */
+      const blocked = Object.entries(d.byBlocked || {}).sort((a, b) => b[1] - a[1]);
+
+      const summary = $('fiqGateSummary');
+      if (summary) {
+        summary.innerHTML =
+          `<div style="display:flex;flex-wrap:wrap;gap:16px">
+             ${tile(d.total, 'taken')}
+             ${tile(v.ready || 0, 'ready')}
+             ${tile(v.qualified || 0, 'worth a conversation')}
+             ${tile(v['not-yet'] || 0, 'declined')}
+             ${tile(d.booked, 'booked after passing')}
+           </div>` +
+          (blocked.length
+            ? `<p style="margin:12px 0 0;font-size:12.5px;line-height:1.6;color:var(--text-secondary)">
+                 What blocks them: ${blocked.map(([k, n]) =>
+                   `<span style="color:var(--text-primary)">${esc(GATE_TESTS[k] || k)}</span> ${n}`).join(' · ')}.
+                 The most common one is the offer to build next.
+               </p>`
+            : '');
+      }
+
+      const body = $('fiqGateRows');
+      if (body) {
+        body.innerHTML =
+          `<table class="cx-table"><thead><tr>
+             <th>When</th><th>Verdict</th><th>Score</th><th>Blocked</th>
+             <th>Sector</th><th>Size</th><th>Booked</th>
+           </tr></thead><tbody>` +
+          gates.slice(0, 25).map((g) => `
+            <tr>
+              <td>${esc(new Date(g.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }))}</td>
+              <td>${esc(g.verdict)}</td>
+              <td>${g.total}/6</td>
+              <td>${(g.blocked || []).map((b) => esc(GATE_TESTS[b] || b)).join(', ') || '—'}</td>
+              <td>${esc(g.sector || '—')}</td>
+              <td>${esc(g.headcount_band || '—')}</td>
+              <td>${g.booked_at ? '✓' : '—'}</td>
+            </tr>`).join('') +
+          `</tbody></table>` +
+          (gates.length > 25
+            ? `<p style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Showing the 25 most recent of ${gates.length}.</p>`
+            : '');
+      }
+    } catch (e) {
+      /* Silent by design. The gate is an addition; the register below is the
+         job, and a missing addition must not look like a broken console. */
+      console.warn('[FrictionIQ] gate register unavailable:', e.message);
+      row.hidden = true;
+    }
+  }
+
   /* ── Data ──────────────────────────────────────────────────────────── */
   async function refresh() {
     const status = $('fiqStatus');
@@ -549,6 +638,10 @@
       }
       populateSectors();
       render();
+      /* Fired after the register has rendered, and never awaited — the gate is
+         a second instrument, and waiting on it would make the page people
+         actually use load at the speed of the one they might not. */
+      void loadGates();
     } catch (e) {
       if (status) status.textContent = `error: ${e.message}`;
       const body = $('fiqTableBody');
