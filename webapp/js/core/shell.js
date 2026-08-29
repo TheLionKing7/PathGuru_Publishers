@@ -30,6 +30,7 @@
       sections: {
         'agents-ip':      'Blueprint Library',
         'agents-content': 'Content Schedule',
+        'agents-prompts': 'Prompt Library',
       },
     },
     products: {
@@ -87,7 +88,7 @@
   DEPARTMENTS.storefront = DEPARTMENTS.products;
 
   const INTELLIGENCE_TABS = new Set([
-    'agents-ip', 'agents-content',
+    'agents-ip', 'agents-content', 'agents-prompts',
   ]);
 
   const BLOGROOM_TABS = new Set(['blog', 'writer', 'schedule', 'blog-assets']);

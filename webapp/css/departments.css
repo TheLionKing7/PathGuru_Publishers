@@ -312,6 +312,14 @@ body.pg-shell-v3 .module-topnav .module-tab {
 @media (max-width: 960px) {
   body.pg-shell-v3 .module-shell.active {
     grid-template-columns: 1fr;
+    /* THIS LINE IS LOAD-BEARING. The rule above stacks the areas into THREE
+       rows, but grid-template-rows was still the two-row `auto minmax(0,1fr)`
+       from the wide layout. The 1fr took everything the header left, and
+       `body` fell into an implicit third row with nothing remaining — so
+       below 960px every module's content area was 0px tall and the console
+       looked empty. Found by rendering the Prompt Library at 900px and
+       discovering the Blueprint Library and Nexus Command were blank too. */
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
       "head"
       "tabs"

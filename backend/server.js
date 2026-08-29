@@ -3282,6 +3282,69 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  /* ── Operator prompt library ───────────────────────────────────────────
+     Read-only, and behind the operator gate like every other /api/* route.
+
+     OPERATOR-FACING ONLY. Nothing served here is resolved into any agent's
+     live prompt — Nexus, Aria, Atlas and the rest keep the prompts they were
+     designed with, in their own files. This is the library the human reaches
+     for while doing consulting work, and keeping the two lanes separate is
+     what lets it be edited freely without an approval on every change. */
+  if (req.method === 'GET' && path === '/api/prompts') {
+    try {
+      const { searchPrompts, categoryCounts, INDUSTRIES, CLAUSES, CLAUSE_PRESETS, variablesIn } =
+        await import('./prompts/index.js');
+      const q = params.get('q') || '';
+      const category = params.get('category') || null;
+      const list = searchPrompts(q, category);
+      json(res, {
+        total: list.length,
+        categories: categoryCounts(),
+        industries: INDUSTRIES.map(({ id, name }) => ({ id, name })),
+        clauses: CLAUSES.map(({ id, name, guards }) => ({ id, name, guards })),
+        presets: CLAUSE_PRESETS,
+        prompts: list.map((p) => ({ ...p, variables: variablesIn(p.body) })),
+      });
+    } catch (e) {
+      console.error('[Prompts] list failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  /* Full text of one industry block or clause, for copying on its own. */
+  if (req.method === 'GET' && path === '/api/prompts/blocks') {
+    try {
+      const { INDUSTRIES, CLAUSES } = await import('./prompts/index.js');
+      json(res, { industries: INDUSTRIES, clauses: CLAUSES });
+    } catch (e) {
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  /* POST /api/prompts/compose — the assembled text.
+     Composition happens on the server so the console, a future Slack command
+     and anything else all get byte-identical output from identical input. Two
+     places doing their own assembly is two places to drift. */
+  if (req.method === 'POST' && path === '/api/prompts/compose') {
+    try {
+      const body = await readBody(req);
+      const { PROMPT_BY_ID, compose } = await import('./prompts/index.js');
+      const prompt = PROMPT_BY_ID[body.promptId];
+      if (!prompt) { err(res, `unknown prompt "${body.promptId}"`, 404); return; }
+      const out = compose(prompt, {
+        vars: body.vars || {},
+        industry: body.industry || null,
+        clauses: body.clauses || [],
+      });
+      json(res, out);
+    } catch (e) {
+      err(res, e.message, 400);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && path === '/api/cron/morning-digest') {
     if (!verifyCronAuth(req, url)) { cronAuthFail(res, err); return; }
     try {
@@ -4415,6 +4478,13 @@ researcher._healthCheckTavily()
 import('./aiProviders.js')
   .then(({ logProviderHealth }) => logProviderHealth())
   .catch((e) => console.error(`[AI] provider health check could not run: ${e.message}`));
+
+/* Prompt library integrity, at boot. A duplicate id means one prompt silently
+   shadows another and nobody finds out which — cheap to check here, expensive
+   to discover from a prompt that mysteriously will not open. */
+import('./prompts/index.js')
+  .then(({ logLibraryHealth }) => logLibraryHealth())
+  .catch((e) => console.error(`[Prompts] library check could not run: ${e.message}`));
 
 server.listen(PORT, () => {
   console.log(`

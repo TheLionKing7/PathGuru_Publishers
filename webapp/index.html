@@ -20,6 +20,11 @@
        operator-console.css so its grid, panel and band rules win. -->
   <link rel="stylesheet" href="css/console.css">
 
+  <!-- The operator prompt library room. Last, so its tokens win over
+       console.css — it borrows the same variables, it just needs to be able
+       to set its own grid without fighting a more general rule. -->
+  <link rel="stylesheet" href="css/prompt-library.css">
+
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
        To receive push on this admin panel too, create a separate OneSignal app
@@ -137,6 +142,7 @@
     <nav class="dept-route-nav" id="deptRouteNav" role="tablist" aria-label="Intelligence sections" hidden>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="agents-prompts" role="tab" aria-selected="false">Prompt Library</button>
     </nav>
 
     <!-- ══════════════════════════════════════════════
@@ -1406,6 +1412,16 @@
             <h1 class="panel-title">Content Schedule</h1>
           </div>
         </header>
+        <header class="panel-header" data-for="agents-prompts">
+          <div>
+            <p class="panel-eyebrow">Intelligence Library</p>
+            <h1 class="panel-title">Prompt Library</h1>
+          </div>
+          <div class="header-actions">
+            <span class="pl-count" id="plCount"></span>
+            <button class="btn-secondary btn-sm" id="plBlocksBtn">Blocks &amp; clauses</button>
+          </div>
+        </header>
         <header class="panel-header" data-for="agents-console">
           <div>
             <p class="panel-eyebrow">Agent Network</p>
@@ -2062,6 +2078,41 @@
           </div><!-- /.agents-content-body -->
         </section><!-- /#tab-agents-content -->
 
+        <!-- ── PROMPT LIBRARY ────────────────────────────────────────────
+             The operator's library. It lives under Intelligence rather than
+             Agent Network deliberately: nothing here is resolved into any
+             agent's live prompt, and putting it beside the roster would
+             suggest otherwise. See backend/prompts/library.js. -->
+        <section class="tab-panel" id="tab-agents-prompts" aria-label="Prompt Library">
+          <div class="prompt-room-body">
+
+            <div class="pl-notice">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;opacity:.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <span><strong>Operator library — separate from the agents.</strong>
+                Nothing here changes what Nexus, Aria or Atlas send; they keep the prompts they were
+                designed with. Compose a prompt, an industry block and the clauses the stakes justify,
+                then copy it wherever you are working.</span>
+            </div>
+
+            <div class="pl-toolbar">
+              <div class="pl-search-wrap">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="plSearch" class="pl-search" spellcheck="false"
+                       placeholder="Search titles, purposes and prompt bodies…" aria-label="Search prompts">
+                <span class="pl-kbd">/</span>
+              </div>
+            </div>
+
+            <div class="pl-chips" id="plChips" role="group" aria-label="Categories"></div>
+
+            <div class="pl-layout" id="plLayout">
+              <div class="pl-grid" id="plGrid"></div>
+              <aside class="pl-composer" id="plComposer" hidden aria-label="Prompt composer"></aside>
+            </div>
+
+          </div><!-- /.prompt-room-body -->
+        </section><!-- /#tab-agents-prompts -->
+
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->
 
@@ -2151,6 +2202,21 @@
        been moved to _to_delete/frictioniq.old.js; the register is now native
        here rather than an embed, so nothing loads the old file. -->
   <script src="js/frictioniq-console.js"></script>
+  <!-- Prompt Library room. Loads its data on first visit to the tab, not at
+       boot — nobody should pay for it on a session that never opens it. -->
+  <script src="js/prompt-library.js"></script>
+
+  <!-- Industry blocks & clauses, readable on their own. Lives outside the
+       module shells so it is not hidden with them. -->
+  <div class="pl-modal" id="plBlocksModal" hidden>
+    <div class="pl-modal-card" role="dialog" aria-modal="true" aria-label="Industry blocks and clauses">
+      <div class="pl-modal-head">
+        <h3>Blocks &amp; clauses</h3>
+        <button type="button" class="pl-close" id="plBlocksClose" aria-label="Close" style="margin-left:auto">&times;</button>
+      </div>
+      <div class="pl-modal-body" id="plBlocksBody"></div>
+    </div>
+  </div>
 
   <!-- Create Task Modal -->
   <div class="modal-overlay" id="newTaskOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;align-items:center;justify-content:center;">
