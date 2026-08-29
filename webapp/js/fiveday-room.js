@@ -108,12 +108,11 @@
   function registerHtml() {
     const rows = state.rows;
     return `
-      <div class="fd-intro">
-        <p><strong>Day 0 to Day 5.</strong> One recorded conversation, every candidate through three tests,
-        the friction priced in their currency, and one recommended build — not five.</p>
-        <p class="fd-intro-dim">Built so it can return nothing, which is the only reason to believe it when
-        it returns something.</p>
-      </div>
+      <!-- No pitch here. What stood in this space was copy written for a
+           prospect — "built so it can return nothing" and the rest — which
+           belongs on digitafusion, not in the console the work is done in. An
+           operator opening this room needs to know what is in flight, not to
+           be sold the method they are about to run. -->
 
       ${rows.length ? `
       <table class="cx-table fd-table">
