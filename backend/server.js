@@ -3299,8 +3299,8 @@ const server = createServer(async (req, res) => {
       const { searchPrompts, categoryCounts, INDUSTRIES, CLAUSES, CLAUSE_PRESETS, variablesIn } =
         await import('./prompts/index.js');
       const { registryIndex, usageSummary } = await import('./skills/promptRegistry.js');
-      const q = params.get('q') || '';
-      const category = params.get('category') || null;
+      const q = url.searchParams.get('q') || '';
+      const category = url.searchParams.get('category') || null;
       const list = searchPrompts(q, category);
 
       /* Registry state and usage are fetched alongside the list rather than
@@ -3378,7 +3378,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && path === '/api/prompts/usage') {
     try {
       const { usageSummary } = await import('./skills/promptRegistry.js');
-      const days = Math.min(365, Math.max(1, parseInt(params.get('days') || '30', 10) || 30));
+      const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
       json(res, await usageSummary({ days }));
     } catch (e) {
       err(res, e.message, 500);
