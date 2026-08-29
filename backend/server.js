@@ -3282,27 +3282,44 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  /* ── Operator prompt library ───────────────────────────────────────────
-     Read-only, and behind the operator gate like every other /api/* route.
+  /* ── Prompt library & registry ─────────────────────────────────────────
+     Behind the operator gate like every other /api/* route.
 
-     OPERATOR-FACING ONLY. Nothing served here is resolved into any agent's
+     OPERATOR-FACING TODAY. Nothing served here is resolved into any agent's
      live prompt — Nexus, Aria, Atlas and the rest keep the prompts they were
-     designed with, in their own files. This is the library the human reaches
-     for while doing consulting work, and keeping the two lanes separate is
-     what lets it be edited freely without an approval on every change. */
+     designed with, in their own files. The registry supports an `agent`
+     audience so that lane exists when a prompt is ready to move, and until one
+     is, this stays the library the human reaches for.
+
+     Every prompt resolves from backend/prompts unless an override has been
+     published; the registry stores only what the repo cannot. See
+     skills/promptRegistry.js. */
   if (req.method === 'GET' && path === '/api/prompts') {
     try {
       const { searchPrompts, categoryCounts, INDUSTRIES, CLAUSES, CLAUSE_PRESETS, variablesIn } =
         await import('./prompts/index.js');
+      const { registryIndex, usageSummary } = await import('./skills/promptRegistry.js');
       const q = params.get('q') || '';
       const category = params.get('category') || null;
       const list = searchPrompts(q, category);
+
+      /* Registry state and usage are fetched alongside the list rather than
+         per-card. Seventy-two cards asking one question each is seventy-two
+         round trips to answer something two queries already know. */
+      const [registry, usage] = await Promise.all([
+        registryIndex().catch(() => ({})),
+        usageSummary({ days: 60 }).catch(() => ({ byPrompt: {} })),
+      ]);
+
       json(res, {
         total: list.length,
         categories: categoryCounts(),
         industries: INDUSTRIES.map(({ id, name }) => ({ id, name })),
         clauses: CLAUSES.map(({ id, name, guards }) => ({ id, name, guards })),
         presets: CLAUSE_PRESETS,
+        registry,
+        usage: usage.byPrompt || {},
+        usageDays: usage.days || 60,
         prompts: list.map((p) => ({ ...p, variables: variablesIn(p.body) })),
       });
     } catch (e) {
@@ -3330,19 +3347,78 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST' && path === '/api/prompts/compose') {
     try {
       const body = await readBody(req);
-      const { PROMPT_BY_ID, compose } = await import('./prompts/index.js');
-      const prompt = PROMPT_BY_ID[body.promptId];
-      if (!prompt) { err(res, `unknown prompt "${body.promptId}"`, 404); return; }
-      const out = compose(prompt, {
+      const { resolvePrompt } = await import('./skills/promptRegistry.js');
+      const out = await resolvePrompt(body.promptId, {
         vars: body.vars || {},
         industry: body.industry || null,
         clauses: body.clauses || [],
       });
       json(res, out);
     } catch (e) {
-      err(res, e.message, 400);
+      err(res, e.message, /unknown prompt/.test(e.message) ? 404 : 400);
     }
     return;
+  }
+
+  /* POST /api/prompts/used — record that a prompt was copied.
+     Deliberately fire-and-forget from the caller's point of view: a telemetry
+     write must never be the reason a copy appears to have failed. */
+  if (req.method === 'POST' && path === '/api/prompts/used') {
+    try {
+      const body = await readBody(req);
+      const { recordUsage } = await import('./skills/promptRegistry.js');
+      json(res, await recordUsage(body));
+    } catch (e) {
+      json(res, { recorded: false, error: e.message });
+    }
+    return;
+  }
+
+  /* GET /api/prompts/usage?days=30 — counts per prompt, and what is never used. */
+  if (req.method === 'GET' && path === '/api/prompts/usage') {
+    try {
+      const { usageSummary } = await import('./skills/promptRegistry.js');
+      const days = Math.min(365, Math.max(1, parseInt(params.get('days') || '30', 10) || 30));
+      json(res, await usageSummary({ days }));
+    } catch (e) {
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  /* ── One prompt: history, drafts, publish, revert ──────────────────────
+     /api/prompts/<id>/<action>. Prompt ids contain a dot ('assess.report-draft')
+     but never a slash, so a four-segment split is unambiguous. */
+  if (path.startsWith('/api/prompts/') && path.split('/').length === 5) {
+    const [, , , rawId, action] = path.split('/');
+    const promptId = decodeURIComponent(rawId);
+    try {
+      const reg = await import('./skills/promptRegistry.js');
+
+      if (req.method === 'GET' && action === 'versions') {
+        json(res, await reg.versionsOf(promptId));
+        return;
+      }
+      if (req.method === 'POST' && action === 'draft') {
+        const body = await readBody(req);
+        json(res, await reg.saveDraft(promptId, body.body, { note: body.note || null }));
+        return;
+      }
+      if (req.method === 'POST' && action === 'publish') {
+        const body = await readBody(req);
+        const version = parseInt(body.version, 10);
+        if (!Number.isFinite(version)) { err(res, 'version is required', 400); return; }
+        json(res, await reg.publishVersion(promptId, version));
+        return;
+      }
+      if (req.method === 'POST' && action === 'revert') {
+        json(res, await reg.revertToSeed(promptId));
+        return;
+      }
+    } catch (e) {
+      err(res, e.message, /unknown prompt|has no version/.test(e.message) ? 404 : 400);
+      return;
+    }
   }
 
   if (req.method === 'GET' && path === '/api/cron/morning-digest') {
@@ -4485,6 +4561,14 @@ import('./aiProviders.js')
 import('./prompts/index.js')
   .then(({ logLibraryHealth }) => logLibraryHealth())
   .catch((e) => console.error(`[Prompts] library check could not run: ${e.message}`));
+
+/* And whether the registry is reachable. "The console shows repo text" and
+   "the database is down" look identical from the outside, and only one of them
+   needs attention — so the difference is stated at boot rather than guessed at
+   later. */
+import('./skills/promptRegistry.js')
+  .then(({ logRegistryHealth }) => logRegistryHealth())
+  .catch((e) => console.error(`[Prompts] registry check could not run: ${e.message}`));
 
 server.listen(PORT, () => {
   console.log(`
