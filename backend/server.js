@@ -4225,6 +4225,70 @@ Write the full article now.`;
        forced the client to hardcode /24, which mislabels every deep assessment.
   ── */
 
+  /* ── The five-day assessment ──────────────────────────────────────────────
+     A third register, beside the twelve-question sessions and the three-question
+     gate. Same shared Supabase; the instrument's rules live in
+     skills/assessment5d.js, ported from the digifusion lib so both consoles
+     compute one answer rather than two.
+
+       GET  /api/frictioniq/assessments        the register, each with its finding
+       GET  /api/frictioniq/assessment?id=     one, plus the playbook copy
+       POST /api/frictioniq/assessment         create
+       POST /api/frictioniq/assessment/op      every write, dispatched on `op`  */
+  if (req.method === 'GET' && path === '/api/frictioniq/assessments') {
+    try {
+      const { listAssessments, reckon } = await import('./skills/assessment5d.js');
+      const rows = await listAssessments(Math.min(Number(url.searchParams.get('limit')) || 200, 500));
+      json(res, {
+        total: rows.length,
+        assessments: rows.map((a) => ({ ...a, finding: reckon(a) })),
+      });
+    } catch (e) {
+      console.error('[FiveDay] list failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && path === '/api/frictioniq/assessment') {
+    try {
+      const { loadAssessment, reckon, STAGES, VERDICTS } = await import('./skills/assessment5d.js');
+      const a = await loadAssessment(url.searchParams.get('id') || '');
+      if (!a) { err(res, 'no such assessment', 404); return; }
+      /* The playbook travels with the record. The room shows the method beside
+         the day being worked, and shipping them together means the console
+         cannot drift from the instrument it is running. */
+      json(res, { assessment: a, finding: reckon(a), stages: STAGES, verdicts: VERDICTS });
+    } catch (e) {
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/frictioniq/assessment') {
+    try {
+      const body = await readBody(req);
+      const { createAssessment } = await import('./skills/assessment5d.js');
+      const id = await createAssessment(body || {});
+      json(res, { id });
+    } catch (e) {
+      err(res, e.message, 400);
+    }
+    return;
+  }
+
+  if (req.method === 'POST' && path === '/api/frictioniq/assessment/op') {
+    try {
+      const body = await readBody(req);
+      const { applyOp, reckon } = await import('./skills/assessment5d.js');
+      const a = await applyOp(String(body.id || ''), String(body.op || ''), body);
+      json(res, { assessment: a, finding: reckon(a) });
+    } catch (e) {
+      err(res, e.message, /no such/.test(e.message) ? 404 : 400);
+    }
+    return;
+  }
+
   /* ── GET /api/frictioniq/gates — the three-question readiness gate ────────
      A SEPARATE ROUTE because it is a separate register. readiness_gate holds a
      three-answer instrument with its own verdicts; folding it into

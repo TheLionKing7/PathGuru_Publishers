@@ -24,6 +24,7 @@
        console.css — it borrows the same variables, it just needs to be able
        to set its own grid without fighting a more general rule. -->
   <link rel="stylesheet" href="css/prompt-library.css">
+  <link rel="stylesheet" href="css/fiveday-room.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -143,6 +144,7 @@
       <button type="button" class="dept-route-tab" data-dept-tab="agents-ip" role="tab" aria-selected="false">Playbooks</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-content" role="tab" aria-selected="false">Schedule</button>
       <button type="button" class="dept-route-tab" data-dept-tab="agents-prompts" role="tab" aria-selected="false">Prompt Library</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="agents-fiveday" role="tab" aria-selected="false">Five-Day</button>
     </nav>
 
     <!-- ══════════════════════════════════════════════
@@ -1442,6 +1444,12 @@
             <button class="btn-secondary btn-sm" id="plBlocksBtn">Blocks &amp; clauses</button>
           </div>
         </header>
+        <header class="panel-header" data-for="agents-fiveday">
+          <div>
+            <p class="panel-eyebrow">Intelligence Library</p>
+            <h1 class="panel-title">Five-Day Assessment</h1>
+          </div>
+        </header>
         <header class="panel-header" data-for="agents-console">
           <div>
             <p class="panel-eyebrow">Agent Network</p>
@@ -2133,6 +2141,14 @@
           </div><!-- /.prompt-room-body -->
         </section><!-- /#tab-agents-prompts -->
 
+        <!-- ── FIVE-DAY ASSESSMENT ───────────────────────────────────────
+             The playbook and the register on one screen. Splitting them would
+             mean reading the method in one tab and typing into another during
+             a live call, which is exactly when nobody does it. -->
+        <section class="tab-panel" id="tab-agents-fiveday" aria-label="Five-Day Assessment">
+          <div class="fiveday-room-body" id="fdBody"></div>
+        </section><!-- /#tab-agents-fiveday -->
+
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->
 
@@ -2225,6 +2241,9 @@
   <!-- Prompt Library room. Loads its data on first visit to the tab, not at
        boot — nobody should pay for it on a session that never opens it. -->
   <script src="js/prompt-library.js"></script>
+  <!-- The five-day assessment room. Loads its register on first visit to the
+       tab; the playbook travels with each record from the API. -->
+  <script src="js/fiveday-room.js"></script>
 
   <!-- Industry blocks & clauses, readable on their own. Lives outside the
        module shells so it is not hidden with them. -->

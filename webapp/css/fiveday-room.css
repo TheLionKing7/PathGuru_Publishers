@@ -1,0 +1,154 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   FIVE-DAY ASSESSMENT ROOM
+   The public /agency/assessment layout, in the console's own tokens: a rail of
+   days, the method beside the work, the finding above both.
+   Loaded after console.css so it wins.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.fiveday-room-body { padding: 22px 28px 32px; max-width: 1400px; margin: 0 auto; }
+@media (max-width: 700px) { .fiveday-room-body { padding: 16px 14px 24px; } }
+
+.fd-loading { display: flex; align-items: center; gap: 10px; padding: 30px; color: var(--text-muted); font-size: 13px; }
+.fd-error {
+  padding: 14px 16px; border: 1px solid rgba(239,68,68,.35); background: rgba(239,68,68,.07);
+  border-radius: var(--radius-sm); color: var(--red); font-size: 12.5px; line-height: 1.6;
+}
+.fd-empty {
+  padding: 34px 20px; text-align: center; color: var(--text-muted); font-size: 13px;
+  border: 1px dashed var(--border); border-radius: var(--radius); margin-bottom: 18px;
+}
+
+.fd-intro { margin-bottom: 18px; max-width: 720px; }
+.fd-intro p { margin: 0 0 5px; font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); }
+.fd-intro strong { color: var(--text-primary); }
+.fd-intro-dim { color: var(--text-muted) !important; }
+
+/* ── Register table ───────────────────────────────────────────────────── */
+.fd-table { width: 100%; margin-bottom: 20px; }
+.fd-row { cursor: pointer; }
+.fd-row:hover { background: var(--surface-2); }
+.fd-client { color: var(--text-primary); font-weight: 600; }
+.fd-ok   { color: var(--green); }
+.fd-warn { color: var(--yellow); }
+
+/* ── Panels ───────────────────────────────────────────────────────────── */
+.fd-panel {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); padding: 16px 18px; margin-bottom: 14px;
+}
+.fd-panel h3 {
+  margin: 0 0 12px; font-family: var(--font-ui); font-size: 14px; font-weight: 600; color: var(--text-primary);
+}
+.fd-note { margin: 9px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+.fd-hint { font-size: 11px; color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+.fd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.fd-wide { grid-column: 1 / -1; }
+.fd-grid label, .fd-panel > label {
+  display: block; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted);
+}
+.fd-grid input, .fd-grid textarea, .fd-panel > label input, .fd-panel > label textarea {
+  display: block; width: 100%; margin-top: 6px;
+  padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text-primary);
+  font-family: var(--font-ui); font-size: 12.5px; line-height: 1.5; text-transform: none; letter-spacing: 0;
+}
+.fd-grid textarea, .fd-panel > label textarea { resize: vertical; }
+.fd-grid input:focus, .fd-grid textarea:focus,
+.fd-panel > label input:focus, .fd-panel > label textarea:focus { outline: none; border-color: var(--gold); }
+
+.fd-check {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12.5px; line-height: 1.55; color: var(--text-secondary);
+  text-transform: none; letter-spacing: 0;
+}
+.fd-check input { margin-top: 2px; }
+
+.fd-start { margin-top: 6px; }
+
+/* ── Head ─────────────────────────────────────────────────────────────── */
+.fd-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 16px; }
+.fd-head h3 { margin: 0 0 2px; font-family: var(--font-display); font-size: 22px; color: var(--text-primary); }
+.fd-meta { margin: 0; font-size: 12px; color: var(--text-muted); }
+
+/* ── The finding ──────────────────────────────────────────────────────── */
+.fd-finding { border-color: var(--border-light); }
+.fd-tiles { display: flex; flex-wrap: wrap; gap: 22px; margin-bottom: 12px; }
+.fd-tile-n { display: block; font-family: var(--font-display); font-size: 30px; line-height: 1.1; color: var(--text-primary); }
+.fd-tile-l { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.fd-killed { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); }
+.fd-verdict {
+  margin: 0; padding-left: 14px; border-left: 2px solid var(--gold-dim);
+  font-size: 13px; line-height: 1.65; color: var(--text-secondary);
+}
+.fd-figure { margin: 0; font-family: var(--font-display); font-size: 26px; color: var(--gold); }
+.fd-figure-sub { margin: 3px 0 0; font-size: 12px; line-height: 1.6; color: var(--text-muted); }
+.fd-figure-sub b { color: var(--text-primary); font-weight: 600; }
+.fd-warnbox {
+  margin: 0; padding: 9px 12px; border: 1px solid rgba(245,200,66,.32);
+  background: rgba(245,200,66,.08); border-radius: var(--radius-sm);
+  font-size: 12px; line-height: 1.6; color: var(--yellow);
+}
+
+/* ── The rail of days ─────────────────────────────────────────────────── */
+.fd-rail { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.fd-day {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 8px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer; font-family: var(--font-ui);
+  transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
+}
+.fd-day:hover { border-color: var(--border-light); }
+.fd-day.on { border-color: var(--gold-dim); background: var(--gold-glow); }
+.fd-day-n { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+.fd-day.on .fd-day-n { color: var(--gold); }
+.fd-day-l { font-size: 13px; color: var(--text-primary); }
+
+/* ── Playbook beside the work ─────────────────────────────────────────── */
+.fd-split { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 900px) { .fd-split { grid-template-columns: minmax(0, 1fr); } }
+
+.fd-playbook {
+  position: sticky; top: 12px;
+  border: 1px solid var(--border); border-left: 3px solid var(--gold-dim);
+  border-radius: var(--radius); background: var(--surface-2); padding: 15px 16px;
+}
+@media (max-width: 900px) { .fd-playbook { position: static; } }
+.fd-playbook-day {
+  margin: 0 0 6px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold);
+}
+.fd-playbook-blurb { margin: 0 0 12px; font-size: 13px; line-height: 1.65; color: var(--text-secondary); }
+.fd-prompts { margin: 0; padding-left: 16px; }
+.fd-prompts li { margin-bottom: 7px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+
+/* ── Candidates ───────────────────────────────────────────────────────── */
+.fd-cands { margin-bottom: 14px; }
+.fd-cand {
+  border: 1px solid var(--border); border-left: 3px solid var(--border-light);
+  border-radius: var(--radius-sm); background: var(--surface); padding: 10px 12px; margin-bottom: 7px;
+}
+.fd-cand--ok  { border-left-color: var(--green); }
+.fd-cand--bad { border-left-color: var(--red); }
+.fd-cand--dim { border-left-color: var(--border-light); }
+.fd-cand-head { display: flex; align-items: baseline; gap: 10px; }
+.fd-cand-name { font-size: 13.5px; color: var(--text-primary); font-weight: 600; }
+.fd-cand-verdict { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); }
+.fd-cand--ok  .fd-cand-verdict { color: var(--green); }
+.fd-cand--bad .fd-cand-verdict { color: var(--red); }
+.fd-cand-cost { font-size: 11.5px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.fd-drop { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; line-height: 1; }
+.fd-drop:hover { color: var(--red); }
+.fd-cand-quote { margin: 5px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-secondary); font-style: italic; }
+.fd-cand-note { margin: 4px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+
+/* ── The three tests ──────────────────────────────────────────────────── */
+.fd-tests { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.fd-test { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); padding: 10px 12px; }
+.fd-test legend { padding: 0 4px; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.fd-test p { margin: 0 0 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+.fd-test span { display: flex; gap: 12px; }
+.fd-test label { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-secondary); }
+
+.fd-decide { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
