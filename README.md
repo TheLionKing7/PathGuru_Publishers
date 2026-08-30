@@ -18,7 +18,7 @@ PathGuru is **one system, five departments** — not a monolith. See `ARCHITECTU
 | Department | Purpose |
 |---|---|
 | **Publisher** (core) | Original design: Vektor-grade brief → KDP PDF/EPUB |
-| **Intelligence Studio** | Orion research → specialist playbooks → DigiFusion paid IP → blog teasers |
+| **Intelligence Studio** | Orion research → specialist playbooks → DigiFusion paid IP → blog teasers. Three rooms: Playbooks, Prompt Library, Five-Day Assessment |
 | **Storefront** | DigiFusion shop console (products, orders, CMS) |
 | **Network** | 8-agent operations (roster, console, tasks, leads) |
 | **Analytics** | DigiFusion visitor footprint |
@@ -52,6 +52,46 @@ Nexus can synthesize client-specific playbooks (JSON + HTML) and store them in R
 
 ### 6. Shop Console
 Operator dashboard for the DigiFusion storefront — products, orders, subscriptions, bookings, analytics, T&C, shipping.
+
+### 7. Prompt Library and Registry
+Seventy-two operator prompts in twelve categories, seventeen industry blocks and nine clauses gathered into five presets, composed in the console at **Intelligence → Prompt Library**. A prompt is assembled from a base text, an optional industry block, any clauses and the variables filled in, then copied.
+
+**Usage is recorded on copy, not on compose.** The composer re-assembles the text on every keystroke; counting that would measure typing rather than use.
+
+The registry sits underneath the library. Every prompt has a seed in `backend/prompts/`, a chain of saved drafts, and at most one published version.
+
+**The repo is the floor.** `prompt.live_version` is null until somebody publishes, and a null resolves to the text in the repo. There is no boot-time seeding of the tables, so the database can never shadow the repo with a stale copy of a prompt nobody remembers editing, and reverting is deleting a pointer rather than restoring a backup. `registryHealth()` reports how many prompts are running on a published version and how many on the seed.
+
+Publishing is gated by the estate pause in the same way agent output is: a paused estate blocks agent publishes and leaves operator publishes alone.
+
+### 8. The Five-Day Assessment
+The published five-day board *is* the room. `webapp/js/fiveday-playbook.js` holds that board as data, transcribed and not paraphrased; `fiveday-room.js` renders it and never rewords it. Open a client and each step card grows a second half — that client's state for that step, and the inputs that change it. Step 2 shows the three tests and the candidate list together; Step 3 shows the formula and their figure. Nothing lives in two places. With no client open the board is just the board, which is what you want the night before a call.
+
+Three rules the code enforces rather than documents:
+
+- **A candidate must pass all three tests** — repeatable, legible, bounded. The verdict is derived on the server from those three, first failure deciding. There is deliberately no whitelist of verdicts a client could post: a verdict that can be sent is a verdict that can be wrong.
+- **Yes / no / unknown, never a checkbox.** "We did not ask" and "no" are different findings, and only one of them declines a candidate. An unknown is never counted as a kill.
+- **A survivor missing frequency, elapsed minutes or a rate produces no figure at all.** A partial sum looks like an estimate and is one short.
+
+The reckoning lives once, in `backend/skills/assessment5d.js`. The TypeScript port that used to sit in DigiFusion has been deleted along with the operator screens there — one instrument, one implementation, in the place that runs it. What remains on the public site is the client-facing page at `/agency/assessment`.
+
+### 9. The small-business lifecycle register
+Every stage of the small-business path had a register and none of them had each other: the gate wrote to `readiness_gate`, the booking form to `intake_submission` and `booking`, the assessment to `assessment_5d`. Three tables, three screens, and no way to answer the only question a funnel is for. `backend/skills/lifecycle.js` stitches the chain that was already in the database:
+
+```
+readiness_gate.token
+  → intake_submission.gate_token      (carried through the booking links)
+    → booking.intake_id               (stamped by the Calendly receiver)
+  → assessment_5d.gate_token          (pasted when the assessment starts)
+```
+
+One row per business, at the furthest stage it has reached: *declined at the gate, passed, intake started, session booked, assessment running, decided, outcome recorded.*
+
+**Small businesses only, by construction.** The spine is `readiness_gate`, and the gate is only ever served to firms under ten staff — everyone larger is routed into the twelve-question FrictionIQ instrument, a different register. So this one cannot quietly fill with mid-market prospects and make both counts meaningless. An assessment with no gate token still appears, marked as having entered directly, because a client who arrived by introduction is still a real small business.
+
+**It does not guess.** Where a stage has not happened there is a null, not an inference; a gate with no booking is not "lost", it may be three days old. A gate that declined and later booked anyway keeps its verdict in its own column rather than having it hidden by the progress. Counts are shown rather than rates until ten have passed the gate — a percentage of four is theatre. The four reads are settled rather than chained, so an unmigrated table costs that column and not the whole register.
+
+**One trap worth knowing before you build another room.** `console.css` gives every `.cx-table` a `min-width` of 1060px, which is right for the FrictionIQ register in a full-width console. The Intelligence tab panel is a column flex container, so that floor does not stay inside the table — it becomes the minimum width of the room around it. On a 1280px CSS viewport (a 1080p screen at 150% Windows scaling) that forced the Five-Day board to 1112px and the panel's own overflow sliced the right-hand column off: every band looked broken and not one of them was. A room that uses `.cx-table` should set its own `min-width: 0`, restore a floor only where the panel is certainly wider, and give the table wrapper `contain: inline-size`.
 
 ---
 
@@ -101,6 +141,12 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Godmode Phase 2** | Delivery leverage: exception harvest (4-field catalog), friction tax assembly (deterministic), three-ink classifier (reclassification rate) |
 | **Godmode Phase 3** | Calibration at scale: engagement outcomes register, prior→calibrated flip at 10 pairs, divergence loop |
 | **Godmode Phase 4** | Productised service: harness health diagnostic (0–100), governance charter generator (living document) |
+| **Prompt library** | 72 prompts, 12 categories, 17 industry blocks, 9 clauses, 5 presets; composer with variable detection across the base text and any attached block |
+| **Prompt registry** | Drafts, publish, revert-to-seed, per-prompt version history, usage recorded on copy, 30-day usage summary, registry health. 13 checks in `promptRegistry.test.mjs` |
+| **Five-Day room** | The published board rendered as the room, with each client's work folded into the step it belongs to. The reckoning and its 15 checks live in `assessment5d.js` / `assessment5d.test.mjs` |
+| **Lifecycle register** | Gate → intake → booking → assessment → decision → outcome, one row per business, small firms only by construction |
+| **Readiness gate in the console** | The three-question gate's rows, verdicts and blocked tests shown in the FrictionIQ console |
+| **Intelligence nav** | Schedule removed — it is a content calendar and Blog Room already has one beside the posts it schedules |
 
 ### Pending / known gaps
 
@@ -152,6 +198,31 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `GET` | `/api/agents/nova/harness/charter/:id/full` | Full charter as markdown (Phase 4) |
 | `GET` | `/api/agents/nova/harness/charters` | List all active client charters (Phase 4) |
 
+### Prompt library and registry
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `GET` | `/api/prompts` | The library — prompts, categories, and each prompt's registry state |
+| `GET` | `/api/prompts/blocks` | Industry blocks, clauses and clause presets |
+| `POST` | `/api/prompts/compose` | Assemble base text + industry block + clauses + variables |
+| `POST` | `/api/prompts/used` | Record one use. Called on copy, never on compose |
+| `GET` | `/api/prompts/usage` | Usage summary (`?days=30`) |
+| `GET` | `/api/prompts/:id/versions` | Version history for one prompt |
+| `POST` | `/api/prompts/:id/draft` | Save a draft version |
+| `POST` | `/api/prompts/:id/publish` | Publish a version — sets `live_version` |
+| `POST` | `/api/prompts/:id/revert` | Clear `live_version`; the prompt falls back to the repo seed |
+
+### Five-day assessment and the readiness gate
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| `GET` | `/api/frictioniq/assessments` | The assessment list |
+| `GET` | `/api/frictioniq/assessment` | One assessment and its derived finding (`?id=`) |
+| `POST` | `/api/frictioniq/assessment` | Start one (client, sector, country, currency, optional gate token) |
+| `POST` | `/api/frictioniq/assessment/op` | Every write against an assessment — stage, observe, candidate, drop, price, report, decide, outcome, reference |
+| `GET` | `/api/frictioniq/lifecycle` | The small-business funnel, gate to outcome (`?limit=`, capped at 1000) |
+| `GET` | `/api/frictioniq/gates` | Readiness-gate rows for the FrictionIQ console |
+
 ---
 
 ## Supabase schema
@@ -166,12 +237,19 @@ Run `supabase/001_agent_network.sql` in the Supabase SQL editor to create all ta
 | `knowledge_base` | Synthesizer knowledge — structured extracts from PDFs |
 | `leads` | Lead pipeline from the DigiFusion VA (Aria) |
 | `notifications` | Alert queue — written by agents, dispatched by Pulse |
+| `prompt` | One row per operator prompt. `live_version` null means "use the repo seed" |
+| `prompt_version` | Draft and published bodies, numbered per prompt, with a note and an actor |
+| `prompt_usage` | One row per copy — prompt, industry, clauses, when |
 
 If upgrading an existing deployment, also run:
 ```sql
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dispatch_log JSONB;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS dispatched_at TIMESTAMPTZ;
 ```
+
+Then `supabase/0041_prompt_registry.sql` for the registry.
+
+**Where the small-business tables live.** PathGuru and DigiFusion share one Supabase project, and the migrations for `readiness_gate`, `intake_submission`, `booking` and `assessment_5d` live in the DigiFusion repo (`supabase/migrations/0020`–`0024`) because that is where those rows are written from. PathGuru reads them. Apply them there and both consoles see the same funnel; skip one and the lifecycle register loses that column and says so, rather than failing whole.
 
 ---
 
@@ -292,7 +370,19 @@ backend/
     ├── personas.js             Persona profiles
     ├── personaPrompt.js        Persona injection
     ├── design.js               Design skill helpers
-    └── formatting.js           Output formatting
+    ├── formatting.js           Output formatting
+    ├── promptRegistry.js       Versions, publish, revert, usage, health. Repo is the floor
+    ├── promptRegistry.test.mjs 13 checks against a Supabase-shaped double
+    ├── assessment5d.js         The five-day reckoning — three tests, first failure decides
+    ├── assessment5d.test.mjs   15 checks, including that an unknown is not a kill
+    └── lifecycle.js            Gate → intake → booking → assessment, one row per business
+
+backend/prompts/
+├── library.js                  72 prompts in 12 categories
+├── industries.js               17 industry blocks, each with its own variables
+├── clauses.js                  9 clauses, 5 presets
+├── compose.js                  Assembly: base + block + clauses + variables
+└── index.js                    The module's front door
 
 webapp/
 ├── index.html                  Three-module shell (Publishing, Blog, Shop + Agent Console)
@@ -301,10 +391,16 @@ webapp/
 ├── blog.js                     Blog UI
 ├── shop.js                     Shop UI
 ├── digifusion-chat-widget.js   Vanilla JS embeddable chat widget (standalone alternative)
-└── style.css                   Webapp styles (includes agent chat bubble UI)
+├── style.css                   Webapp styles (includes agent chat bubble UI)
+├── js/prompt-library.js        Prompt Library room — composer, versions, usage
+├── js/fiveday-playbook.js      The published board as data, transcribed verbatim
+├── js/fiveday-room.js          Renders the board; the register lives inside it
+├── css/prompt-library.css      Prompt Library room styles
+└── css/fiveday-room.css        Five-Day room — the board's layout in console tokens
 
 supabase/
-└── 001_agent_network.sql       Full schema for the agent network
+├── 001_agent_network.sql       Full schema for the agent network
+└── 0041_prompt_registry.sql    prompt, prompt_version, prompt_usage
 ```
 
 ---
