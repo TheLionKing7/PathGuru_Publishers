@@ -1362,6 +1362,31 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  /* ── /api/agents/synthesizer/curated ──────────────────────────────────────
+     Curated knowledge: a source read and written up deliberately rather than
+     extracted in bulk from a PDF. GET reports what is in the table against
+     what is in the repo; POST replaces the table's copy with the repo's.
+
+     The repo is the authority, exactly as it is for prompts. Ingest deletes by
+     source key before inserting, so re-running after an edit replaces rather
+     than accumulating — three drifting copies of one claim are worse than
+     none, because an agent finds one and cannot tell it is stale. */
+  if (path === '/api/agents/synthesizer/curated') {
+    try {
+      const ck = await import('./skills/curatedKnowledge.js');
+      if (req.method === 'GET') { json(res, await ck.curatedStatus()); return; }
+      if (req.method === 'POST') {
+        const body = await readBody(req).catch(() => ({}));
+        json(res, await ck.ingestCurated({ key: body?.key || null }));
+        return;
+      }
+    } catch (e) {
+      console.error('[Curated]', e.message);
+      err(res, e.message, 500);
+      return;
+    }
+  }
+
   // ── POST /api/agents/synthesizer/ingest ─────────────────────────────────
   // Trigger PDF ingestion. Body: { prefix, domain } or { r2Key, domain }
   if (req.method === 'POST' && path === '/api/agents/synthesizer/ingest') {

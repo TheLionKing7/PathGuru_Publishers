@@ -75,6 +75,22 @@ Three rules the code enforces rather than documents:
 
 The reckoning lives once, in `backend/skills/assessment5d.js`. The TypeScript port that used to sit in DigiFusion has been deleted along with the operator screens there — one instrument, one implementation, in the place that runs it. What remains on the public site is the client-facing page at `/agency/assessment`.
 
+### 9. Curated knowledge
+The Synthesizer ingests PDFs from R2 in bulk. `backend/knowledge/` is the other path: a source somebody read, judged worth keeping, and wrote up deliberately as knowledge units, landing in the same `knowledge_base` table so every agent reaches it through the same query. Nova's domains are `automation` and `general`, so an automation source put in `automation` is reachable by the specialist that needs it.
+
+**Mechanisms and priors are not the same thing, and the row says which it is.** A *mechanism* is a way of working that can be applied and recommended. A *prior* is a figure from somebody else's clients — quotable with its source and its n, never presentable as our own result. The status is written into the metadata and into the tags, so an agent can exclude priors with a tag filter rather than by parsing jsonb. This distinction is the entire reason to curate rather than extract: an LLM pass over an article produces fluent paraphrase in which a mechanism and a borrowed number look identical.
+
+**Ingest replaces, it never accumulates.** `ingestCurated()` deletes by source key and re-inserts, so editing the repo file and re-running replaces the table's copy. Three drifting copies of one claim are worse than none, because an agent finds one of them and has no way to know it is stale. `curatedStatus()` reads the table back and reports in-table against in-repo, which is how a half-applied ingest is caught.
+
+```bash
+npm run knowledge:ingest      # replace the table's copy with the repo's
+npm run test:curated          # 20 checks, no database needed
+```
+
+`GET /api/agents/synthesizer/curated` reports the same status; `POST` runs the ingest.
+
+The first source is a synthesis of Luke Pierce's account of running AI implementations (Boom Automations, 90+ engagements): the three-way classification of work into deterministic, judgment and decision; the four silo cost patterns and why AI amplifies them; the founder's map against the floor map; the investigation interview; quantifying pain in the client's own numbers; absorb / keep / kill; one write path per entity; data then workflows then intelligence; the three migration paths; adoption rate and the shadow spreadsheet; engagement signal; the five failure patterns; and the four post-launch loops. His figures are in one unit, tagged `prior`, ranked below every mechanism so they are not the first thing an agent finds.
+
 ### 9. The small-business lifecycle register
 Every stage of the small-business path had a register and none of them had each other: the gate wrote to `readiness_gate`, the booking form to `intake_submission` and `booking`, the assessment to `assessment_5d`. Three tables, three screens, and no way to answer the only question a funnel is for. `backend/skills/lifecycle.js` stitches the chain that was already in the database:
 
@@ -375,7 +391,12 @@ backend/
     ├── promptRegistry.test.mjs 13 checks against a Supabase-shaped double
     ├── assessment5d.js         The five-day reckoning — three tests, first failure decides
     ├── assessment5d.test.mjs   15 checks, including that an unknown is not a kill
-    └── lifecycle.js            Gate → intake → booking → assessment, one row per business
+    ├── lifecycle.js            Gate → intake → booking → assessment, one row per business
+    ├── curatedKnowledge.js     Ingest curated sources; replaces by source key, never accumulates
+    └── curatedKnowledge.test.mjs  20 checks, including that priors stay labelled as priors
+
+backend/knowledge/
+└── implementation-method.js    Running an AI implementation — mechanisms and priors, kept apart
 
 backend/prompts/
 ├── library.js                  72 prompts in 12 categories
