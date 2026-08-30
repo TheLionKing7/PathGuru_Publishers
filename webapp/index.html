@@ -2241,8 +2241,10 @@
   <!-- Prompt Library room. Loads its data on first visit to the tab, not at
        boot — nobody should pay for it on a session that never opens it. -->
   <script src="js/prompt-library.js"></script>
-  <!-- The five-day assessment room. Loads its register on first visit to the
-       tab; the playbook travels with each record from the API. -->
+  <!-- The five-day assessment room. The playbook is data (verbatim from the
+       published board) and must load first; the room renders it and folds the
+       register into it. -->
+  <script src="js/fiveday-playbook.js"></script>
   <script src="js/fiveday-room.js"></script>
 
   <!-- Industry blocks & clauses, readable on their own. Lives outside the

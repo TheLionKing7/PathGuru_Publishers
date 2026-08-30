@@ -2,328 +2,299 @@
    FIVE-DAY ASSESSMENT — Intelligence › Five-Day
    ══════════════════════════════════════════════════════════════════════════
 
-   ONE ROOM, NOT TWO. The playbook and the register are the same screen: the
-   method sits beside the day you are working, and the day you are working
-   writes to the record. Splitting them would mean reading the method in one
-   tab and typing into another during a live call, which is precisely when
-   nobody does it.
+   The published board, rendered in the console, with the register living
+   inside it rather than beside it.
 
-   Two states. With nothing selected it is the register — every assessment with
-   its finding, and the form that starts one. With an assessment open it is the
-   playbook: a rail of the six days, the method text for the day you are on,
-   and the inputs for that day. The finding sits at the top throughout, because
-   the count that survived is the point of the instrument and should never
-   require scrolling.
+   HOW THE TWO JOIN. The board's arc has six steps. Five of them map onto a
+   stage of an assessment record; Step 0 maps onto the readiness gate, which is
+   its own register. So when a client is open, each step card grows a second
+   half — that client's state for that step, and the inputs to change it. Step 2
+   shows the three tests AND their candidate list. Step 3 shows the formula AND
+   their figure. Nothing is in two places.
 
-   The verdict on a candidate is computed by the SERVER from the three tests.
-   This file never sends one. See backend/skills/assessment5d.js.
+   With no client open the board is just the board: the method, readable
+   end to end, which is what you want the night before a call.
+
+   The playbook text lives in fiveday-playbook.js, verbatim from the board.
+   This file renders it and never rewords it.
+
+   The verdict on a candidate is computed by the server from the three tests.
+   This file never sends one.
    ══════════════════════════════════════════════════════════════════════════ */
 
 (function () {
   'use strict';
 
-  const state = {
-    loaded: false,
-    rows: [],
-    open: null,        // { assessment, finding, stages, verdicts }
-    busy: false,
-  };
+  const state = { loaded: false, rows: [], open: null, busy: false, showStart: false, regError: null };
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
   const api = () => window.PathGuruBackend;
+  const pb = () => window.FIVE_DAY_PLAYBOOK;
 
   const money = (n, ccy) => {
-    try {
-      return new Intl.NumberFormat('en-GB', { style: 'currency', currency: ccy || 'USD', maximumFractionDigits: 0 }).format(n);
-    } catch { return `${ccy || 'USD'} ${Math.round(n).toLocaleString('en-GB')}`; }
+    try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: ccy || 'USD', maximumFractionDigits: 0 }).format(n); }
+    catch { return `${ccy || 'USD'} ${Math.round(n).toLocaleString('en-GB')}`; }
   };
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—');
 
-  /* ── Load ─────────────────────────────────────────────────────────────── */
+  /* ── Data ─────────────────────────────────────────────────────────────── */
 
-  async function loadRegister() {
-    const host = $('fdBody');
-    if (host && !state.loaded) host.innerHTML = '<div class="fd-loading"><div class="agents-spinner"></div><span>Loading the register…</span></div>';
+  async function loadRegister(quiet) {
     try {
       const d = await api().apiFetch('/api/frictioniq/assessments', { timeoutMs: 15000 });
       state.rows = d.assessments || [];
+      state.regError = null;
       state.loaded = true;
-      render();
+      if (!quiet) render();
     } catch (e) {
-      if (host) host.innerHTML = `<div class="fd-error">Could not read the register — ${esc(e.message)}.<br>
-        If this says the table is missing, run <code>0024_assessment_5d.sql</code>.</div>`;
+      /* The board is static content and must still draw. A failed register
+         read is one strip reporting a problem, not a blank room — the method
+         is readable whether or not the database is reachable, and the night
+         before a call that is the half you actually need. */
+      state.regError = e.message;
+      if (!quiet) render();
     }
   }
 
   async function openAssessment(id) {
-    const host = $('fdBody');
-    if (host) host.innerHTML = '<div class="fd-loading"><div class="agents-spinner"></div><span>Opening…</span></div>';
     try {
       state.open = await api().apiFetch(`/api/frictioniq/assessment?id=${encodeURIComponent(id)}`, { timeoutMs: 15000 });
       render();
-    } catch (e) {
-      if (host) host.innerHTML = `<div class="fd-error">${esc(e.message)}</div>`;
-    }
+      $('fdTop')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { window.pgToast?.(e.message, 'error'); }
   }
 
-  /** Every write goes through one op, and the server answers with the whole
-      record — so the finding on screen is always the server's, never a local
-      guess about what the edit probably did. */
   async function op(body) {
     if (state.busy) return;
     state.busy = true;
     try {
-      state.open = await api().postJson('/api/frictioniq/assessment/op',
-        { ...body, id: state.open.assessment.id });
-      /* The register behind it is now stale in exactly one row. Refresh it
-         quietly rather than leaving a list that disagrees with the thing the
-         operator just changed. */
-      void loadRegisterQuiet();
+      state.open = await api().postJson('/api/frictioniq/assessment/op', { ...body, id: state.open.assessment.id });
+      void loadRegister(true);
       render();
-    } catch (e) {
-      window.pgToast?.(e.message, 'error');
-    } finally {
-      state.busy = false;
-    }
-  }
-
-  async function loadRegisterQuiet() {
-    try {
-      const d = await api().apiFetch('/api/frictioniq/assessments', { timeoutMs: 15000 });
-      state.rows = d.assessments || [];
-    } catch { /* the open record is what matters here */ }
+    } catch (e) { window.pgToast?.(e.message, 'error'); }
+    finally { state.busy = false; }
   }
 
   /* ── Render ───────────────────────────────────────────────────────────── */
 
   function render() {
     const host = $('fdBody');
-    if (!host) return;
-    host.innerHTML = state.open ? assessmentHtml() : registerHtml();
+    if (!host || !pb()) return;
+    const p = pb();
+    host.innerHTML =
+      `<div id="fdTop"></div>` +
+      headerHtml(p) +
+      registerStripHtml() +
+      arcHtml(p) +
+      filterHtml(p) +
+      toolchainHtml(p) +
+      commitHtml(p) +
+      ladderHtml(p) +
+      retainerHtml(p) +
+      demandHtml(p) +
+      recordHtml(p) +
+      changedHtml(p) +
+      footerHtml(p);
   }
 
-  function registerHtml() {
-    const rows = state.rows;
-    return `
-      <!-- No pitch here. What stood in this space was copy written for a
-           prospect — "built so it can return nothing" and the rest — which
-           belongs on digitafusion, not in the console the work is done in. An
-           operator opening this room needs to know what is in flight, not to
-           be sold the method they are about to run. -->
-
-      ${rows.length ? `
-      <table class="cx-table fd-table">
-        <thead><tr>
-          <th>Client</th><th>Day</th><th>Candidates</th><th>Finding</th><th>Sector</th><th>Started</th>
-        </tr></thead>
-        <tbody>
-          ${rows.map((a) => {
-            const f = a.finding || {};
-            return `<tr class="fd-row" data-open="${esc(a.id)}">
-              <td><span class="fd-client">${esc(a.client_name)}</span></td>
-              <td>${esc(dayLabel(a.stage))}</td>
-              <td>${f.listed ? `${f.listed} listed · <span class="fd-ok">${f.survived}</span> survived · ${f.killed} killed` : '—'}</td>
-              <td>${f.priced ? `${esc(money(f.low, a.currency))}–${esc(money(f.high, a.currency))}` :
-                    f.survived ? '<span class="fd-warn">not priced</span>' : '—'}</td>
-              <td>${esc(a.sector || '—')}</td>
-              <td>${esc(day(a.created_at))}</td>
-            </tr>`;
-          }).join('')}
-        </tbody>
-      </table>` : `
-      <div class="fd-empty">No assessments yet. Start one below — usually from a gate that passed.</div>`}
-
-      <div class="fd-panel fd-start">
-        <h3>Start an assessment</h3>
-        <div class="fd-grid">
-          <label>Client<input type="text" id="fdNewName" placeholder="Who"></label>
-          <label>Sector<input type="text" id="fdNewSector"></label>
-          <label>Country<input type="text" id="fdNewCountry"></label>
-          <label>Currency<input type="text" id="fdNewCurrency" value="USD"></label>
-          <label>Gate token <span class="fd-hint">if they passed the three questions</span>
-            <input type="text" id="fdNewGate"></label>
-        </div>
-        <button class="cx-btn cx-btn-primary" id="fdCreate">Start · Day 1</button>
-      </div>`;
-  }
-
-  function dayLabel(stage) {
-    const s = (state.open?.stages || DEFAULT_STAGES).find((x) => x.id === stage);
-    if (!s) return stage || '—';
-    return s.day === '—' ? s.label : `${s.day} · ${s.label}`;
-  }
-
-  /* Used before an assessment has been opened, so the register can label days
-     without waiting for the playbook to arrive. Ids must match the server's. */
-  const DEFAULT_STAGES = [
-    { id: 'observe', day: 'Day 1', label: 'Observe' },
-    { id: 'analyse', day: 'Day 2', label: 'Analyse' },
-    { id: 'price',   day: 'Day 3', label: 'Price' },
-    { id: 'report',  day: 'Day 4', label: 'Report' },
-    { id: 'decide',  day: 'Day 5', label: 'Decide' },
-    { id: 'closed',  day: '—',     label: 'Closed' },
-  ];
-
-  function assessmentHtml() {
-    const { assessment: a, finding: f, stages } = state.open;
-    const stage = stages.find((s) => s.id === a.stage) || stages[0];
-
-    return `
-      <div class="fd-head">
-        <button class="cx-btn" id="fdBack">← Register</button>
-        <div>
-          <h3>${esc(a.client_name)}</h3>
-          <p class="fd-meta">${[a.sector, a.headcount_band, a.country, a.currency].filter(Boolean).map(esc).join(' · ')}</p>
-        </div>
+  function headerHtml(p) {
+    return `<header class="fd-masthead">
+      <div>
+        <h2 class="fd-title">${esc(p.title)}</h2>
+        <p class="fd-lede">${esc(p.lede)}</p>
+        <p class="fd-attrib">${esc(p.attribution)}</p>
       </div>
-
-      ${findingHtml(a, f)}
-
-      <div class="fd-rail">
-        ${stages.map((s) => `
-          <button class="fd-day ${s.id === a.stage ? 'on' : ''}" data-stage="${esc(s.id)}">
-            <span class="fd-day-n">${esc(s.day)}</span>
-            <span class="fd-day-l">${esc(s.label)}</span>
-          </button>`).join('')}
-      </div>
-
-      <div class="fd-split">
-        <!-- The playbook, for the day being worked. Beside the inputs, not in
-             another tab — a method you have to go and find during a live call
-             is a method nobody follows. -->
-        <aside class="fd-playbook">
-          <p class="fd-playbook-day">${esc(stage.day === '—' ? '' : stage.day)} ${esc(stage.label)}</p>
-          <p class="fd-playbook-blurb">${esc(stage.blurb)}</p>
-          <ul class="fd-prompts">
-            ${(stage.prompts || []).map((p) => `<li>${esc(p)}</li>`).join('')}
-          </ul>
-        </aside>
-
-        <div class="fd-work">${workHtml(a, f, stage.id)}</div>
-      </div>`;
+      <aside class="fd-guarantee">
+        <p class="fd-guarantee-label">${esc(p.guarantee.label)}</p>
+        <p class="fd-guarantee-body">${esc(p.guarantee.body)}</p>
+      </aside>
+    </header>`;
   }
 
-  function findingHtml(a, f) {
-    if (!f.listed) {
-      return `<div class="fd-panel fd-finding">
-        <h3>The finding</h3>
-        <p class="fd-intro-dim">No candidates yet. Day 2 fills this in — with no target number, because a
-        count that is free to come out at zero is the only reason to believe it when it does not.</p>
+  /* The register, as a strip rather than a screen. Open a client and the arc
+     below fills with their work; close it and the board reads as the method. */
+  function registerStripHtml() {
+    const a = state.open?.assessment;
+    const f = state.open?.finding;
+
+    if (state.regError) {
+      return `<div class="fd-strip fd-strip--bad">
+        <span class="fd-strip-label">The register</span>
+        <span class="fd-strip-meta">unavailable — ${esc(state.regError)}${
+          /table|relation|schema/i.test(state.regError) ? '. Run 0024_assessment_5d.sql.' : ''}</span>
+        <button class="cx-btn" id="fdRetry">Retry</button>
       </div>`;
     }
-    const tiles = [
-      [f.listed, 'listed'], [f.survived, 'survived all three'],
-      [f.killed, 'killed'], [f.unknown, 'unknown'],
-    ];
-    return `<div class="fd-panel fd-finding">
-      <h3>The finding</h3>
-      <div class="fd-tiles">
-        ${tiles.map(([n, l], i) => `<div><span class="fd-tile-n ${i === 1 ? 'fd-ok' : ''}">${n}</span><span class="fd-tile-l">${esc(l)}</span></div>`).join('')}
+
+    if (a) {
+      return `<div class="fd-strip fd-strip--open">
+        <div>
+          <span class="fd-strip-client">${esc(a.client_name)}</span>
+          <span class="fd-strip-meta">${[a.sector, a.headcount_band, a.country, a.currency].filter(Boolean).map(esc).join(' · ')}</span>
+        </div>
+        <span class="fd-strip-finding">${f.listed
+          ? `${f.listed} listed · <b>${f.survived}</b> survived · ${f.killed} killed${
+              f.priced ? ` · ${esc(money(f.low, a.currency))}–${esc(money(f.high, a.currency))}` : ''}`
+          : 'no candidates yet'}</span>
+        <button class="cx-btn" id="fdClose">Close client</button>
+      </div>`;
+    }
+
+    const rows = state.rows;
+    return `<div class="fd-strip">
+      <span class="fd-strip-label">The register</span>
+      <span class="fd-strip-meta">${rows.length ? `${rows.length} assessment${rows.length === 1 ? '' : 's'}` : 'nothing in flight'}</span>
+      <button class="cx-btn" id="fdToggleStart">${state.showStart ? 'Cancel' : 'Start one'}</button>
+    </div>
+
+    ${rows.length ? `<table class="cx-table fd-table">
+      <thead><tr><th>Client</th><th>Step</th><th>Candidates</th><th>Finding</th><th>Sector</th><th>Started</th></tr></thead>
+      <tbody>${rows.map((r) => {
+        const fx = r.finding || {};
+        return `<tr class="fd-row" data-open="${esc(r.id)}">
+          <td><span class="fd-client">${esc(r.client_name)}</span></td>
+          <td>${esc(stepLabelFor(r.stage))}</td>
+          <td>${fx.listed ? `${fx.listed} / <span class="fd-ok">${fx.survived}</span> / ${fx.killed}` : '—'}</td>
+          <td>${fx.priced ? `${esc(money(fx.low, r.currency))}–${esc(money(fx.high, r.currency))}`
+                : fx.survived ? '<span class="fd-warn">not priced</span>' : '—'}</td>
+          <td>${esc(r.sector || '—')}</td>
+          <td>${esc(day(r.created_at))}</td></tr>`;
+      }).join('')}</tbody></table>` : ''}
+
+    ${state.showStart ? `<div class="fd-panel fd-start">
+      <div class="fd-grid">
+        <label>Client<input type="text" id="fdNewName" placeholder="Who"></label>
+        <label>Sector<input type="text" id="fdNewSector"></label>
+        <label>Country<input type="text" id="fdNewCountry"></label>
+        <label>Currency<input type="text" id="fdNewCurrency" value="USD"></label>
+        <label>Gate token <span class="fd-hint">if they passed Step 0</span><input type="text" id="fdNewGate"></label>
       </div>
-      ${f.byTest?.length ? `<p class="fd-killed">Killed by: ${f.byTest.map((t) => `${esc(t.label.toLowerCase())} ${t.count}`).join(' · ')}.</p>` : ''}
-      ${f.survived === 0
-        ? `<p class="fd-verdict">Nothing survived. That is a finding, and the report is one page: not yet,
-           and here is the order to fix it in. It is the one they remember when they are ready.</p>`
-        : f.priced
-          ? `<p class="fd-figure">${esc(money(f.low, a.currency))} – ${esc(money(f.high, a.currency))}</p>
-             <p class="fd-figure-sub">annual cost of doing nothing · ±${a.band_pct}% band${
-               f.suggestedCeiling !== null ? ` · sizing rule suggests committing no more than <b>${esc(money(f.suggestedCeiling, a.currency))}</b>` : ''}</p>`
-          : `<p class="fd-warnbox">${f.unpriced} survivor${f.unpriced === 1 ? '' : 's'} missing frequency,
-             elapsed minutes or a rate — so there is no figure yet. A partial sum would look like an
-             estimate and be one short.</p>`}
+      <button class="cx-btn cx-btn-primary" id="fdCreate">Start · Step 1</button>
+    </div>` : ''}`;
+  }
+
+  function stepLabelFor(stage) {
+    const s = pb().arc.steps.find((x) => x.stage === stage);
+    return s ? `${s.n} · ${s.title}` : (stage === 'closed' ? 'Closed' : stage || '—');
+  }
+
+  /* ── The arc ──────────────────────────────────────────────────────────── */
+
+  function arcHtml(p) {
+    const a = state.open?.assessment;
+    return band(p.arc.label, p.arc.sub, `<div class="fd-arc">
+      ${p.arc.steps.map((s) => {
+        const isNow = a && s.stage && a.stage === s.stage;
+        return `<article class="fd-step ${isNow ? 'now' : ''}">
+          <div class="fd-step-head">
+            <span class="fd-step-n">${esc(s.n)}</span>
+            <span class="fd-step-time">${esc(s.time)}</span>
+          </div>
+          <h4 class="fd-step-title">${esc(s.title)}</h4>
+          <p class="fd-step-line">${esc(s.line)}</p>
+          ${s.blocks.map(blockHtml).join('')}
+          ${a ? clientHalf(s, a) : ''}
+        </article>`;
+      }).join('')}
+    </div>`);
+  }
+
+  function blockHtml(b) {
+    if (b.formula) return `<p class="fd-formula">${esc(b.formula)}</p>`;
+    return `<div class="fd-block">
+      <p class="fd-block-label">${esc(b.label)}</p>
+      ${b.items ? `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
+                : `<p class="fd-block-text">${esc(b.text)}</p>`}
     </div>`;
   }
 
-  function workHtml(a, f, stageId) {
-    if (stageId === 'observe') return `
-      <div class="fd-panel">
-        <div class="fd-grid">
-          <label>Who you interviewed<input type="text" data-f="interviewee" value="${esc(a.interviewee || '')}"></label>
-          <label>Their role<input type="text" data-f="interviewee_role" value="${esc(a.interviewee_role || '')}"></label>
-          <label class="fd-wide">Recording link <span class="fd-hint">a pointer, not a paste</span>
-            <input type="text" data-f="recording_url" value="${esc(a.recording_url || '')}"></label>
-          <label class="fd-wide">What you saw <span class="fd-hint">in their words where you can</span>
-            <textarea data-f="observation_note" rows="5">${esc(a.observation_note || '')}</textarea></label>
-        </div>
-        <button class="cx-btn cx-btn-primary" data-op="observe">Save</button>
-      </div>`;
+  /* The client's own half of a step card — state, then the inputs that change
+     it. Absent entirely when no client is open, so the board stays a board. */
+  function clientHalf(s, a) {
+    const f = state.open.finding;
+    const act = (op, label, extra = '') =>
+      `<div class="fd-live-actions">${extra}<button class="cx-btn cx-btn-primary" data-op="${op}">${label}</button></div>`;
 
-    if (stageId === 'analyse') return `
-      ${a.candidates.length ? `<div class="fd-cands">${a.candidates.map((c, i) => candHtml(c, i, a)).join('')}</div>` : ''}
-      <div class="fd-panel">
-        <h3>Add a candidate</h3>
+    if (!s.stage) {
+      /* Step 0 — the gate is its own register; shown, never edited here. */
+      return `<div class="fd-live">
+        <p class="fd-live-label">This client</p>
+        ${a.gate_token
+          ? `<p class="fd-live-text">Came through the gate ·
+             <a href="https://www.digitafusion.com/diagnostic/g/${esc(a.gate_token)}" target="_blank" rel="noopener">see their answers</a></p>`
+          : `<p class="fd-live-text fd-dim">No gate token on this record. If they passed the three questions, paste the token when starting — it is what makes the gate's conversion rate mean anything.</p>`}
+      </div>`;
+    }
+
+    const head = `<p class="fd-live-label">This client${a.stage === s.stage ? ' · current step' : ''}</p>`;
+
+    if (s.stage === 'observe') return `<div class="fd-live">${head}
+      <div class="fd-grid">
+        <label>Interviewed<input type="text" data-f="interviewee" value="${esc(a.interviewee || '')}"></label>
+        <label>Their role<input type="text" data-f="interviewee_role" value="${esc(a.interviewee_role || '')}"></label>
+        <label class="fd-wide">Recording link<input type="text" data-f="recording_url" value="${esc(a.recording_url || '')}"></label>
+        <label class="fd-wide">What you saw<textarea data-f="observation_note" rows="4">${esc(a.observation_note || '')}</textarea></label>
+      </div>${act('observe', 'Save')}</div>`;
+
+    if (s.stage === 'analyse') return `<div class="fd-live">${head}
+      ${a.candidates.length ? `<div class="fd-cands">${a.candidates.map((c, i) => candHtml(c, i, a)).join('')}</div>`
+        : '<p class="fd-live-text fd-dim">No candidates listed yet. No target number — the count has to be free to come out at zero.</p>'}
+      ${f.byTest?.length ? `<p class="fd-live-text">Killed by: ${f.byTest.map((t) => `${esc(t.label.toLowerCase())} ${t.count}`).join(' · ')}.</p>` : ''}
+      <details class="fd-add"><summary>Add a candidate</summary>
         <div class="fd-grid">
           <label class="fd-wide">Candidate<input type="text" data-f="name"></label>
-          <label class="fd-wide">Their exact words <span class="fd-hint">quoted, not paraphrased</span>
-            <textarea data-f="quote" rows="2"></textarea></label>
+          <label class="fd-wide">Their exact words<textarea data-f="quote" rows="2"></textarea></label>
           <label>Who does it<input type="text" data-f="who"></label>
           <label>What triggers it<input type="text" data-f="trigger"></label>
           <label>Times per week<input type="text" data-f="frequency_per_week"></label>
-          <label>Elapsed minutes each <span class="fd-hint">not touch time</span><input type="text" data-f="minutes_each"></label>
-          <label>Loaded hourly rate<input type="text" data-f="loaded_rate"></label>
+          <label>Elapsed minutes<input type="text" data-f="minutes_each"></label>
+          <label>Loaded rate<input type="text" data-f="loaded_rate"></label>
           <label>What it produces<input type="text" data-f="output"></label>
         </div>
-        <div class="fd-tests">
-          ${test('repeatable', 'Repeatable', 'Weekly or more, on a schedule or trigger?')}
-          ${test('legible', 'Legible', 'Rules fit one page a new hire could follow?')}
-          ${test('bounded', 'Bounded', 'A wrong output caught before a customer or a ledger?')}
-        </div>
+        <div class="fd-tests">${pb().filter.tests.map(testInput).join('')}</div>
         <label class="fd-wide">Note <span class="fd-hint">for an unknown, write the question to ask</span>
           <textarea data-f="note" rows="2"></textarea></label>
-        <button class="cx-btn cx-btn-primary" data-op="candidate">Add candidate</button>
+        ${act('candidate', 'Add candidate')}
         <p class="fd-note">The verdict is computed from the three tests, not chosen.</p>
-      </div>`;
+      </details></div>`;
 
-    if (stageId === 'price') return `
-      <div class="fd-panel">
-        <div class="fd-grid">
-          <label>Confidence band ±% <span class="fd-hint">a range survives a finance director</span>
-            <input type="text" data-f="band_pct" value="${esc(a.band_pct)}"></label>
-          <label class="fd-wide">Rates and assumptions <span class="fd-hint">whose rates, supplied by whom</span>
-            <textarea data-f="rates_note" rows="4">${esc(a.rates_note || '')}</textarea></label>
-        </div>
-        <button class="cx-btn cx-btn-primary" data-op="price">Save</button>
-      </div>`;
+    if (s.stage === 'price') return `<div class="fd-live">${head}
+      ${f.survived === 0
+        ? '<p class="fd-live-text fd-dim">Nothing has survived the filter, so there is nothing to price. That is a finding.</p>'
+        : f.priced
+          ? `<p class="fd-figure">${esc(money(f.low, a.currency))} – ${esc(money(f.high, a.currency))}</p>
+             <p class="fd-figure-sub">across ${f.survived} survivor${f.survived === 1 ? '' : 's'} · ±${a.band_pct}%${
+               f.suggestedCeiling !== null ? ` · a quarter is <b>${esc(money(f.suggestedCeiling, a.currency))}</b>` : ''}</p>`
+          : `<p class="fd-warnbox">${f.unpriced} survivor${f.unpriced === 1 ? '' : 's'} missing frequency, elapsed minutes or a rate — no figure yet. A partial sum would look like an estimate and be one short.</p>`}
+      <div class="fd-grid">
+        <label>Band ±%<input type="text" data-f="band_pct" value="${esc(a.band_pct)}"></label>
+        <label class="fd-wide">Rates and assumptions<textarea data-f="rates_note" rows="3">${esc(a.rates_note || '')}</textarea></label>
+      </div>${act('price', 'Save')}</div>`;
 
-    if (stageId === 'report') return `
-      <div class="fd-panel">
-        <div class="fd-grid">
-          <label class="fd-wide">The first build — one, not five
-            <span class="fd-hint">if you cannot choose one, Day 2 is not finished</span>
-            <textarea data-f="first_build" rows="3">${esc(a.first_build || '')}</textarea></label>
-          <label>What it costs<input type="text" data-f="first_build_cost" value="${esc(a.first_build_cost ?? '')}"></label>
-          <label>Recommended ceiling
-            <span class="fd-hint">${f.suggestedCeiling !== null ? `a quarter is ${esc(money(f.suggestedCeiling, a.currency))}` : 'zero where a prerequisite is missing'}</span>
-            <input type="text" data-f="ceiling" value="${esc(a.ceiling ?? '')}"></label>
-          <label class="fd-wide">Report notes<textarea data-f="report_note" rows="5">${esc(a.report_note || '')}</textarea></label>
-        </div>
-        <button class="cx-btn cx-btn-primary" data-op="report">Save</button>
-      </div>`;
+    if (s.stage === 'report') return `<div class="fd-live">${head}
+      <div class="fd-grid">
+        <label class="fd-wide">The first build — one, not five<textarea data-f="first_build" rows="3">${esc(a.first_build || '')}</textarea></label>
+        <label>What it costs<input type="text" data-f="first_build_cost" value="${esc(a.first_build_cost ?? '')}"></label>
+        <label>Ceiling <span class="fd-hint">${f.suggestedCeiling !== null ? `a quarter is ${esc(money(f.suggestedCeiling, a.currency))}` : 'zero where a prerequisite is missing'}</span>
+          <input type="text" data-f="ceiling" value="${esc(a.ceiling ?? '')}"></label>
+        <label class="fd-wide">Report notes<textarea data-f="report_note" rows="4">${esc(a.report_note || '')}</textarea></label>
+      </div>${act('report', 'Save')}</div>`;
 
-    if (stageId === 'decide') return `
-      <div class="fd-panel">
-        <label class="fd-wide">What they said<textarea data-f="decision_note" rows="3">${esc(a.decision_note || '')}</textarea></label>
-        <div class="fd-decide">
-          ${['proceed', 'later', 'declined'].map((d) => `
-            <button class="cx-btn ${a.decision === d ? 'cx-btn-primary' : ''}" data-decide="${d}">${d}</button>`).join('')}
-        </div>
-        ${a.decided_at ? `<p class="fd-note">Decided ${esc(day(a.decided_at))}</p>` : ''}
-      </div>`;
-
-    return `
-      <div class="fd-panel">
+    if (s.stage === 'decide') return `<div class="fd-live">${head}
+      <label class="fd-wide">What they said<textarea data-f="decision_note" rows="3">${esc(a.decision_note || '')}</textarea></label>
+      <div class="fd-decide">${['proceed', 'later', 'declined'].map((d) =>
+        `<button class="cx-btn ${a.decision === d ? 'cx-btn-primary' : ''}" data-decide="${d}">${d}</button>`).join('')}</div>
+      ${a.decided_at ? `<p class="fd-note">Decided ${esc(day(a.decided_at))}</p>` : ''}
+      <details class="fd-add"><summary>Day 90 · outcome, and the public track record</summary>
         <div class="fd-grid">
           <label>Realised value<input type="text" data-f="realised_value" value="${esc(a.realised_value ?? '')}"></label>
-          <label class="fd-wide">What actually happened<textarea data-f="outcome_note" rows="4">${esc(a.outcome_note || '')}</textarea></label>
-        </div>
-        <button class="cx-btn cx-btn-primary" data-op="outcome">Save outcome</button>
-      </div>
-
-      <div class="fd-panel">
-        <h3>Public track record</h3>
+          <label class="fd-wide">What actually happened<textarea data-f="outcome_note" rows="3">${esc(a.outcome_note || '')}</textarea></label>
+        </div>${act('outcome', 'Save outcome')}
+      </details>
+      <details class="fd-add"><summary>Consent and the public count</summary>
         <label class="fd-check"><input type="checkbox" data-f="is_public" ${a.is_public ? 'checked' : ''}>
           <span>Count this on the site. Adds one business and its industry to the public numbers — no name is published.</span></label>
         <label class="fd-wide">Reference quote<textarea data-f="quote" rows="3">${esc(a.reference_quote || '')}</textarea></label>
@@ -332,10 +303,12 @@
           <label>Their role<input type="text" data-f="role" value="${esc(a.reference_role || '')}"></label>
         </div>
         <label class="fd-check"><input type="checkbox" data-f="consent" ${a.reference_consent_at ? 'checked' : ''}>
-          <span>They agreed it may be published. Nothing appears without this, and unticking takes it down.</span></label>
+          <span>They agreed it may be published. Nothing appears without this; unticking takes it down.</span></label>
         <label class="fd-wide">Who confirmed it, and how<input type="text" data-f="consent_by" value="${esc(a.reference_consent_by || '')}"></label>
-        <button class="cx-btn cx-btn-primary" data-op="reference">Save</button>
-      </div>`;
+        ${act('reference', 'Save')}
+      </details></div>`;
+
+    return '';
   }
 
   function candHtml(c, i, a) {
@@ -344,7 +317,7 @@
     return `<div class="fd-cand fd-cand--${tone}">
       <div class="fd-cand-head">
         <span class="fd-cand-name">${esc(c.name)}</span>
-        <span class="fd-cand-verdict">${esc(c.verdict.replace('fails-', 'fails '))}</span>
+        <span class="fd-cand-verdict">${esc(String(c.verdict).replace('fails-', 'fails '))}</span>
         ${cost ? `<span class="fd-cand-cost">${esc(money(cost, a.currency))}/yr</span>` : ''}
         <button class="fd-drop" data-drop="${i}" title="Remove">×</button>
       </div>
@@ -359,19 +332,97 @@
     return f * 52 * (m / 60) * r;
   }
 
-  /* Yes / no / unknown — never a two-state checkbox. "We did not ask" and "no"
-     are different findings, and only one of them is a reason to decline. */
-  function test(name, label, q) {
+  /* Yes / no / unknown. Not a checkbox: "we did not ask" and "no" are
+     different findings, and only one of them declines a candidate. */
+  function testInput(t) {
     return `<fieldset class="fd-test">
-      <legend>${esc(label)}</legend>
-      <p>${esc(q)}</p>
+      <legend>${esc(t.name)}</legend>
+      <p>${esc(t.q)}</p>
       <span>
-        <label><input type="radio" name="fd_${name}" data-t="${name}" value="yes"> Yes</label>
-        <label><input type="radio" name="fd_${name}" data-t="${name}" value="no"> No</label>
-        <label><input type="radio" name="fd_${name}" data-t="${name}" value="" checked> Unknown</label>
+        <label><input type="radio" name="fd_${t.id}" data-t="${t.id}" value="yes"> Yes</label>
+        <label><input type="radio" name="fd_${t.id}" data-t="${t.id}" value="no"> No</label>
+        <label><input type="radio" name="fd_${t.id}" data-t="${t.id}" value="" checked> Unknown</label>
       </span>
     </fieldset>`;
   }
+
+  /* ── The reference bands ──────────────────────────────────────────────── */
+
+  const band = (label, sub, inner) => `<section class="fd-band">
+    <div class="fd-band-head"><h3>${esc(label)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div>
+    ${inner}</section>`;
+
+  const cardGrid = (cards) => `<div class="fd-cards">${cards.map((c) => `
+    <div class="fd-card">
+      <p class="fd-card-kicker">${esc(c.kicker)}</p>
+      <h4>${esc(c.title)}</h4>
+      ${c.body ? `<p>${esc(c.body)}</p>` : ''}
+      ${c.items ? `<ul>${c.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
+      ${c.note ? `<p class="fd-card-note">${esc(c.note)}</p>` : ''}
+      ${c.watch ? `<p class="fd-card-watch"><b>Watch</b> ${esc(c.watch)}</p>` : ''}
+    </div>`).join('')}</div>`;
+
+  const table = (head, rows) => `<div class="fd-table-wrap"><table class="cx-table fd-table">
+    <thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr>${r.map((c, i) =>
+      `<td${i === 0 ? ' class="fd-td-lead"' : ''}>${esc(c) || '<span class="fd-dim">—</span>'}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>`;
+
+  function filterHtml(p) {
+    return band(p.filter.label, p.filter.sub, `<div class="fd-cards">
+      ${p.filter.tests.map((t) => `<div class="fd-card fd-card--test">
+        <p class="fd-card-kicker">${esc(t.n)}</p>
+        <h4>${esc(t.name)}</h4>
+        <p>${esc(t.q)}</p>
+        <p class="fd-card-watch"><b>On failure</b> ${esc(t.fail)}</p>
+      </div>`).join('')}</div>`);
+  }
+
+  function toolchainHtml(p) {
+    return band(p.toolchain.label, p.toolchain.sub, `<div class="fd-cards">
+      ${p.toolchain.items.map((t) => `<div class="fd-card">
+        <p class="fd-card-kicker">${esc(t.phase)} · ${esc(t.step)}</p>
+        <h4>${esc(t.name)}</h4>
+        <p>${esc(t.line)}</p>
+        ${t.note ? `<p class="fd-card-note">${esc(t.note)}</p>` : ''}
+        ${t.watch ? `<p class="fd-card-watch"><b>Watch</b> ${esc(t.watch)}</p>` : ''}
+      </div>`).join('')}</div>`);
+  }
+
+  const commitHtml = (p) => band(p.commit.label, p.commit.sub, cardGrid(p.commit.cards));
+
+  function ladderHtml(p) {
+    return band(p.ladder.label, p.ladder.sub,
+      table(p.ladder.head, p.ladder.rows) + cardGrid(p.ladder.cards));
+  }
+
+  const retainerHtml = (p) => band(p.retainer.label, p.retainer.sub, cardGrid(p.retainer.cards));
+
+  function demandHtml(p) {
+    return band(p.demand.label, p.demand.sub, `<ol class="fd-demand">
+      ${p.demand.rows.map((r) => `<li class="${r.beware ? 'beware' : ''}">
+        <span class="fd-demand-rank">${esc(r.rank)}</span>
+        <div>
+          <p class="fd-demand-tier">${esc(r.tier)}</p>
+          <h4>${esc(r.name)}</h4>
+          <p class="fd-demand-line">${esc(r.line)}</p>
+          <p class="fd-demand-body">${esc(r.body)}</p>
+        </div></li>`).join('')}</ol>`);
+  }
+
+  function recordHtml(p) {
+    return band(p.record.label, p.record.sub,
+      table(p.record.head, p.record.rows) + cardGrid(p.record.cards));
+  }
+
+  function changedHtml(p) {
+    return band(p.changed.label, p.changed.sub, `<ul class="fd-changed">
+      ${p.changed.rows.map((r) => `<li class="fd-changed--${esc(r.kind.toLowerCase())}">
+        <span class="fd-changed-kind">${esc(r.kind)}</span>
+        <div><h4>${esc(r.title)}</h4><p>${esc(r.body)}</p></div></li>`).join('')}</ul>`);
+  }
+
+  const footerHtml = (p) => `<footer class="fd-footer">${p.footer.map((l) => `<p>${esc(l)}</p>`).join('')}</footer>`;
 
   /* ── Wiring ───────────────────────────────────────────────────────────── */
 
@@ -380,9 +431,7 @@
     scope.querySelectorAll('[data-f]').forEach((el) => {
       out[el.dataset.f] = el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value;
     });
-    scope.querySelectorAll('[data-t]:checked').forEach((el) => {
-      out[el.dataset.t] = el.value || null;
-    });
+    scope.querySelectorAll('[data-t]:checked').forEach((el) => { out[el.dataset.t] = el.value || null; });
     return out;
   }
 
@@ -394,8 +443,9 @@
     root.addEventListener('click', async (e) => {
       const openRow = e.target.closest('[data-open]');
       if (openRow) { void openAssessment(openRow.dataset.open); return; }
-
-      if (e.target.closest('#fdBack')) { state.open = null; render(); return; }
+      if (e.target.closest('#fdClose')) { state.open = null; render(); return; }
+      if (e.target.closest('#fdRetry')) { void loadRegister(); return; }
+      if (e.target.closest('#fdToggleStart')) { state.showStart = !state.showStart; render(); return; }
 
       if (e.target.closest('#fdCreate')) {
         const name = $('fdNewName')?.value.trim();
@@ -408,37 +458,45 @@
             currency: $('fdNewCurrency')?.value.trim() || 'USD',
             gate_token: $('fdNewGate')?.value.trim() || null,
           });
-          await loadRegisterQuiet();
+          state.showStart = false;
+          await loadRegister(true);
           if (d.id) void openAssessment(d.id);
         } catch (err) { window.pgToast?.(err.message, 'error'); }
         return;
       }
 
-      const stage = e.target.closest('[data-stage]');
-      if (stage) { void op({ op: 'stage', stage: stage.dataset.stage }); return; }
-
       const decide = e.target.closest('[data-decide]');
       if (decide) {
-        const panel = decide.closest('.fd-panel');
-        void op({ op: 'decide', decision: decide.dataset.decide, ...collect(panel) });
+        void op({ op: 'decide', decision: decide.dataset.decide, ...collect(decide.closest('.fd-live')) });
         return;
       }
-
       const drop = e.target.closest('[data-drop]');
       if (drop) { void op({ op: 'drop', index: Number(drop.dataset.drop) }); return; }
 
       const save = e.target.closest('[data-op]');
       if (save) {
-        const panel = save.closest('.fd-panel');
-        void op({ op: save.dataset.op, ...collect(panel) });
+        /* Scope to the nearest details block when there is one, so the
+           consent form and the outcome form do not post each other's fields. */
+        const scope = save.closest('details') || save.closest('.fd-live');
+        void op({ op: save.dataset.op, ...collect(scope) });
       }
+    });
+
+    /* Clicking a step card moves the client to that step — the rail and the
+       board are the same object, so there is no separate stage control. */
+    root.addEventListener('dblclick', (e) => {
+      const card = e.target.closest('.fd-step');
+      if (!card || !state.open) return;
+      const idx = [...root.querySelectorAll('.fd-step')].indexOf(card);
+      const stage = pb().arc.steps[idx]?.stage;
+      if (stage && stage !== state.open.assessment.stage) void op({ op: 'stage', stage });
     });
   }
 
   document.addEventListener('pg:tab-change', (e) => {
     if (e.detail?.tab !== 'agents-fiveday') return;
     wire();
-    if (!state.loaded) void loadRegister();
+    if (!state.loaded) void loadRegister(); else render();
   });
 
   window.PathGuruFiveDay = { loadRegister, openAssessment };
