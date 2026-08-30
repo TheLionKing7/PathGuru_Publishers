@@ -20,7 +20,7 @@
  * ── SMALL BUSINESSES ONLY, BY CONSTRUCTION ──────────────────────────────────
  *
  * The spine is `readiness_gate`, and the gate is only ever served to firms
- * under ten staff — /diagnostic routes everyone else into the twelve-question
+ * under fifty staff — /diagnostic routes everyone else into the twelve-question
  * FrictionIQ instrument instead. So this register cannot accidentally fill up
  * with mid-market prospects; they are a different instrument with a different
  * register, and mixing them would make both counts meaningless.

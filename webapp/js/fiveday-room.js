@@ -175,7 +175,7 @@
 
   /* ── The lifecycle register ─────────────────────────────────────────────
      Every small business from the gate onward, not only the ones that reached
-     an assessment. The gate is served exclusively to firms under ten staff, so
+     an assessment. The gate is served exclusively to firms under fifty staff, so
      this cannot fill with mid-market prospects — they are a different
      instrument with a different register. */
 
@@ -198,7 +198,7 @@
     if (!l.rows.length) {
       return `<p class="fd-live-text fd-dim">Nothing in the funnel yet. It fills from
         <a href="https://www.digitafusion.com/diagnostic" target="_blank" rel="noopener">the three questions</a>
-        — a business under ten staff answers them, and the row appears here whether they pass or not.</p>`;
+        — a business under fifty staff answers them, and the row appears here whether they pass or not.</p>`;
     }
 
     const degraded = Object.entries(l.degraded || {}).filter(([, bad]) => bad).map(([k]) => k);
