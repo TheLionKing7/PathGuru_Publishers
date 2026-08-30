@@ -266,7 +266,12 @@
 
   function blockHtml(b) {
     if (b.formula) return `<p class="fd-formula">${esc(b.formula)}</p>`;
-    return `<div class="fd-block">
+    /* OUT is what the step produces and WATCH is how it fails. The board gives
+       each its own treatment — one boxed, one in the page's only red — because
+       an operator mid-call is scanning for exactly those two. */
+    const kind = /^out$/i.test(b.label) ? ' fd-block--out'
+      : /^watch$/i.test(b.label) ? ' fd-block--watch' : '';
+    return `<div class="fd-block${kind}">
       <p class="fd-block-label">${esc(b.label)}</p>
       ${b.items ? `<ul>${b.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`
                 : `<p class="fd-block-text">${esc(b.text)}</p>`}
@@ -410,11 +415,19 @@
 
   /* ── The reference bands ──────────────────────────────────────────────── */
 
+  /* The board opens every band with a monospaced marker, its subtitle beside
+     it, and a rule running out to the right margin. A serif headline instead
+     reads as a chapter of a book; this reads as an instrument, which is what
+     the thing is. */
   const band = (label, sub, inner) => `<section class="fd-band">
-    <div class="fd-band-head"><h3>${esc(label)}</h3>${sub ? `<p>${esc(sub)}</p>` : ''}</div>
+    <div class="fd-band-head">
+      <span class="fd-band-label">${esc(label)}</span>
+      ${sub ? `<span class="fd-band-sub">${esc(sub)}</span>` : ''}
+      <span class="fd-band-rule" aria-hidden="true"></span>
+    </div>
     ${inner}</section>`;
 
-  const cardGrid = (cards) => `<div class="fd-cards">${cards.map((c) => `
+  const cardGrid = (cards, cols) => `<div class="fd-cards${cols === 4 ? ' fd-cards--4' : ''}">${cards.map((c) => `
     <div class="fd-card">
       <p class="fd-card-kicker">${esc(c.kicker)}</p>
       <h4>${esc(c.title)}</h4>
@@ -441,9 +454,9 @@
   }
 
   function toolchainHtml(p) {
-    return band(p.toolchain.label, p.toolchain.sub, `<div class="fd-cards">
+    return band(p.toolchain.label, p.toolchain.sub, `<div class="fd-cards fd-cards--4">
       ${p.toolchain.items.map((t) => `<div class="fd-card">
-        <p class="fd-card-kicker">${esc(t.phase)} · ${esc(t.step)}</p>
+        <p class="fd-card-kicker">${esc(t.phase)}<span>${esc(t.step)}</span></p>
         <h4>${esc(t.name)}</h4>
         <p>${esc(t.line)}</p>
         ${t.note ? `<p class="fd-card-note">${esc(t.note)}</p>` : ''}
@@ -460,16 +473,20 @@
 
   const retainerHtml = (p) => band(p.retainer.label, p.retainer.sub, cardGrid(p.retainer.cards));
 
+  /* Four across, the way the board ranks them. A vertical list buries the
+     point, which is that the two highest-leverage channels are the two almost
+     nobody works — you only see that when all seven are on screen together. */
   function demandHtml(p) {
     return band(p.demand.label, p.demand.sub, `<ol class="fd-demand">
       ${p.demand.rows.map((r) => `<li class="${r.beware ? 'beware' : ''}">
-        <span class="fd-demand-rank">${esc(r.rank)}</span>
-        <div>
-          <p class="fd-demand-tier">${esc(r.tier)}</p>
-          <h4>${esc(r.name)}</h4>
-          <p class="fd-demand-line">${esc(r.line)}</p>
-          <p class="fd-demand-body">${esc(r.body)}</p>
-        </div></li>`).join('')}</ol>`);
+        <div class="fd-demand-head">
+          <span class="fd-rank">${esc(r.rank)}</span>
+          <span class="fd-tier">${esc(r.tier)}</span>
+        </div>
+        <h4>${esc(r.name)}</h4>
+        <p class="fd-demand-line">${esc(r.line)}</p>
+        <p class="fd-demand-body">${esc(r.body)}</p>
+      </li>`).join('')}</ol>`);
   }
 
   function recordHtml(p) {
@@ -480,8 +497,8 @@
   function changedHtml(p) {
     return band(p.changed.label, p.changed.sub, `<ul class="fd-changed">
       ${p.changed.rows.map((r) => `<li class="fd-changed--${esc(r.kind.toLowerCase())}">
-        <span class="fd-changed-kind">${esc(r.kind)}</span>
-        <div><h4>${esc(r.title)}</h4><p>${esc(r.body)}</p></div></li>`).join('')}</ul>`);
+        <h4><span class="fd-changed-kind">${esc(r.kind)}</span> · ${esc(r.title)}</h4>
+        <p>${esc(r.body)}</p></li>`).join('')}</ul>`);
   }
 
   const footerHtml = (p) => `<footer class="fd-footer">${p.footer.map((l) => `<p>${esc(l)}</p>`).join('')}</footer>`;
