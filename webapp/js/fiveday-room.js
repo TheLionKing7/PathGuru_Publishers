@@ -25,7 +25,7 @@
 (function () {
   'use strict';
 
-  const state = { loaded: false, rows: [], open: null, busy: false, showStart: false, regError: null };
+  const state = { loaded: false, rows: [], life: null, open: null, busy: false, showStart: false, regError: null };
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -44,8 +44,16 @@
 
   async function loadRegister(quiet) {
     try {
-      const d = await api().apiFetch('/api/frictioniq/assessments', { timeoutMs: 15000 });
+      const [d, life] = await Promise.all([
+        api().apiFetch('/api/frictioniq/assessments', { timeoutMs: 15000 }),
+        /* The lifecycle is the register an operator actually wants: every small
+           business from the gate onward, not only the ones that reached an
+           assessment. It is allowed to fail on its own without taking the
+           assessment list with it. */
+        api().apiFetch('/api/frictioniq/lifecycle', { timeoutMs: 15000 }).catch(() => null),
+      ]);
       state.rows = d.assessments || [];
+      state.life = life;
       state.regError = null;
       state.loaded = true;
       if (!quiet) render();
@@ -146,23 +154,11 @@
     const rows = state.rows;
     return `<div class="fd-strip">
       <span class="fd-strip-label">The register</span>
-      <span class="fd-strip-meta">${rows.length ? `${rows.length} assessment${rows.length === 1 ? '' : 's'}` : 'nothing in flight'}</span>
+      <span class="fd-strip-meta">${lifecycleSummary(rows)}</span>
       <button class="cx-btn" id="fdToggleStart">${state.showStart ? 'Cancel' : 'Start one'}</button>
     </div>
 
-    ${rows.length ? `<table class="cx-table fd-table">
-      <thead><tr><th>Client</th><th>Step</th><th>Candidates</th><th>Finding</th><th>Sector</th><th>Started</th></tr></thead>
-      <tbody>${rows.map((r) => {
-        const fx = r.finding || {};
-        return `<tr class="fd-row" data-open="${esc(r.id)}">
-          <td><span class="fd-client">${esc(r.client_name)}</span></td>
-          <td>${esc(stepLabelFor(r.stage))}</td>
-          <td>${fx.listed ? `${fx.listed} / <span class="fd-ok">${fx.survived}</span> / ${fx.killed}` : '—'}</td>
-          <td>${fx.priced ? `${esc(money(fx.low, r.currency))}–${esc(money(fx.high, r.currency))}`
-                : fx.survived ? '<span class="fd-warn">not priced</span>' : '—'}</td>
-          <td>${esc(r.sector || '—')}</td>
-          <td>${esc(day(r.created_at))}</td></tr>`;
-      }).join('')}</tbody></table>` : ''}
+    ${lifecycleHtml()}
 
     ${state.showStart ? `<div class="fd-panel fd-start">
       <div class="fd-grid">
@@ -174,6 +170,72 @@
       </div>
       <button class="cx-btn cx-btn-primary" id="fdCreate">Start · Step 1</button>
     </div>` : ''}`;
+  }
+
+
+  /* ── The lifecycle register ─────────────────────────────────────────────
+     Every small business from the gate onward, not only the ones that reached
+     an assessment. The gate is served exclusively to firms under ten staff, so
+     this cannot fill with mid-market prospects — they are a different
+     instrument with a different register. */
+
+  function lifecycleSummary(rows) {
+    const l = state.life;
+    if (!l) return rows.length ? `${rows.length} assessment${rows.length === 1 ? '' : 's'}` : 'nothing in flight';
+    const f = l.funnel;
+    if (!f.took && !rows.length) return 'nothing in the funnel yet';
+    /* Counts, not rates. A percentage on four rows is theatre; the ratio is
+       shown only once there are ten passes to divide by. */
+    const rate = l.enoughToRate && f.passed
+      ? ` · ${Math.round((f.booked / f.passed) * 100)}% of passes booked`
+      : '';
+    return `${f.took} took the gate · ${f.passed} passed · ${f.booked} booked · ${f.assessed} assessed · ${f.proceeded} proceeding${rate}`;
+  }
+
+  function lifecycleHtml() {
+    const l = state.life;
+    if (!l) return '';
+    if (!l.rows.length) {
+      return `<p class="fd-live-text fd-dim">Nothing in the funnel yet. It fills from
+        <a href="https://www.digitafusion.com/diagnostic" target="_blank" rel="noopener">the three questions</a>
+        — a business under ten staff answers them, and the row appears here whether they pass or not.</p>`;
+    }
+
+    const degraded = Object.entries(l.degraded || {}).filter(([, bad]) => bad).map(([k]) => k);
+
+    return `${degraded.length ? `<p class="fd-live-text fd-warn">Could not read: ${degraded.join(', ')} —
+      those columns are blank rather than wrong.</p>` : ''}
+      <div class="fd-table-wrap"><table class="cx-table fd-table">
+      <thead><tr>
+        <th>Business</th><th>Stage</th><th>Gate</th><th>Booked</th><th>Assessment</th><th>Finding</th><th>Last</th>
+      </tr></thead>
+      <tbody>${l.rows.map((r) => `
+        <tr class="${r.assessmentId ? 'fd-row' : ''}" ${r.assessmentId ? `data-open="${esc(r.assessmentId)}"` : ''}>
+          <td>${r.anonymous
+            ? `<span class="fd-dim">unnamed</span> <span class="fd-tag">${esc(r.enteredVia)}</span>`
+            : `<span class="fd-client">${esc(r.name)}</span>`}
+            ${r.sector ? `<span class="fd-sub">${esc(r.sector)}</span>` : ''}</td>
+          <td><span class="fd-stage fd-stage--${esc(r.stage)}">${esc(stageLabel(r.stage))}</span></td>
+          <td>${r.gateVerdict
+            ? `${esc(r.gateVerdict)} <span class="fd-dim">${esc(r.gateTotal)}</span>${
+                r.gateBlocked.length ? `<span class="fd-sub">missing: ${r.gateBlocked.map(esc).join(', ')}</span>` : ''}`
+            : '<span class="fd-dim">direct</span>'}</td>
+          <td>${r.bookedAt ? esc(day(r.bookedAt)) : '<span class="fd-dim">—</span>'}</td>
+          <td>${r.assessmentStage ? esc(stepLabelFor(r.assessmentStage)) : '<span class="fd-dim">—</span>'}</td>
+          <td>${r.finding && r.finding.listed
+            ? `${r.finding.listed} / <span class="fd-ok">${r.finding.survived}</span> / ${r.finding.killed}${
+                r.finding.priced ? `<span class="fd-sub">${esc(money(r.finding.low, r.currency))}–${esc(money(r.finding.high, r.currency))}</span>` : ''}`
+            : '<span class="fd-dim">—</span>'}
+            ${r.decision ? `<span class="fd-sub">${esc(r.decision)}</span>` : ''}</td>
+          <td>${esc(day(r.lastAt))}</td>
+        </tr>`).join('')}</tbody></table></div>
+
+      <div class="fd-stagekey">${l.stages.map((st) =>
+        `<span title="${esc(st.blurb)}"><b>${l.byStage[st.id] || 0}</b> ${esc(st.label.toLowerCase())}</span>`).join('')}</div>`;
+  }
+
+  function stageLabel(id) {
+    return (state.life?.stages || []).find((s) => s.id === id)?.label || id;
   }
 
   function stepLabelFor(stage) {

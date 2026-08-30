@@ -183,3 +183,24 @@
 
 .fd-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   padding: 14px 16px; margin-bottom: 14px; }
+
+/* ── Lifecycle register ───────────────────────────────────────────────── */
+.fd-sub { display: block; margin-top: 2px; font-size: 10.5px; color: var(--text-muted); }
+.fd-tag { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted);
+  border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; }
+
+.fd-stage { display: inline-block; font-size: 10.5px; letter-spacing: .04em;
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; color: var(--text-secondary); white-space: nowrap; }
+/* A decline is not a failure state — it is the instrument working — so it is
+   muted rather than red. Red is reserved for something being wrong. */
+.fd-stage--declined  { color: var(--text-muted); }
+.fd-stage--gated     { border-color: var(--gold-dim); color: var(--gold); }
+.fd-stage--intake    { border-color: var(--gold-dim); color: var(--gold); }
+.fd-stage--booked    { border-color: var(--blue); color: var(--blue); }
+.fd-stage--assessing { border-color: var(--blue); color: var(--blue); }
+.fd-stage--decided   { border-color: var(--green); color: var(--green); }
+.fd-stage--outcome   { border-color: var(--green); background: rgba(62,207,142,.1); color: var(--green); }
+
+.fd-stagekey { display: flex; flex-wrap: wrap; gap: 14px; margin: 2px 0 16px;
+  font-size: 11.5px; color: var(--text-muted); }
+.fd-stagekey b { color: var(--text-primary); font-variant-numeric: tabular-nums; }

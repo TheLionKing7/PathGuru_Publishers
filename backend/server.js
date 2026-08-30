@@ -4250,6 +4250,22 @@ Write the full article now.`;
     return;
   }
 
+  /* GET /api/frictioniq/lifecycle — the small-business funnel, gate to outcome.
+     Spined on readiness_gate, which is only ever served to firms under ten
+     staff, so this register cannot fill with mid-market prospects. */
+  if (req.method === 'GET' && path === '/api/frictioniq/lifecycle') {
+    try {
+      const { loadLifecycle } = await import('./skills/lifecycle.js');
+      json(res, await loadLifecycle({
+        limit: Math.min(Number(url.searchParams.get('limit')) || 300, 1000),
+      }));
+    } catch (e) {
+      console.error('[Lifecycle] failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && path === '/api/frictioniq/assessment') {
     try {
       const { loadAssessment, reckon, STAGES, VERDICTS } = await import('./skills/assessment5d.js');

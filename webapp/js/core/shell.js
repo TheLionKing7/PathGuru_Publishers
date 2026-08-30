@@ -29,7 +29,6 @@
       defaultTab:   'agents-ip',
       sections: {
         'agents-ip':      'Blueprint Library',
-        'agents-content': 'Content Schedule',
         'agents-prompts': 'Prompt Library',
         'agents-fiveday': 'Five-Day Assessment',
       },
@@ -89,7 +88,7 @@
   DEPARTMENTS.storefront = DEPARTMENTS.products;
 
   const INTELLIGENCE_TABS = new Set([
-    'agents-ip', 'agents-content', 'agents-prompts', 'agents-fiveday',
+    'agents-ip', 'agents-prompts', 'agents-fiveday',
   ]);
 
   const BLOGROOM_TABS = new Set(['blog', 'writer', 'schedule', 'blog-assets']);
