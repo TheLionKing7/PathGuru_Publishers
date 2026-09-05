@@ -237,6 +237,15 @@ function detectTrack(text) {
   return top[1] >= 1 ? top[0] : null;
 }
 
+// Map Aria's internal track keys to the DigiFusion public intake slugs.
+const TRACK_SLUGS = {
+  automation:    'ai-automation',
+  bd:            'business-development',
+  digital_media: 'digital-media',
+};
+
+const DIGIFUSION_BASE = (process.env.DIGIFUSION_SITE_URL || 'https://www.digitafusion.com').replace(/\/$/, '');
+
 // ══════════════════════════════════════════════════════════════════════════════
 // ASSISTANT AGENT CLASS
 // ══════════════════════════════════════════════════════════════════════════════
@@ -375,7 +384,7 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the
       // "Book with Aria" and "Send me the link"
       // If neither was chosen yet, append a natural offer to the response
       if (!response.toLowerCase().includes('book') && !response.toLowerCase().includes('session')) {
-        response += `\n\nWe're at a point where a strategy session would be the right next step. I can either collect your details now and confirm a time that works, or send you a link to pick your own slot — whichever you prefer.`;
+        response += `\n\nWe're at a point where a strategy session would be the right next step. I can either collect your details now and confirm a time that works, or send you a short form to fill in at your own pace — whichever you prefer.`;
       }
     }
 
@@ -392,10 +401,17 @@ ${score >= 4 && !leadState.bookingOffered ? 'If appropriate, briefly mention the
 
     // Detect if visitor chose "send me the link"
     const wantsLink = !isCollectingBooking && updatedLeadState.bookingOffered &&
-      ['send.*link', 'link.*please', 'link.*send', 'own.*time', 'pick.*time', 'choose.*time', 'calendly', 'self.*service'].some(s => new RegExp(s, 'i').test(message));
+      ['send.*link', 'link.*please', 'link.*send', 'own.*time', 'pick.*time', 'choose.*time', 'calendly', 'self.*service', 'short form', 'fill.*out'].some(s => new RegExp(s, 'i').test(message));
 
     if (wantsLink) {
-      bookingUrl = process.env.CALENDLY_BOOKING_URL || 'https://calendly.com/digifusion/strategy-session';
+      // The link Aria hands out is the intake-only form — business size plus
+      // business info, no booking, no gate, no diagnostic. A visitor gets to
+      // hand over their details at their own pace rather than sit through a
+      // conversation first.
+      const slug = TRACK_SLUGS[updatedLeadState.track] || null;
+      bookingUrl = slug
+        ? `${DIGIFUSION_BASE}/agency/booking/start/${slug}?booking=off`
+        : `${DIGIFUSION_BASE}/agency/booking`;
       action = 'offer_booking';
     }
 
