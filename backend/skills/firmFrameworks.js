@@ -466,7 +466,12 @@ never count them when asked how many frameworks the firm has.
 
 Describe OUTCOMES only in chat — never internal methodology steps or scoring logic.
 
-BOOKING: https://calendly.com/digifusion/strategy
+BOOKING (book a strategy session): https://calendly.com/digitafusion-strategy-session/30min
+
+INTAKE FORM (no booking — the visitor just fills their business size and business info themselves):
+  AI Automation — https://www.digitafusion.com/agency/booking/start/ai-automation?booking=off
+  Business Development — https://www.digitafusion.com/agency/booking/start/business-development?booking=off
+  Digital Media — https://www.digitafusion.com/agency/booking/start/digital-media?booking=off
 `.trim();
 }
 

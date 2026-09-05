@@ -551,7 +551,7 @@ META_WHATSAPP_TOKEN=...
 META_PHONE_NUMBER_ID=...
 
 # Booking
-CALENDLY_BOOKING_URL=https://calendly.com/digifusion/strategy-session
+CALENDLY_BOOKING_URL=https://calendly.com/digitafusion-strategy-session/30min
 
 PORT=8787
 ```
