@@ -42,6 +42,12 @@ _to_delete/
 .cursor/
 .continue/
 .cline/
+.claude/
+.sixth/
+.agents/
+.gemini/
+.kiro/
+.clinerules
 
 # Scratch artefacts
 tmp-*

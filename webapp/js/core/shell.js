@@ -30,7 +30,6 @@
       sections: {
         'agents-ip':      'Blueprint Library',
         'agents-prompts': 'Prompt Library',
-        'agents-fiveday': 'Five-Day Assessment',
       },
     },
     products: {
@@ -81,6 +80,7 @@
       defaultTab:   'frictioniq',
       sections: {
         frictioniq: 'Operator Console',
+        'frictioniq-fiveday': 'Five-Day Assessment',
       },
     },
   };
@@ -88,7 +88,7 @@
   DEPARTMENTS.storefront = DEPARTMENTS.products;
 
   const INTELLIGENCE_TABS = new Set([
-    'agents-ip', 'agents-prompts', 'agents-fiveday',
+    'agents-ip', 'agents-prompts',
   ]);
 
   const BLOGROOM_TABS = new Set(['blog', 'writer', 'schedule', 'blog-assets']);

@@ -148,7 +148,6 @@
            library of gated IP. The panel markup is still below and unreachable;
            move it into Blog Room or delete it, but it does not belong here. -->
       <button type="button" class="dept-route-tab" data-dept-tab="agents-prompts" role="tab" aria-selected="false">Prompt Library</button>
-      <button type="button" class="dept-route-tab" data-dept-tab="agents-fiveday" role="tab" aria-selected="false">Five-Day Assessment</button>
     </nav>
 
     <!-- ══════════════════════════════════════════════
@@ -1253,11 +1252,21 @@
                target="_blank" rel="noopener" title="Open the storefront console on digitafusion.com">Open in new tab</a>
           </div>
         </header>
+        <header class="panel-header" data-for="frictioniq-fiveday">
+          <div>
+            <p class="panel-eyebrow">FrictionIQ</p>
+            <h1 class="panel-title">Five-Day Assessment</h1>
+          </div>
+        </header>
       </div>
       <div class="module-topnav" role="tablist" aria-label="FrictionIQ sections">
         <button class="module-tab active" data-subtab="frictioniq" role="tab" aria-selected="true">
           <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
           Register
+        </button>
+        <button class="module-tab" data-subtab="frictioniq-fiveday" role="tab" aria-selected="false">
+          <svg class="tab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M10 21v-6h4v6"/></svg>
+          Five-Day Assessment
         </button>
       </div><!-- /.module-topnav -->
 
@@ -1375,6 +1384,14 @@
             </div>
           </div>
         </section><!-- /#tab-frictioniq -->
+
+        <!-- ── FIVE-DAY ASSESSMENT ───────────────────────────────────────
+             The playbook and the register on one screen, filed under the
+             FrictionIQ register as its own sub-tab — the small-business path
+             lives beside the twelve-domain register it feeds. -->
+        <section class="tab-panel" id="tab-frictioniq-fiveday" aria-label="Five-Day Assessment">
+          <div class="fiveday-room-body" id="fdBody"></div>
+        </section><!-- /#tab-frictioniq-fiveday -->
       </div><!-- /.module-body -->
     </div><!-- /#module-frictioniq -->
 
@@ -1446,12 +1463,6 @@
           <div class="header-actions">
             <span class="pl-count" id="plCount"></span>
             <button class="btn-secondary btn-sm" id="plBlocksBtn">Blocks &amp; clauses</button>
-          </div>
-        </header>
-        <header class="panel-header" data-for="agents-fiveday">
-          <div>
-            <p class="panel-eyebrow">Intelligence Library</p>
-            <h1 class="panel-title">Five-Day Assessment</h1>
           </div>
         </header>
         <header class="panel-header" data-for="agents-console">
@@ -2144,14 +2155,6 @@
 
           </div><!-- /.prompt-room-body -->
         </section><!-- /#tab-agents-prompts -->
-
-        <!-- ── FIVE-DAY ASSESSMENT ───────────────────────────────────────
-             The playbook and the register on one screen. Splitting them would
-             mean reading the method in one tab and typing into another during
-             a live call, which is exactly when nobody does it. -->
-        <section class="tab-panel" id="tab-agents-fiveday" aria-label="Five-Day Assessment">
-          <div class="fiveday-room-body" id="fdBody"></div>
-        </section><!-- /#tab-agents-fiveday -->
 
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->

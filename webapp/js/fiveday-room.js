@@ -515,7 +515,7 @@
   }
 
   function wire() {
-    const root = $('tab-agents-fiveday');
+    const root = $('tab-frictioniq-fiveday');
     if (!root || root.dataset.wired) return;
     root.dataset.wired = '1';
 
@@ -573,7 +573,7 @@
   }
 
   document.addEventListener('pg:tab-change', (e) => {
-    if (e.detail?.tab !== 'agents-fiveday') return;
+    if (e.detail?.tab !== 'frictioniq-fiveday') return;
     wire();
     if (!state.loaded) void loadRegister(); else render();
   });

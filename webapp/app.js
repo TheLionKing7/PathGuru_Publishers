@@ -15,7 +15,7 @@ const MODULE_OF_TAB = {
   'agents-console': 'agents', 'agents-tasks': 'agents',
   'agents-leads': 'agents', 'agents-ip': 'agents',
   'agents-content': 'agents', 'agents-prompts': 'agents',
-  'agents-fiveday': 'agents',
+  'frictioniq-fiveday': 'frictioniq',
   frictioniq: 'frictioniq',
 };
 
