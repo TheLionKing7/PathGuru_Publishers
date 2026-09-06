@@ -3876,6 +3876,26 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // GET /api/intake — web intake submissions (intake_submission table). The
+  // web form is the self-serve path; Aria's conversational path lives in
+  // `leads`. One pipeline reads both so no prospect is invisible.
+  if (req.method === 'GET' && path === '/api/intake') {
+    const { getSupabase: _getDb } = await import('./supabaseClient.js');
+    const db = _getDb();
+    if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const limit = parseInt(url.searchParams.get('limit') || '200', 10);
+      const { data, error } = await db
+        .from('intake_submission')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      json(res, { intakes: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
 
   // ══════════════════════════════════════════════════════════════════
   // FIRM IP & BLUEPRINT ROUTES

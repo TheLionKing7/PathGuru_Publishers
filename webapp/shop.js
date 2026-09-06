@@ -235,34 +235,64 @@
     }
   }
 
+  const TRACK_LABEL = {
+    'ai-automation': 'AI Automation & SaaS', 'business-development': 'Business Development', 'digital-media': 'Digital Media',
+    automation: 'AI Automation & SaaS', bd: 'Business Development', digital_media: 'Digital Media',
+    general: 'General Enquiry',
+  };
+
   async function loadIntakeLeads () {
     const wrap = document.getElementById('shopIntakeTable');
     if (!wrap) return;
     wrap.innerHTML = '<p class="shop-empty-msg">Loading intake pipeline…</p>';
     try {
-      const res = await fetch(`${getBackendUrl()}/api/agents/leads?limit=50`);
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || res.statusText);
-      const leads = (json.leads || []).filter(l => {
-        const conv = Array.isArray(l.conversation) ? l.conversation : [];
-        return l.intake_data || conv.length >= 6 || l.score >= 3 || l.status === 'booked';
-      });
-      wrap.innerHTML = leads.length ? `
+      const [leadsRes, intakesRes] = await Promise.all([
+        fetch(`${getBackendUrl()}/api/agents/leads?limit=100`),
+        fetch(`${getBackendUrl()}/api/intake?limit=200`),
+      ]);
+      const leadsJson = await leadsRes.json().catch(() => ({}));
+      const intakesJson = await intakesRes.json().catch(() => ({}));
+
+      const aria = (leadsJson.leads || []).map(l => ({
+        name: l.name || l.email || '—',
+        email: l.email || '',
+        track: TRACK_LABEL[l.track] || l.track || '—',
+        size: '—',
+        score: l.score ?? '—',
+        status: l.status || 'new',
+        intake: l.intake_data || (Array.isArray(l.conversation) && l.conversation.length >= 6) ? 'Complete' : 'In progress',
+        source: 'Aria',
+      }));
+
+      const web = (intakesJson.intakes || []).map(r => ({
+        name: r.contact_name || r.company || r.work_email || '—',
+        email: r.work_email || '',
+        track: TRACK_LABEL[r.track] || r.track || '—',
+        size: r.answers?.size || '—',
+        score: r.score ?? '—',
+        status: r.status || (r.lifecycle === 'complete' ? 'new' : 'partial'),
+        intake: r.lifecycle === 'complete' ? 'Complete' : 'In progress',
+        source: 'Web',
+      }));
+
+      const rows = [...web, ...aria];
+      wrap.innerHTML = rows.length ? `
         <table class="shop-table">
-          <thead><tr><th>Contact</th><th>Track</th><th>Score</th><th>Status</th><th>Intake</th><th>Source</th></tr></thead>
+          <thead><tr><th>Contact</th><th>Track</th><th>Size</th><th>Score</th><th>Status</th><th>Intake</th><th>Source</th></tr></thead>
           <tbody>
-            ${leads.map(l => `
+            ${rows.map(l => `
               <tr>
-                <td>${esc(l.name || l.email || '—')}<br><span class="mono" style="font-size:11px;color:var(--text-muted)">${esc(l.email || '')}</span></td>
-                <td>${esc(l.challenge?.slice(0, 40) || 'Consulting')}</td>
-                <td>${esc(l.score ?? '—')}</td>
-                <td><span class="status-pill ${esc(l.status || 'new')}">${esc(l.status || 'new')}</span></td>
-                <td>${l.intake_data || (Array.isArray(l.conversation) && l.conversation.length >= 6) ? 'Complete' : 'In progress'}</td>
-                <td>${l.booking_url ? `<a href="${esc(l.booking_url)}" target="_blank" rel="noopener" style="font-size:11px">Calendly</a>` : l.source_url ? `<a href="${esc(l.source_url)}" target="_blank" rel="noopener" style="font-size:11px">Source</a>` : '—'}</td>
+                <td>${esc(l.name)}<br><span class="mono" style="font-size:11px;color:var(--text-muted)">${esc(l.email)}</span></td>
+                <td>${esc(l.track)}</td>
+                <td>${esc(l.size)}</td>
+                <td>${esc(l.score)}</td>
+                <td><span class="status-pill ${esc(l.status)}">${esc(l.status)}</span></td>
+                <td>${esc(l.intake)}</td>
+                <td>${esc(l.source)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
-      ` : '<p class="shop-empty-msg">No qualified intake leads yet. Aria syncs completed intakes to Notion.</p>';
+      ` : '<p class="shop-empty-msg">No intake submissions yet — the web form and Aria both feed this list.</p>';
     } catch (e) {
       wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
     }
