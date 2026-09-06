@@ -4311,6 +4311,24 @@ Write the full article now.`;
     return;
   }
 
+  /* GET /api/engagements/board — the unified operating board. One projection
+     across BOTH registers (assessment_5d + frictioniq_engagement) so the
+     operator sees every delivery in one table: who, what stage, which agent,
+     which framework, and for how much. The instruments stay separate in
+     storage; the board is the view that makes them one pipeline. */
+  if (req.method === 'GET' && path === '/api/engagements/board') {
+    try {
+      const { loadBoard } = await import('./skills/engagementBoard.js');
+      json(res, await loadBoard({
+        limit: Math.min(Number(url.searchParams.get('limit')) || 500, 1000),
+      }));
+    } catch (e) {
+      console.error('[EngagementBoard] failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && path === '/api/frictioniq/assessment') {
     try {
       const { loadAssessment, reckon, STAGES, VERDICTS } = await import('./skills/assessment5d.js');

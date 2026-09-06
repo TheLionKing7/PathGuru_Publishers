@@ -81,6 +81,7 @@
       sections: {
         frictioniq: 'Operator Console',
         'frictioniq-fiveday': 'Five-Day Assessment',
+        'frictioniq-engagements': 'Engagements',
       },
     },
   };

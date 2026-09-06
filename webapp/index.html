@@ -25,6 +25,7 @@
        to set its own grid without fighting a more general rule. -->
   <link rel="stylesheet" href="css/prompt-library.css">
   <link rel="stylesheet" href="css/fiveday-room.css">
+  <link rel="stylesheet" href="css/engagements-board.css">
 
   <!-- OneSignal: PathGuru is the sending side (backend notifier.js uses the REST API).
        The browser SDK belongs on digitafusion.com where subscribers opt in.
@@ -1253,6 +1254,13 @@
         <section class="tab-panel" id="tab-frictioniq-fiveday" aria-label="Five-Day Assessment">
           <div class="fiveday-room-body" id="fdBody"></div>
         </section><!-- /#tab-frictioniq-fiveday -->
+
+        <!-- ── ENGAGEMENTS ──────────────────────────────────────────────────
+             The unified operating board: both registers in one table. Read-only
+             projection of assessment_5d + frictioniq_engagement. -->
+        <section class="tab-panel" id="tab-frictioniq-engagements" aria-label="Engagements">
+          <div class="engagements-board-body" id="engBoard"></div>
+        </section><!-- /#tab-frictioniq-engagements -->
       </div><!-- /.module-body -->
     </div><!-- /#module-frictioniq -->
 
@@ -2249,6 +2257,8 @@
        register into it. -->
   <script src="js/fiveday-playbook.js"></script>
   <script src="js/fiveday-room.js"></script>
+  <!-- The unified engagement board: one read across both registers. -->
+  <script src="js/engagements-board.js"></script>
 
   <!-- Industry blocks & clauses, readable on their own. Lives outside the
        module shells so it is not hidden with them. -->

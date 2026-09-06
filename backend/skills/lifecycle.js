@@ -183,6 +183,14 @@ function rowFor({ gate, intake, booking, asmt }) {
     decidedAt: asmt?.decided_at || null,
     outcomeAt: asmt?.outcome_at || null,
     realisedValue: asmt?.realised_value ?? null,
+    /* Operating envelope (0027) — surfaced so the register answers "who owns
+       it, which framework, what next, and for how much". */
+    assignedAgent: asmt?.assigned_agent || null,
+    frameworkId: asmt?.framework_id || null,
+    recommendation: asmt?.recommendation || null,
+    nextStage: asmt?.next_stage || null,
+    serviceAmount: asmt?.service_amount ?? null,
+    serviceCurrency: asmt?.service_currency || asmt?.currency || 'USD',
     stage,
     lastAt: asmt?.outcome_at || asmt?.decided_at || asmt?.created_at || bookedAt
       || intake?.created_at || gate?.created_at || null,

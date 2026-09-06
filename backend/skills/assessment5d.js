@@ -13,6 +13,7 @@
  */
 
 import { getSupabase } from '../supabaseClient.js';
+import { routeEngagement } from './engagementRouting.js';
 
 export const STAGES = [
   { id: 'observe', day: 'Day 1', label: 'Observe',
@@ -158,9 +159,40 @@ export async function createAssessment(input) {
     gate_token: input.gate_token || null,
     session_token: input.session_token || null,
     created_by: input.created_by || 'pathguru',
+    /* Operating envelope (0027). Spread-not-null so a create survives
+       before the migration is applied. */
+    ...(input.assigned_agent ? { assigned_agent: input.assigned_agent } : {}),
+    ...(input.framework_id ? { framework_id: input.framework_id } : {}),
+    ...(input.recommendation ? { recommendation: input.recommendation } : {}),
+    ...(input.next_stage ? { next_stage: input.next_stage } : {}),
+    ...(input.service_amount === undefined ? {} : { service_amount: input.service_amount }),
+    ...(input.service_currency ? { service_currency: input.service_currency } : {}),
   }).select('id').maybeSingle();
   if (error) throw new Error(error.message);
   return data?.id || null;
+}
+
+const PRACTICE_TRACKS = new Set(['ai-automation', 'business-development', 'digital-media']);
+
+/**
+ * Route a concluded five-day assessment to its service-line agent and framework.
+ *
+ * The register itself holds no service line — only sector and size. The service
+ * line is on the intake row that produced this assessment (via gate_token or
+ * session_token), so it is resolved here and the lane defaults to automation
+ * when the intake is a segment route or missing: the five-day instrument's
+ * whole output is ONE automation first-build.
+ */
+async function routeAssessment(a) {
+  let track = null;
+  const token = a.gate_token || a.session_token;
+  if (token) {
+    const col = a.gate_token ? 'gate_token' : 'session_token';
+    const { data } = await db().from('intake_submission').select('track').eq(col, token).maybeSingle();
+    track = data?.track || null;
+  }
+  const lane = PRACTICE_TRACKS.has(track) ? track : 'ai-automation';
+  return routeEngagement({ track: lane, segment: 'sme', sector: a.sector, headcountBand: a.headcount_band });
 }
 
 /** One switch, matching the digifusion route's ops exactly. */
@@ -241,13 +273,24 @@ export async function applyOp(id, op, body = {}) {
       break;
     case 'decide': {
       if (!DECISIONS.has(String(body.decision))) throw new Error('unknown decision');
+      const decision = String(body.decision);
       const now = new Date().toISOString();
       patch = {
-        decision: String(body.decision),
+        decision,
         decision_note: s('decision_note', 2000),
         decided_at: now,
         delivered_at: now,
       };
+      /* Proceed is the promotion step: the assessment becomes a build, so the
+         operating envelope is stamped now — owner, framework, next stage — and
+         the recommendation defaults to the first build when not already set. */
+      if (decision === 'proceed') {
+        const route = await routeAssessment(a);
+        patch.next_stage = 'build';
+        if (route.assigned_agent) patch.assigned_agent = route.assigned_agent;
+        if (route.framework_id) patch.framework_id = route.framework_id;
+        if (!a.recommendation && a.first_build) patch.recommendation = a.first_build;
+      }
       break;
     }
     case 'outcome':
@@ -273,6 +316,16 @@ export async function applyOp(id, op, body = {}) {
       };
       break;
     }
+    case 'operating':
+      patch = {
+        assigned_agent: s('assigned_agent', 40),
+        framework_id: s('framework_id', 60),
+        recommendation: s('recommendation', 4000),
+        next_stage: s('next_stage', 120),
+        service_amount: n('service_amount'),
+        service_currency: s('service_currency', 8) || 'USD',
+      };
+      break;
     default:
       throw new Error(`unknown op "${op}"`);
   }
@@ -288,5 +341,6 @@ function normalise(a) {
     candidates: Array.isArray(a.candidates) ? a.candidates : [],
     band_pct: Number.isFinite(Number(a.band_pct)) ? Number(a.band_pct) : 30,
     is_public: Boolean(a.is_public),
+    service_currency: a.service_currency || a.currency || 'USD',
   };
 }

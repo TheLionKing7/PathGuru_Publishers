@@ -1,0 +1,51 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Engagement Board — one table across both delivery registers.
+   Console tokens, with fallbacks so it reads correctly outside the theme too.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.engagements-board-body {
+  padding: 22px 26px 48px;
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+.eb-masthead { margin-bottom: 18px; }
+.eb-title { font-size: 22px; font-weight: 700; margin: 0 0 6px; color: var(--text, #e7edf7); }
+.eb-lede { color: var(--text-muted, #4d6280); font-size: 14px; margin: 0; }
+.eb-meta { color: var(--text-muted, #4d6280); font-size: 12.5px; margin: 10px 0 0; }
+.eb-warn { color: var(--warning, #f59e0b); }
+
+.eb-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+.eb-chip {
+  padding: 6px 13px; border-radius: 999px; border: 1px solid var(--border, rgba(125,145,180,.25));
+  background: var(--surface, rgba(255,255,255,.03)); color: var(--text-muted, #4d6280);
+  font-size: 12.5px; cursor: pointer; transition: all .15s;
+}
+.eb-chip:hover { color: var(--text, #e7edf7); border-color: var(--blue, #4d9fff); }
+.eb-chip.active { background: var(--blue, #4d9fff); border-color: var(--blue, #4d9fff); color: #07101d; font-weight: 600; }
+
+.eb-table-wrap { overflow-x: auto; border: 1px solid var(--border, rgba(125,145,180,.2)); border-radius: 10px; }
+.eb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 1080px; }
+.eb-table th {
+  text-align: left; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-muted-dim, #4d6280); padding: 10px 12px; border-bottom: 1px solid var(--border, rgba(125,145,180,.2));
+  font-weight: 600; white-space: nowrap;
+}
+.eb-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border, rgba(125,145,180,.12));
+  color: var(--text, #e7edf7); vertical-align: top;
+}
+.eb-table tbody tr:last-child td { border-bottom: 0; }
+.eb-table tbody tr:hover td { background: var(--surface, rgba(255,255,255,.03)); }
+
+.eb-name { font-weight: 600; white-space: nowrap; }
+.eb-rec { max-width: 340px; }
+.eb-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.eb-muted { color: var(--text-muted, #4d6280); }
+
+.eb-badge { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.eb-badge-5d { background: rgba(0,212,170,.14); color: #00d4aa; }
+.eb-badge-fiq { background: rgba(124,58,237,.16); color: #b18bff; }
+
+.eb-error { color: #ef4444; padding: 14px 16px; border: 1px solid rgba(239,68,68,.35); border-radius: 8px; background: rgba(239,68,68,.07); }
+.eb-empty { color: var(--text-muted, #4d6280); font-size: 14px; padding: 18px 0; }
