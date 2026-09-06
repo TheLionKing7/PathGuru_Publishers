@@ -806,137 +806,8 @@
 
       <div class="module-body">
 
-        <!-- Products -->
-        <section class="tab-panel active" id="tab-shop-products" aria-label="Products">
-          <div class="prod-panel-body">
-            <div class="prod-toolbar">
-              <input type="search" id="shopProductSearch" placeholder="Search products..." aria-label="Search products">
-              <select id="shopProductCategory" aria-label="Filter by section">
-                <option value="">All sections</option>
-                <option value="field-guide"> Field Guides</option>
-                <option value="playbook"> Playbooks</option>
-                <option value="research"> Research</option>
-                <option value="tool"> Tools</option>
-                <option value="saas"> SaaS Products</option>
-                <option value="service"> Services</option>
-                <option value="bundle"> Bundles</option>
-              </select>
-              <select id="shopProductStatus" aria-label="Filter by status">
-                <option value="">All statuses</option>
-                <option value="active">Active</option>
-                <option value="archived">Archived</option>
-              </select>
-              <button class="btn-secondary btn-sm" id="shopProductRefresh">Refresh</button>
-              <span class="prod-toolbar-spacer" aria-hidden="true"></span>
-              <button class="btn-primary btn-sm prod-toolbar-add" id="shopProductAddBtn">+ Add Product</button>
-            </div>
-            <div class="prod-list" id="shopProductsTable">
-              <div class="shop-empty-init">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                <p>Click <strong>Refresh</strong> to load products, or <strong>+ Add Product</strong> to create your first one.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Product overlays - module level (fixed), not inside scroll panel -->
-            <div class="prod-form-overlay" id="prodFormOverlay">
-              <div class="prod-form-panel" id="prodFormPanel">
-                <div class="prod-form-header">
-                  <h3 id="prodFormTitle">Add Product</h3>
-                  <button class="btn-secondary btn-sm" id="prodFormCancel"> Close</button>
-                </div>
-                <form class="prod-form-body" id="prodFormEl">
-                  <div class="prod-form-section">
-                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. The Advertising Playbook Vol.1" required></div>
-                    <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
-
-                    <!-- Intelligence Library section + fulfillment type -->
-                    <div class="field-row">
-                      <div class="field">
-                        <label for="prodFormCategory">Library Section <span class="required">*</span></label>
-                        <select id="prodFormCategory">
-                          <option value="">- Select section -</option>
-                          <option value="field-guide"> Field Guide</option>
-                          <option value="playbook"> Automation Playbook</option>
-                          <option value="research"> Research / Case Study</option>
-                          <option value="tool"> Tool / Extension</option>
-                          <option value="saas"> SaaS Product</option>
-                          <option value="service"> Agency Service</option>
-                          <option value="bundle"> Bundle</option>
-                        </select>
-                      </div>
-                      <div class="field">
-                        <label for="prodFormType">Fulfillment Type <span class="required">*</span></label>
-                        <select id="prodFormType">
-                          <option value="download">⬇ Download (ebook, PDF, template)</option>
-                          <option value="subscription"> Subscription (recurring)</option>
-                          <option value="service"> Service (booking / consultation)</option>
-                          <option value="saas"> SaaS (app access)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div class="field-row">
-                      <div class="field"><label for="prodFormStatus">Status</label>
-                        <select id="prodFormStatus">
-                          <option value="active">Active</option>
-                          <option value="draft">Draft</option>
-                        </select>
-                      </div>
-                      <div class="field"><label for="prodFormFeatured">Featured</label>
-                        <select id="prodFormFeatured">
-                          <option value="false">No</option>
-                          <option value="true">Yes - show on hub page</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div class="field-row">
-                      <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
-                      <div class="field"><label for="prodFormCurrency">Currency</label>
-                        <select id="prodFormCurrency">
-                          <option value="USD">USD - US Dollar</option>
-                          <option value="NGN">NGN - Nigerian Naira</option>
-                          <option value="GBP">GBP - British Pound</option>
-                          <option value="EUR">EUR - Euro</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pages..."></textarea></div>
-                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://..."></div>
-                    <div class="field"><label for="prodFormFulfillment">Fulfillment metadata (JSON)</label><textarea id="prodFormFulfillment" rows="3" placeholder='{"r2_key":"intelligence/playbooks/hospitality.zip","filename":"Hospitality Automation Suite.zip"}'></textarea></div>
-                  </div>
-                  <div class="prod-form-error" id="prodFormError" hidden></div>
-                  <div class="prod-form-actions">
-                    <button type="button" class="btn-secondary" onclick="document.getElementById('prodFormCancel').click()">Cancel</button>
-                    <button type="submit" class="btn-primary" id="prodFormSave">Save product</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-            <!-- Product detail slide panel -->
-            <div class="prod-detail-overlay" id="prodDetailOverlay">
-              <div class="prod-detail-panel" id="prodDetailPanel">
-                <div class="prod-detail-header">
-                  <div>
-                    <span id="prodDetailBadge" class="prod-type-badge" style="margin-bottom:4px;display:inline-block"></span>
-                    <h3 id="prodDetailName"></h3>
-                    <span id="prodDetailSlug" style="font-size:11px;color:var(--text-muted)"></span>
-                  </div>
-                  <div class="prod-detail-actions">
-                    <button class="btn-primary btn-sm" id="prodDetailEditBtn">Edit</button>
-                    <button class="btn-secondary btn-sm" id="prodDetailClose"></button>
-                  </div>
-                </div>
-                <div class="prod-detail-body" id="prodDetailBody"></div>
-              </div>
-            </div>
-
         <!-- Consulting & Bookings - CMS + Calendly + intake + Notion -->
-        <section class="tab-panel" id="tab-shop-services" aria-label="Services and Bookings">
+        <section class="tab-panel active" id="tab-shop-services" aria-label="Services and Bookings">
           <div class="shop-panel-body">
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Consulting operations</h2>
@@ -1453,6 +1324,12 @@
           <div class="header-actions">
             <span class="pl-count" id="plCount"></span>
             <button class="btn-secondary btn-sm" id="plBlocksBtn">Blocks &amp; clauses</button>
+          </div>
+        </header>
+        <header class="panel-header" data-for="shop-products">
+          <div>
+            <p class="panel-eyebrow">Intelligence Library</p>
+            <h1 class="panel-title">Products</h1>
           </div>
         </header>
         <header class="panel-header" data-for="agents-console">
@@ -2145,6 +2022,135 @@
 
           </div><!-- /.prompt-room-body -->
         </section><!-- /#tab-agents-prompts -->
+
+        <!-- Products (Intelligence) -->
+        <section class="tab-panel" id="tab-shop-products" aria-label="Products">
+          <div class="prod-panel-body">
+            <div class="prod-toolbar">
+              <input type="search" id="shopProductSearch" placeholder="Search products..." aria-label="Search products">
+              <select id="shopProductCategory" aria-label="Filter by section">
+                <option value="">All sections</option>
+                <option value="field-guide"> Field Guides</option>
+                <option value="playbook"> Playbooks</option>
+                <option value="research"> Research</option>
+                <option value="tool"> Tools</option>
+                <option value="saas"> SaaS Products</option>
+                <option value="service"> Services</option>
+                <option value="bundle"> Bundles</option>
+              </select>
+              <select id="shopProductStatus" aria-label="Filter by status">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+              </select>
+              <button class="btn-secondary btn-sm" id="shopProductRefresh">Refresh</button>
+              <span class="prod-toolbar-spacer" aria-hidden="true"></span>
+              <button class="btn-primary btn-sm prod-toolbar-add" id="shopProductAddBtn">+ Add Product</button>
+            </div>
+            <div class="prod-list" id="shopProductsTable">
+              <div class="shop-empty-init">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity=".25"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                <p>Click <strong>Refresh</strong> to load products, or <strong>+ Add Product</strong> to create your first one.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Product overlays - module level (fixed), not inside scroll panel -->
+            <div class="prod-form-overlay" id="prodFormOverlay">
+              <div class="prod-form-panel" id="prodFormPanel">
+                <div class="prod-form-header">
+                  <h3 id="prodFormTitle">Add Product</h3>
+                  <button class="btn-secondary btn-sm" id="prodFormCancel"> Close</button>
+                </div>
+                <form class="prod-form-body" id="prodFormEl">
+                  <div class="prod-form-section">
+                    <div class="field"><label for="prodFormName">Product name <span class="required">*</span></label><input type="text" id="prodFormName" placeholder="e.g. The Advertising Playbook Vol.1" required></div>
+                    <div class="field"><label for="prodFormSlug">URL slug</label><input type="text" id="prodFormSlug" placeholder="auto-generated from name"></div>
+
+                    <!-- Intelligence Library section + fulfillment type -->
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="prodFormCategory">Library Section <span class="required">*</span></label>
+                        <select id="prodFormCategory">
+                          <option value="">- Select section -</option>
+                          <option value="field-guide"> Field Guide</option>
+                          <option value="playbook"> Automation Playbook</option>
+                          <option value="research"> Research / Case Study</option>
+                          <option value="tool"> Tool / Extension</option>
+                          <option value="saas"> SaaS Product</option>
+                          <option value="service"> Agency Service</option>
+                          <option value="bundle"> Bundle</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="prodFormType">Fulfillment Type <span class="required">*</span></label>
+                        <select id="prodFormType">
+                          <option value="download">⬇ Download (ebook, PDF, template)</option>
+                          <option value="subscription"> Subscription (recurring)</option>
+                          <option value="service"> Service (booking / consultation)</option>
+                          <option value="saas"> SaaS (app access)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormStatus">Status</label>
+                        <select id="prodFormStatus">
+                          <option value="active">Active</option>
+                          <option value="draft">Draft</option>
+                        </select>
+                      </div>
+                      <div class="field"><label for="prodFormFeatured">Featured</label>
+                        <select id="prodFormFeatured">
+                          <option value="false">No</option>
+                          <option value="true">Yes - show on hub page</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field-row">
+                      <div class="field"><label for="prodFormPrice">Price</label><input type="number" id="prodFormPrice" placeholder="0.00" min="0" step="0.01"></div>
+                      <div class="field"><label for="prodFormCurrency">Currency</label>
+                        <select id="prodFormCurrency">
+                          <option value="USD">USD - US Dollar</option>
+                          <option value="NGN">NGN - Nigerian Naira</option>
+                          <option value="GBP">GBP - British Pound</option>
+                          <option value="EUR">EUR - Euro</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field"><label for="prodFormDesc">Description</label><textarea id="prodFormDesc" rows="3" placeholder="Short product description visible on library/product pages..."></textarea></div>
+                    <div class="field"><label for="prodFormCoverUrl">Cover image URL</label><input type="url" id="prodFormCoverUrl" placeholder="https://..."></div>
+                    <div class="field"><label for="prodFormFulfillment">Fulfillment metadata (JSON)</label><textarea id="prodFormFulfillment" rows="3" placeholder='{"r2_key":"intelligence/playbooks/hospitality.zip","filename":"Hospitality Automation Suite.zip"}'></textarea></div>
+                  </div>
+                  <div class="prod-form-error" id="prodFormError" hidden></div>
+                  <div class="prod-form-actions">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('prodFormCancel').click()">Cancel</button>
+                    <button type="submit" class="btn-primary" id="prodFormSave">Save product</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <!-- Product detail slide panel -->
+            <div class="prod-detail-overlay" id="prodDetailOverlay">
+              <div class="prod-detail-panel" id="prodDetailPanel">
+                <div class="prod-detail-header">
+                  <div>
+                    <span id="prodDetailBadge" class="prod-type-badge" style="margin-bottom:4px;display:inline-block"></span>
+                    <h3 id="prodDetailName"></h3>
+                    <span id="prodDetailSlug" style="font-size:11px;color:var(--text-muted)"></span>
+                  </div>
+                  <div class="prod-detail-actions">
+                    <button class="btn-primary btn-sm" id="prodDetailEditBtn">Edit</button>
+                    <button class="btn-secondary btn-sm" id="prodDetailClose"></button>
+                  </div>
+                </div>
+                <div class="prod-detail-body" id="prodDetailBody"></div>
+              </div>
+            </div>
 
       </div><!-- /.module-body -->
     </div><!-- /#module-agents -->

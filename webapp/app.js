@@ -7,7 +7,7 @@
 
 const MODULE_OF_TAB = {
   blog: 'blog', 'blog-assets': 'blog',
-  'shop-products': 'shop', 'shop-services': 'shop', 'shop-payments': 'shop',
+  'shop-products': 'agents', 'shop-services': 'shop', 'shop-payments': 'shop',
   'shop-analytics': 'shop', 'shop-settings': 'shop',
   analytics: 'analytics',
   'agents-command': 'agents', 'agents-workflow': 'agents',
@@ -21,7 +21,7 @@ const MODULE_OF_TAB = {
 
 const DEFAULT_TAB_OF_MODULE = {
   blog: 'blog',
-  shop: 'shop-products',
+  shop: 'shop-services',
   analytics: 'analytics',
   agents: 'agents-command',
   frictioniq: 'frictioniq',

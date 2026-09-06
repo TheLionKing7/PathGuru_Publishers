@@ -114,14 +114,12 @@
 
   function moduleForTab(tab, dept) {
     if (BLOGROOM_TABS.has(tab)) return 'blog';
-    if (tab === 'shop-products') return 'shop'; // the catalog lives in the shop module
     const d = dept || deptForTab(tab);
     return d?.module || 'blog';
   }
 
   function deptForModule(module, activeTab) {
     if (module === 'blog') return DEPARTMENTS.blogroom;
-    if (module === 'shop' && activeTab === 'shop-products') return DEPARTMENTS.intelligence;
     if (module === 'agents' && activeTab && INTELLIGENCE_TABS.has(activeTab)) {
       return DEPARTMENTS.intelligence;
     }

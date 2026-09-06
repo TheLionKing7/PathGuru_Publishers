@@ -4956,7 +4956,9 @@ body.pg-shell-v3 .module-shell {
 }
 
 #module-shop .prod-form-overlay,
-#module-shop .prod-detail-overlay {
+#module-shop .prod-detail-overlay,
+#module-agents .prod-form-overlay,
+#module-agents .prod-detail-overlay {
   position: fixed;
   z-index: 300;
 }
