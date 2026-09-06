@@ -107,9 +107,9 @@
         <span class="nav-label-block"><span class="nav-label">Intelligence</span><span class="nav-desc">Library &amp; blueprints</span></span>
       </button>
 
-      <button class="nav-btn" data-dept="products" data-module="shop" title="Tools, SaaS, workflow templates &amp; orders" aria-label="Products and Tools department">
+      <button class="nav-btn" data-dept="products" data-module="shop" title="Bookings, revenue &amp; payments" aria-label="Operations department">
         <span class="nav-icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg></span>
-        <span class="nav-label-block"><span class="nav-label">Products</span><span class="nav-desc">Tools &amp; SaaS</span></span>
+        <span class="nav-label-block"><span class="nav-label">Operations</span><span class="nav-desc">Bookings &amp; revenue</span></span>
       </button>
 
       <button class="nav-btn" data-dept="network" data-module="agents" title="Agent roster, console, tasks &amp; leads" aria-label="Agent Network department">
@@ -148,6 +148,7 @@
            library of gated IP. The panel markup is still below and unreachable;
            move it into Blog Room or delete it, but it does not belong here. -->
       <button type="button" class="dept-route-tab" data-dept-tab="agents-prompts" role="tab" aria-selected="false">Prompt Library</button>
+      <button type="button" class="dept-route-tab" data-dept-tab="shop-products" role="tab" aria-selected="false">Products</button>
     </nav>
 
     <!-- ══════════════════════════════════════════════
@@ -770,29 +771,22 @@
 
       <!-- Per-tab headers -->
       <div class="module-headers">
-        <header class="panel-header active" data-for="shop-products">
-          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Product Catalog</h1></div>
-        </header>
-        <header class="panel-header" data-for="shop-services">
-          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Consulting &amp; Bookings</h1></div>
+        <header class="panel-header active" data-for="shop-services">
+          <div><p class="panel-eyebrow">Operations</p><h1 class="panel-title">Consulting &amp; Bookings</h1></div>
         </header>
         <header class="panel-header" data-for="shop-payments">
-          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Revenue &amp; Payments</h1></div>
+          <div><p class="panel-eyebrow">Operations</p><h1 class="panel-title">Revenue &amp; Payments</h1></div>
         </header>
         <header class="panel-header" data-for="shop-analytics">
-          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Revenue Analytics</h1></div>
+          <div><p class="panel-eyebrow">Operations</p><h1 class="panel-title">Revenue Analytics</h1></div>
         </header>
         <header class="panel-header" data-for="shop-settings">
-          <div><p class="panel-eyebrow">Products &amp; Tools</p><h1 class="panel-title">Commerce Settings</h1></div>
+          <div><p class="panel-eyebrow">Operations</p><h1 class="panel-title">Commerce Settings</h1></div>
         </header>
       </div>
 
       <div class="module-topnav" role="tablist" aria-label="Shop sections">
-        <button class="shop-tab module-tab active" data-subtab="shop-products" role="tab" aria-selected="true">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          Products
-        </button>
-        <button class="shop-tab module-tab" data-subtab="shop-services" role="tab" aria-selected="false">
+        <button class="shop-tab module-tab active" data-subtab="shop-services" role="tab" aria-selected="true">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Services
         </button>
@@ -947,18 +941,14 @@
             <div class="shop-toolbar">
               <h2 class="shop-section-title">Consulting operations</h2>
               <div class="shop-services-tabs">
-                <button type="button" class="shop-services-tab active" data-svc="cms">CMS bookings</button>
-                <button type="button" class="shop-services-tab" data-svc="calendly">Calendly</button>
+                <button type="button" class="shop-services-tab active" data-svc="calendly">Calendly</button>
                 <button type="button" class="shop-services-tab" data-svc="intake">Intake pipeline</button>
                 <button type="button" class="shop-services-tab" data-svc="notion">Notion workspace</button>
               </div>
               <button class="btn-secondary btn-sm" id="shopBookingsRefresh">Refresh</button>
             </div>
-            <p class="shop-services-hint">Aria intake completions sync to Notion automatically. Calendly bookings land in Supabase; CMS bookings come from DigiFusion checkout.</p>
-            <div class="shop-services-pane active" id="shopServicesPaneCms">
-              <div id="shopBookingsTable"><div class="shop-empty"><p>Click Refresh to load CMS service bookings.</p></div></div>
-            </div>
-            <div class="shop-services-pane" id="shopServicesPaneCalendly" hidden>
+            <p class="shop-services-hint">Every intake — web form or Aria — is a lead and lands in Notion. Calendly bookings land in Supabase.</p>
+            <div class="shop-services-pane active" id="shopServicesPaneCalendly">
               <div id="shopCalendlyTable"><div class="shop-empty"><p>Click Refresh to load Calendly schedule.</p></div></div>
             </div>
             <div class="shop-services-pane" id="shopServicesPaneIntake" hidden>

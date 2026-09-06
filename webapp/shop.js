@@ -69,7 +69,7 @@
     return data.data ?? data;
   }
 
-  let _servicesSubTab = 'cms';
+  let _servicesSubTab = 'calendly';
   let _shopAutoRefreshTimer = null;
 
   function startShopAutoRefresh () {
@@ -146,41 +146,11 @@
     document.querySelectorAll('.shop-services-tab').forEach(b => {
       b.classList.toggle('active', b.dataset.svc === svc);
     });
-    const panes = { cms: 'Cms', calendly: 'Calendly', intake: 'Intake', notion: 'Notion' };
+    const panes = { calendly: 'Calendly', intake: 'Intake', notion: 'Notion' };
     Object.entries(panes).forEach(([key, suffix]) => {
       const el = document.getElementById(`shopServicesPane${suffix}`);
       if (el) el.hidden = key !== svc;
     });
-  }
-
-  async function loadBookings () {
-    const wrap = document.getElementById('shopBookingsTable');
-    if (!wrap) return;
-
-    try {
-      const data = await shopFetch('GET', '/api/shop/bookings');
-      if (!data) return;
-
-      const bookings = unwrapData(data).bookings || data.bookings || [];
-
-      wrap.innerHTML = bookings.length ? `
-        <table class="shop-table">
-          <thead><tr><th>Service</th><th>Customer</th><th>Status</th><th>Scheduled</th><th>Created</th></tr></thead>
-          <tbody>
-            ${bookings.map(b => `
-              <tr>
-                <td>${esc(b.product?.name || '—')}</td>
-                <td>${esc(b.order?.customer_name || b.order?.customer_email || '—')}</td>
-                <td><span class="status-pill ${(b.status || '').replace('_','-')}">${esc(b.status || '—')}</span></td>
-                <td>${b.scheduled_at ? fmtDate(b.scheduled_at) : '<em>TBD</em>'}</td>
-                <td>${fmtDate(b.created_at)}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      ` : '<p class="shop-empty-msg">No CMS service bookings yet.</p>';
-    } catch (e) {
-      wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
-    }
   }
 
   async function loadCalendlyBookings () {
@@ -342,7 +312,6 @@
     const btn = document.getElementById('shopBookingsRefresh');
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
     try {
-      if (_servicesSubTab === 'cms') await loadBookings();
       if (_servicesSubTab === 'calendly') await loadCalendlyBookings();
       if (_servicesSubTab === 'intake') await loadIntakeLeads();
       if (_servicesSubTab === 'notion') await loadNotionWorkspace();
