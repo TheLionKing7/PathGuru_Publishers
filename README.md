@@ -111,6 +111,20 @@ One row per business, at the furthest stage it has reached: *declined at the gat
 
 ---
 
+### 10. The unified engagement board and operating envelope
+
+Two instruments, two registers — `assessment_5d` (five-day) and `frictioniq_engagement` (fourteen-day) — and one question asked of both: *which business, what stage, owned by whom, running which framework, for how much.* The operating envelope answers it.
+
+**Six columns on both registers** (migration `0027_engagement_operating_envelope.sql`, in the DigiFusion repo): `assigned_agent`, `framework_id`, `recommendation`, `next_stage`, `service_amount`, `service_currency`. They are the operating view of data the instruments already produce — `recommendation` mirrors `first_build` / the deliverables, `next_stage` mirrors `decision` / the `kind` ladder, `service_amount` mirrors `first_build_cost` / `contract_value` — denormalised onto both tables so the board is a UNION of two identically-shaped projections, not a join through a third table.
+
+**Routing is deterministic, not guessed.** `backend/skills/engagementRouting.js` maps the three practice areas to their specialist agent — automation → Nova, business development → Atlas, digital media → Aether — and the BD framework resolves regulation → segment → headcount band → Deal Engine. An unknown track returns nulls, never a default. Nexus is the Digital CEO and can override any assignment (the `operating` op, or `/api/agents/nexus/orchestrate`).
+
+**Promotion stamps the envelope.** A five-day `proceed` (`backend/skills/assessment5d.js`) and an enterprise engagement's creation (DigiFusion `createEngagement`) resolve and write the route automatically; the `operating` op re-routes by hand when needed.
+
+**The board.** `GET /api/engagements/board` reads both registers into one projection; the `Engagements` tab (FrictionIQ department) renders it as one table, filterable by agent / unassigned.
+
+---
+
 ## AI Provider Chain
 
 Providers are tried in order until one succeeds. Chat calls never force JSON mode.
@@ -136,6 +150,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Nexus daily briefing** | `generateDailyBriefing()` — network status + leads + completed tasks → LLM summary → Notion |
 | **Nexus pipeline view** | `getPipelineView()` — leads grouped by status/stage |
 | **Post-service evaluation** | Atlas, Nova, Aether each trigger structured evaluation on `evaluation_triggered` milestone |
+| **Engagement board** | Operating envelope on both registers; deterministic routing; unified `Engagements` board |
 | **Research pipeline** | Two-layer: Tavily discovery + Firecrawl full-content scraping; priority domains (McKinsey, BCG, HBR, etc.); pre-flight Tavily health check prevents burning quota against dead APIs |
 | **Synthesizer** | PDF ingestion from R2 → structured knowledge → Supabase `knowledge_base` table |
 | **Agency Playbooks** | Synthesize + upload to R2 with AWS V4 signing; manifest tracking per folder |
@@ -238,6 +253,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `POST` | `/api/frictioniq/assessment/op` | Every write against an assessment — stage, observe, candidate, drop, price, report, decide, outcome, reference |
 | `GET` | `/api/frictioniq/lifecycle` | The small-business funnel, gate to outcome (`?limit=`, capped at 1000) |
 | `GET` | `/api/frictioniq/gates` | Readiness-gate rows for the FrictionIQ console |
+| `GET` | `/api/engagements/board` | The unified operating board — both registers, one projection (`?limit=`, capped at 1000) |
 
 ---
 
