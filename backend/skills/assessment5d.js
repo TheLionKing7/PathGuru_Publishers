@@ -174,6 +174,15 @@ export async function createAssessment(input) {
 
 const PRACTICE_TRACKS = new Set(['ai-automation', 'business-development', 'digital-media']);
 
+function parseWorkstreams(v, fallback) {
+  if (v === undefined || v === null || v === '') return fallback ?? [];
+  if (Array.isArray(v)) return v;
+  try {
+    const p = JSON.parse(String(v));
+    return Array.isArray(p) ? p : (fallback ?? []);
+  } catch { return fallback ?? []; }
+}
+
 /**
  * Route a concluded five-day assessment to its service-line agent and framework.
  *
@@ -184,14 +193,24 @@ const PRACTICE_TRACKS = new Set(['ai-automation', 'business-development', 'digit
  * whole output is ONE automation first-build.
  */
 async function routeAssessment(a) {
-  let track = null;
-  const token = a.gate_token || a.session_token;
-  if (token) {
-    const col = a.gate_token ? 'gate_token' : 'session_token';
-    const { data } = await db().from('intake_submission').select('track').eq(col, token).maybeSingle();
-    track = data?.track || null;
+  // The assessment's own lane, when the operator categorised the first build.
+  let lane = PRACTICE_TRACKS.has(a.track) ? a.track : null;
+
+  // Else the intake's service line (a practice area, not a segment route).
+  if (!lane) {
+    const token = a.gate_token || a.session_token;
+    if (token) {
+      const col = a.gate_token ? 'gate_token' : 'session_token';
+      const { data } = await db().from('intake_submission').select('track').eq(col, token).maybeSingle();
+      if (PRACTICE_TRACKS.has(data?.track)) lane = data.track;
+    }
   }
-  const lane = PRACTICE_TRACKS.has(track) ? track : 'ai-automation';
+
+  // No lane known → unassigned, never guessed. A segment route ('small-business')
+  // does not carry a practice area, and guessing automation would misroute a
+  // BD or media first-build.
+  if (!lane) return { track: null, assigned_agent: null, framework_id: null };
+
   return {
     track: lane,
     ...routeEngagement({ track: lane, segment: 'sme', sector: a.sector, headcountBand: a.headcount_band }),
@@ -362,6 +381,8 @@ export async function applyOp(id, op, body = {}) {
         next_stage: s('next_stage', 120),
         service_amount: n('service_amount'),
         service_currency: s('service_currency', 8) || 'USD',
+        track: PRACTICE_TRACKS.has(String(body.track || '')) ? String(body.track) : null,
+        workstreams: parseWorkstreams(body.workstreams, a.workstreams),
       };
       break;
     default:

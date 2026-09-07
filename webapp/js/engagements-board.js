@@ -127,7 +127,7 @@
       <td>${r.track ? esc(r.track) : '<span class="eb-muted">—</span>'}</td>
       <td>${esc([r.sector, r.headcountBand].filter(Boolean).join(' · ')) || '—'}</td>
       <td>${esc(stage)}</td>
-      <td>${agentSelect(r)}</td>
+      <td>${agentSelect(r)}${r.workstreams?.length ? ` <span class="eb-badge eb-badge-streams" title="Multi-agent engagement — ${r.workstreams.length} workstreams">${r.workstreams.length} streams</span>` : ''}</td>
       <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="eb-muted">—</span>'}</td>
       <td class="eb-rec">${r.recommendation ? esc(r.recommendation) : '<span class="eb-muted">—</span>'}</td>
       <td>${r.nextStage ? esc(r.nextStage) : '<span class="eb-muted">—</span>'}</td>

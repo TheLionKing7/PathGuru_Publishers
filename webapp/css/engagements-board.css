@@ -47,6 +47,7 @@
 .eb-badge-5d { background: rgba(0,212,170,.14); color: #00d4aa; }
 .eb-badge-fiq { background: rgba(124,58,237,.16); color: #b18bff; }
 .eb-badge-contracted { background: rgba(245,158,11,.14); color: #f59e0b; }
+.eb-badge-streams { background: rgba(77,159,255,.14); color: #4d9fff; }
 
 .eb-agent {
   background: var(--surface, rgba(255,255,255,.03)); color: var(--text, #e7edf7);
