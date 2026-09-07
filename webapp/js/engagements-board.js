@@ -165,5 +165,9 @@
     }
   });
 
-  load();
+  /* Lazy-load on first visit to the tab, like the other rooms. */
+  document.addEventListener('pg:tab-change', (e) => {
+    if (e.detail?.tab !== 'frictioniq-engagements') return;
+    load();
+  });
 })();
