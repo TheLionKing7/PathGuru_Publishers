@@ -123,6 +123,8 @@ Two instruments, two registers — `assessment_5d` (five-day) and `frictioniq_en
 
 **Promotion also makes the amount real.** `backend/skills/promoteToDelivery.js` creates a `client_accounts` and an `engagements` row whose `contract_value` is the quoted `service_amount`, then the register's `engagement_id` (migration `0029`) is stamped back — so "amount" on the board becomes actual money rather than a note. The enterprise register (`frictioniq_engagement`) promotes through the same function; its `track` (migration `0028`) is the service line that drives the route.
 
+**The loop closes.** A five-day `outcome` (day 90) writes a structured `engagement_outcomes` row; once ten `delivered` outcomes exist, the calibration engine flips `basis` from `prior` to `calibrated` automatically (`backend/harness/godmode/calibration.js`) — the declared priors become measurements. The board is self-service: each row's agent is an inline select that re-routes via `/api/engagements/board/op`.
+
 **The board.** `GET /api/engagements/board` reads both registers into one projection; the `Engagements` tab (FrictionIQ department) renders it as one table, filterable by agent / unassigned.
 
 ---
@@ -256,6 +258,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `GET` | `/api/frictioniq/lifecycle` | The small-business funnel, gate to outcome (`?limit=`, capped at 1000) |
 | `GET` | `/api/frictioniq/gates` | Readiness-gate rows for the FrictionIQ console |
 | `GET` | `/api/engagements/board` | The unified operating board — both registers, one projection (`?limit=`, capped at 1000) |
+| `POST` | `/api/engagements/board/op` | Re-route an engagement from the board — agent, framework, next stage |
 
 ---
 

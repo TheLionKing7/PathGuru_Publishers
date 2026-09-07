@@ -101,10 +101,10 @@ export async function recordEngagementOutcome({
 
   console.log(`[Calibration] Outcome recorded: ${engagementId} → ${outcome} (self:${selfScore?.band}, assessor:${assessorScore?.band})`);
 
-  // After recording, check if we hit calibration threshold
+  // After recording, flip the basis when the threshold is met — the closed loop.
   const status = await getCalibrationStatus();
   if (status.totalOutcomes >= MIN_CALIBRATION_PAIRS) {
-    console.log(`[Calibration] ${status.totalOutcomes} outcomes — calibration threshold met. Run computeMeasuredPriors() to flip basis.`);
+    await computeMeasuredPriors();
   }
 
   return data;

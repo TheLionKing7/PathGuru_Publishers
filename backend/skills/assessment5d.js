@@ -310,13 +310,34 @@ export async function applyOp(id, op, body = {}) {
       }
       break;
     }
-    case 'outcome':
+    case 'outcome': {
+      const realised = n('realised_value');
       patch = {
         outcome_note: s('outcome_note', 2000),
-        realised_value: n('realised_value'),
+        realised_value: realised,
         outcome_at: new Date().toISOString(),
       };
+      /* Close the loop: write a structured outcome so the calibration engine
+         learns from it. Derived honestly — delivered only when a positive value
+         was realised, declined when the decision says so, stalled otherwise. */
+      try {
+        const { recordEngagementOutcome } = await import('../harness/godmode/calibration.js');
+        const outcome = a.decision === 'declined' ? 'declined'
+          : realised != null && realised > 0 ? 'delivered'
+          : 'stalled';
+        await recordEngagementOutcome({
+          engagementId: `assessment-${a.id}`,
+          outcome,
+          selfScore: null,
+          assessorScore: null,
+          actualPaybackMonths: null,
+          sector: a.sector,
+        });
+      } catch (e) {
+        console.warn('[FiveDay] outcome persist failed:', e.message);
+      }
       break;
+    }
     case 'reference': {
       const quote = s('quote', 2000);
       const consented = (body.consent === true || body.consent === '1') && Boolean(quote);

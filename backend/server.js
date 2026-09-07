@@ -4329,6 +4329,34 @@ Write the full article now.`;
     return;
   }
 
+  /* POST /api/engagements/board/op — re-route an engagement from the board.
+     Writes the operating envelope onto whichever register the row came from, so
+     the board is self-service rather than a round-trip to another room. */
+  if (req.method === 'POST' && path === '/api/engagements/board/op') {
+    try {
+      const body = await readBody(req);
+      const instrument = String(body.instrument || '');
+      const table = instrument === '5day' ? 'assessment_5d'
+        : instrument === 'fiq' ? 'frictioniq_engagement' : null;
+      if (!body.id || !table) { err(res, 'bad request', 400); return; }
+
+      const patch = {};
+      if (body.assigned_agent !== undefined) patch.assigned_agent = String(body.assigned_agent || '').trim().slice(0, 40) || null;
+      if (body.framework_id !== undefined) patch.framework_id = String(body.framework_id || '').trim().slice(0, 60) || null;
+      if (body.next_stage !== undefined) patch.next_stage = String(body.next_stage || '').trim().slice(0, 120) || null;
+      if (!Object.keys(patch).length) { err(res, 'nothing to update', 400); return; }
+
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const { error } = await db.from(table).update(patch).eq('id', String(body.id));
+      if (error) throw new Error(error.message);
+      json(res, { ok: true, patch });
+    } catch (e) {
+      console.error('[EngagementBoard] op failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   if (req.method === 'GET' && path === '/api/frictioniq/assessment') {
     try {
       const { loadAssessment, reckon, STAGES, VERDICTS } = await import('./skills/assessment5d.js');

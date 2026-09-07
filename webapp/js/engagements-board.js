@@ -127,7 +127,7 @@
       <td>${r.track ? esc(r.track) : '<span class="eb-muted">—</span>'}</td>
       <td>${esc([r.sector, r.headcountBand].filter(Boolean).join(' · ')) || '—'}</td>
       <td>${esc(stage)}</td>
-      <td>${r.assignedAgent ? esc(r.assignedAgent) : '<span class="eb-muted">—</span>'}</td>
+      <td>${agentSelect(r)}</td>
       <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="eb-muted">—</span>'}</td>
       <td class="eb-rec">${r.recommendation ? esc(r.recommendation) : '<span class="eb-muted">—</span>'}</td>
       <td>${r.nextStage ? esc(r.nextStage) : '<span class="eb-muted">—</span>'}</td>
@@ -135,10 +135,34 @@
     </tr>`;
   }
 
-  /* ── Wire filters (delegated, so re-render keeps them live) ─────────── */
+  function agentSelect(r) {
+    const opts = ['', 'atlas', 'nova', 'aether'].map((a) =>
+      `<option value="${a}"${r.assignedAgent === a ? ' selected' : ''}>${a || '—'}</option>`
+    ).join('');
+    return `<select class="eb-agent" data-instrument="${r.instrument}" data-id="${r.id}" title="Re-route to a different agent">${opts}</select>`;
+  }
+
+  /* ── Wire filters + inline re-route (delegated, survive re-render) ──── */
   document.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-filter]');
     if (chip) setFilter(chip.dataset.filter);
+  });
+
+  document.addEventListener('change', async (e) => {
+    const sel = e.target.closest('select.eb-agent');
+    if (!sel) return;
+    try {
+      await api().postJson('/api/engagements/board/op', {
+        instrument: sel.dataset.instrument,
+        id: sel.dataset.id,
+        assigned_agent: sel.value || null,
+      });
+      window.pgToast?.('Re-routed', 'success');
+    } catch (err) {
+      window.pgToast?.(err.message, 'error');
+    } finally {
+      load();
+    }
   });
 
   load();

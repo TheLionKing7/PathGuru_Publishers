@@ -48,5 +48,12 @@
 .eb-badge-fiq { background: rgba(124,58,237,.16); color: #b18bff; }
 .eb-badge-contracted { background: rgba(245,158,11,.14); color: #f59e0b; }
 
+.eb-agent {
+  background: var(--surface, rgba(255,255,255,.03)); color: var(--text, #e7edf7);
+  border: 1px solid var(--border, rgba(125,145,180,.25)); border-radius: 6px;
+  padding: 4px 6px; font-size: 12.5px; cursor: pointer; max-width: 110px;
+}
+.eb-agent:focus { outline: none; border-color: var(--blue, #4d9fff); }
+
 .eb-error { color: #ef4444; padding: 14px 16px; border: 1px solid rgba(239,68,68,.35); border-radius: 8px; background: rgba(239,68,68,.07); }
 .eb-empty { color: var(--text-muted, #4d6280); font-size: 14px; padding: 18px 0; }
