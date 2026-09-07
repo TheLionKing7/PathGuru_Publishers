@@ -207,7 +207,7 @@
       those columns are blank rather than wrong.</p>` : ''}
       <div class="fd-table-wrap"><table class="cx-table fd-table">
       <thead><tr>
-        <th>Business</th><th>Stage</th><th>Gate</th><th>Booked</th><th>Assessment</th><th>Finding</th><th>Last</th>
+        <th>Business</th><th>Stage</th><th>Gate</th><th>Booked</th><th>Assessment</th><th>Finding</th><th>Agent</th><th>Framework</th><th>Amount</th><th>Last</th>
       </tr></thead>
       <tbody>${l.rows.map((r) => `
         <tr class="${r.assessmentId ? 'fd-row' : ''}" ${r.assessmentId ? `data-open="${esc(r.assessmentId)}"` : ''}>
@@ -227,6 +227,9 @@
                 r.finding.priced ? `<span class="fd-sub">${esc(money(r.finding.low, r.currency))}–${esc(money(r.finding.high, r.currency))}</span>` : ''}`
             : '<span class="fd-dim">—</span>'}
             ${r.decision ? `<span class="fd-sub">${esc(r.decision)}</span>` : ''}</td>
+          <td>${r.assignedAgent ? esc(r.assignedAgent) : '<span class="fd-dim">—</span>'}</td>
+          <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="fd-dim">—</span>'}</td>
+          <td>${r.serviceAmount ? esc(money(r.serviceAmount, r.serviceCurrency)) : '<span class="fd-dim">—</span>'}</td>
           <td>${esc(day(r.lastAt))}</td>
         </tr>`).join('')}</tbody></table></div>
 
