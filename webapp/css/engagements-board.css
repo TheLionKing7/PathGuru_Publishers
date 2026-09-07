@@ -56,5 +56,17 @@
 }
 .eb-agent:focus { outline: none; border-color: var(--blue, #4d9fff); }
 
+.eb-masthead-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.eb-new-btn { background: var(--blue, #4d9fff); color: #07101d; border: none; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.eb-new-btn:hover { opacity: .9; }
+.eb-form { border: 1px solid var(--border, rgba(125,145,180,.2)); border-radius: 10px; padding: 16px; margin: 0 0 16px; background: var(--surface, rgba(255,255,255,.02)); }
+.eb-form-title { margin: 0 0 12px; font-size: 15px; }
+.eb-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.eb-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted, #4d6280); }
+.eb-input { background: var(--surface, rgba(255,255,255,.03)); color: var(--text, #e7edf7); border: 1px solid var(--border, rgba(125,145,180,.25)); border-radius: 6px; padding: 7px 9px; font-size: 13px; }
+.eb-input:focus { outline: none; border-color: var(--blue, #4d9fff); }
+.eb-form-promote { flex-direction: row !important; align-items: center; gap: 8px !important; margin: 10px 0; }
+.eb-form-actions { display: flex; gap: 8px; margin-top: 12px; }
+
 .eb-error { color: #ef4444; padding: 14px 16px; border: 1px solid rgba(239,68,68,.35); border-radius: 8px; background: rgba(239,68,68,.07); }
 .eb-empty { color: var(--text-muted, #4d6280); font-size: 14px; padding: 18px 0; }

@@ -23,7 +23,7 @@
 
   const AGENTS = ['atlas', 'nova', 'aether'];
 
-  const state = { rows: [], filter: 'all', error: null };
+  const state = { rows: [], filter: 'all', error: null, showForm: false, busy: false };
 
   const money = (n, ccy) => {
     if (n === null || n === undefined || n === '') return '—';
@@ -65,7 +65,7 @@
         ? state.rows
         : state.rows.filter((r) => r.assignedAgent === state.filter);
 
-    host.innerHTML = headerHtml() + filtersHtml() + tableHtml(list);
+    host.innerHTML = headerHtml() + filtersHtml() + formHtml() + tableHtml(list);
   }
 
   function headerHtml() {
@@ -74,8 +74,13 @@
       .filter(([, v]) => v)
       .map(([k]) => k === 'fiveDay' ? 'five-day' : 'fourteen-day').join(' · ');
     return `<header class="eb-masthead">
-      <h2 class="eb-title">Engagement board</h2>
-      <p class="eb-lede">Every delivery in one table — both instruments, one pipeline.</p>
+      <div class="eb-masthead-row">
+        <div>
+          <h2 class="eb-title">Engagement board</h2>
+          <p class="eb-lede">Every delivery in one table — both instruments, one pipeline.</p>
+        </div>
+        <button class="eb-new-btn" data-new-engagement>+ New engagement</button>
+      </div>
       <p class="eb-meta">${c.total ?? 0} total · ${c.fiveDay ?? 0} five-day · ${c.fiq ?? 0} fourteen-day · ${c.unassigned ?? 0} unassigned${degraded ? ` · <span class="eb-warn">${esc(degraded)} unavailable</span>` : ''}</p>
     </header>`;
   }
@@ -87,6 +92,30 @@
       ${AGENTS.map((a) => chip(a, a)).join('')}
       ${chip('unassigned', 'Unassigned')}
     </div>`;
+  }
+
+  function formHtml() {
+    if (!state.showForm) return '';
+    const sel = (name, opts, def) => `<select name="${name}" class="eb-input"><option value="">—</option>${opts.map((o) => `<option value="${o}"${o === def ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
+    return `<form class="eb-form" id="ebNewForm">
+      <h3 class="eb-form-title">New enterprise engagement</h3>
+      <div class="eb-form-grid">
+        <label>Client name<input name="client_name" required class="eb-input" placeholder="ABC Company"></label>
+        <label>Service line${sel('track', ['ai-automation', 'business-development', 'digital-media'], 'ai-automation')}</label>
+        <label>Rung${sel('kind', ['investigation', 'audit-14d', 'build', 'retainer'], 'audit-14d')}</label>
+        <label>Sector<input name="sector" class="eb-input" placeholder="Financial services"></label>
+        <label>Headcount${sel('headcount_band', ['1–9', '10–49', '50–249', '250–999', '1,000+'])}</label>
+        <label>Country<input name="country" class="eb-input"></label>
+        <label>Amount<input name="service_amount" type="number" step="any" class="eb-input" placeholder="0"></label>
+        <label>Currency${sel('service_currency', ['USD', 'NGN', 'GBP', 'EUR', 'GHS', 'KES', 'ZAR', 'CAD', 'AUD'], 'USD')}</label>
+      </div>
+      <label>Scope<textarea name="scope_note" class="eb-input" rows="2" placeholder="The two or three flows in scope"></textarea></label>
+      <label class="eb-form-promote"><input type="checkbox" name="promote" value="1"> Promote to the delivery OS now — the amount becomes a contract</label>
+      <div class="eb-form-actions">
+        <button type="submit" class="eb-new-btn">Create</button>
+        <button type="button" class="eb-chip" data-cancel-new>Cancel</button>
+      </div>
+    </form>`;
   }
 
   function tableHtml(list) {
@@ -145,7 +174,40 @@
   /* ── Wire filters + inline re-route (delegated, survive re-render) ──── */
   document.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-filter]');
-    if (chip) setFilter(chip.dataset.filter);
+    if (chip) { setFilter(chip.dataset.filter); return; }
+    if (e.target.closest('[data-new-engagement]')) { state.showForm = true; render(); return; }
+    if (e.target.closest('[data-cancel-new]')) { state.showForm = false; render(); }
+  });
+
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest('#ebNewForm');
+    if (!form) return;
+    e.preventDefault();
+    if (state.busy) return;
+    state.busy = true;
+    const fd = new FormData(form);
+    const body = {
+      client_name: fd.get('client_name'),
+      track: fd.get('track') || null,
+      kind: fd.get('kind') || null,
+      sector: fd.get('sector') || null,
+      headcount_band: fd.get('headcount_band') || null,
+      country: fd.get('country') || null,
+      service_amount: fd.get('service_amount') ? Number(fd.get('service_amount')) : null,
+      service_currency: fd.get('service_currency') || 'USD',
+      scope_note: fd.get('scope_note') || null,
+      promote: fd.get('promote') === '1',
+    };
+    try {
+      await api().postJson('/api/engagements/create', body);
+      window.pgToast?.('Engagement created', 'success');
+      state.showForm = false;
+      await load();
+    } catch (err) {
+      window.pgToast?.(err.message, 'error');
+    } finally {
+      state.busy = false;
+    }
   });
 
   document.addEventListener('change', async (e) => {
