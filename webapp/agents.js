@@ -3104,9 +3104,25 @@
               <span class="lead-status-tag">${esc(lead.status || 'new')}</span>
               <span class="lead-time">${relTime(lead.created_at)}</span>
               ${lead.booking_url ? `<a href="${esc(lead.booking_url)}" target="_blank" rel="noopener" class="btn-lead-book">Book</a>` : ''}
+              <button class="btn-sm btn-danger lead-delete-btn" data-id="${esc(lead.id)}" title="Delete this lead">Delete</button>
             </div>
           </div>`;
       }).join('');
+
+      grid.querySelectorAll('.lead-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          if (!id || !window.confirm('Delete this lead? This cannot be undone.')) return;
+          btn.disabled = true;
+          try {
+            await apiFetch(`/api/agents/leads?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+            loadLeads();
+          } catch (err) {
+            window.pgToast?.(err.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
     } catch (err) {
       grid.innerHTML = `<div class="leads-empty leads-error">${esc(err.message)}</div>`;
     }

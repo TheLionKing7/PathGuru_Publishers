@@ -207,7 +207,7 @@
       those columns are blank rather than wrong.</p>` : ''}
       <div class="fd-table-wrap"><table class="cx-table fd-table">
       <thead><tr>
-        <th>Business</th><th>Stage</th><th>Gate</th><th>Booked</th><th>Assessment</th><th>Finding</th><th>Agent</th><th>Framework</th><th>Amount</th><th>Last</th>
+        <th>Business</th><th>Stage</th><th>Gate</th><th>Booked</th><th>Assessment</th><th>Finding</th><th>Agent</th><th>Framework</th><th>Amount</th><th>Last</th><th></th>
       </tr></thead>
       <tbody>${l.rows.map((r) => `
         <tr class="${r.assessmentId ? 'fd-row' : ''}" ${r.assessmentId ? `data-open="${esc(r.assessmentId)}"` : ''}>
@@ -231,6 +231,7 @@
           <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="fd-dim">—</span>'}</td>
           <td>${r.serviceAmount ? esc(money(r.serviceAmount, r.serviceCurrency)) : '<span class="fd-dim">—</span>'}</td>
           <td>${esc(day(r.lastAt))}</td>
+          <td>${r.assessmentId ? `<button class="cx-btn cx-btn-danger cx-btn-sm" data-del="${esc(r.assessmentId)}" title="Delete this five-day assessment record">Delete</button>` : ''}</td>
         </tr>`).join('')}</tbody></table></div>
 
       <div class="fd-stagekey">${l.stages.map((st) =>
@@ -523,6 +524,18 @@
     root.dataset.wired = '1';
 
     root.addEventListener('click', async (e) => {
+      const del = e.target.closest('[data-del]');
+      if (del) {
+        if (!window.confirm('Delete this five-day assessment record? This cannot be undone.')) return;
+        try {
+          await api().apiFetch(`/api/frictioniq/assessment?id=${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE' });
+          window.pgToast?.('Assessment deleted', 'success');
+          state.open = null;
+          await loadRegister(true);
+          render();
+        } catch (err) { window.pgToast?.(err.message, 'error'); }
+        return;
+      }
       const openRow = e.target.closest('[data-open]');
       if (openRow) { void openAssessment(openRow.dataset.open); return; }
       if (e.target.closest('#fdClose')) { state.open = null; render(); return; }

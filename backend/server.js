@@ -2293,17 +2293,61 @@ const server = createServer(async (req, res) => {
   // SERVICE BOOKINGS
   // ════════════════════════════════════════════════════════════════════════
 
-  // GET /api/bookings — list all bookings (Intelligence tab)
+  // GET /api/bookings — list all bookings (Services › Calendly tab).
+  // Two sources are unioned so a past Calendly booking is never invisible: the
+  // CRM mirror (service_bookings) and the funnel register (booking). The funnel
+  // row is only appended when its event URI is missing from the mirror, so a
+  // partial webhook write still surfaces the booking instead of hiding it.
   if (req.method === 'GET' && path === '/api/bookings') {
     const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
     try {
       const status = url.searchParams.get('status');
-      const limit  = parseInt(url.searchParams.get('limit') || '100', 10);
+      const limit  = parseInt(url.searchParams.get('limit') || '200', 10);
       let q = db.from('service_bookings').select('*').order('booking_time', { ascending: false }).limit(limit);
       if (status) q = q.eq('status', status);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
-      json(res, { bookings: data || [] });
+
+      const bookings = (data || []).slice();
+      const seen = new Set(bookings.map((b) => b.calendly_event_id).filter(Boolean));
+
+      /* The funnel register is the source of truth for Calendly's own events.
+         It is read as a best-effort reconciliation: if the table is not present
+         the mirror alone is still returned rather than failing the whole tab. */
+      let funnel = [];
+      try {
+        const { data: fRows, error: fErr } = await db
+          .from('booking')
+          .select('id, provider, status, invitee_name, invitee_email, event_uri, starts_at')
+          .order('starts_at', { ascending: false })
+          .limit(limit);
+        if (fErr) throw new Error(fErr.message);
+        funnel = fRows || [];
+      } catch (fErr) {
+        console.warn('[Bookings] funnel reconciliation skipped:', fErr.message);
+      }
+
+      for (const f of funnel) {
+        if (!f.event_uri || seen.has(f.event_uri)) continue;
+        bookings.push({
+          id: f.id,
+          client_name: f.invitee_name,
+          client_email: f.invitee_email,
+          track: null,
+          source: f.provider || 'calendly',
+          status: f.status === 'canceled' ? 'cancelled' : f.status === 'active' ? 'confirmed' : f.status,
+          booking_time: f.starts_at,
+          calendly_event_id: f.event_uri,
+        });
+      }
+
+      bookings.sort((a, b) => {
+        const at = a.booking_time ? new Date(a.booking_time).getTime() : -Infinity;
+        const bt = b.booking_time ? new Date(b.booking_time).getTime() : -Infinity;
+        return bt - at;
+      });
+
+      json(res, { bookings: bookings.slice(0, limit) });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -3877,6 +3921,19 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // DELETE /api/agents/leads?id= — remove a lead from the pipeline.
+  if (req.method === 'DELETE' && path === '/api/agents/leads') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const id = url.searchParams.get('id');
+      if (!id) { err(res, 'missing id', 400); return; }
+      const { error } = await db.from('leads').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      json(res, { ok: true, deleted: true, id });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
   // GET /api/intake — web intake submissions (intake_submission table). The
   // web form is the self-serve path; Aria's conversational path lives in
   // `leads`. One pipeline reads both so no prospect is invisible.
@@ -3893,6 +3950,19 @@ const server = createServer(async (req, res) => {
         .limit(limit);
       if (error) throw new Error(error.message);
       json(res, { intakes: data || [] });
+    } catch (e) { err(res, e.message, 500); }
+    return;
+  }
+
+  // DELETE /api/intake?id= — remove a web intake submission.
+  if (req.method === 'DELETE' && path === '/api/intake') {
+    const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+    try {
+      const id = url.searchParams.get('id');
+      if (!id) { err(res, 'missing id', 400); return; }
+      const { error } = await db.from('intake_submission').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      json(res, { ok: true, deleted: true, id });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
@@ -4420,6 +4490,18 @@ Write the full article now.`;
       const { applyOp, reckon } = await import('./skills/assessment5d.js');
       const a = await applyOp(String(body.id || ''), String(body.op || ''), body);
       json(res, { assessment: a, finding: reckon(a) });
+    } catch (e) {
+      err(res, e.message, /no such/.test(e.message) ? 404 : 400);
+    }
+    return;
+  }
+
+  // DELETE /api/frictioniq/assessment?id= — remove a five-day assessment row.
+  if (req.method === 'DELETE' && path === '/api/frictioniq/assessment') {
+    try {
+      const { deleteAssessment } = await import('./skills/assessment5d.js');
+      await deleteAssessment(url.searchParams.get('id') || '');
+      json(res, { ok: true, deleted: true });
     } catch (e) {
       err(res, e.message, /no such/.test(e.message) ? 404 : 400);
     }

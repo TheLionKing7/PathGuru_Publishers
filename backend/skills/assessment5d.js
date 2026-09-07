@@ -172,6 +172,14 @@ export async function createAssessment(input) {
   return data?.id || null;
 }
 
+export async function deleteAssessment(id) {
+  if (!id) throw new Error('no such assessment');
+  const existing = await loadAssessment(id);
+  if (!existing) throw new Error('no such assessment');
+  const { error } = await db().from('assessment_5d').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 const PRACTICE_TRACKS = new Set(['ai-automation', 'business-development', 'digital-media']);
 
 function parseWorkstreams(v, fallback) {

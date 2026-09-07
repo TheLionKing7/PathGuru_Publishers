@@ -158,7 +158,7 @@
     if (!wrap) return;
     wrap.innerHTML = '<p class="shop-empty-msg">Loading Calendly bookings…</p>';
     try {
-      const res = await fetch(`${getBackendUrl()}/api/bookings?limit=50`);
+      const res = await fetch(`${getBackendUrl()}/api/bookings?limit=200`);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
       const bookings = json.bookings || [];
@@ -224,6 +224,8 @@
       const intakesJson = await intakesRes.json().catch(() => ({}));
 
       const aria = (leadsJson.leads || []).map(l => ({
+        id: l.id,
+        kind: 'lead',
         name: l.name || l.email || '—',
         email: l.email || '',
         track: TRACK_LABEL[l.track] || l.track || '—',
@@ -235,6 +237,8 @@
       }));
 
       const web = (intakesJson.intakes || []).map(r => ({
+        id: r.id,
+        kind: 'intake',
         name: r.contact_name || r.company || r.work_email || '—',
         email: r.work_email || '',
         track: TRACK_LABEL[r.track] || r.track || '—',
@@ -248,7 +252,7 @@
       const rows = [...web, ...aria];
       wrap.innerHTML = rows.length ? `
         <table class="shop-table">
-          <thead><tr><th>Contact</th><th>Track</th><th>Size</th><th>Score</th><th>Status</th><th>Intake</th><th>Source</th></tr></thead>
+          <thead><tr><th>Contact</th><th>Track</th><th>Size</th><th>Score</th><th>Status</th><th>Intake</th><th>Source</th><th></th></tr></thead>
           <tbody>
             ${rows.map(l => `
               <tr>
@@ -259,10 +263,32 @@
                 <td><span class="status-pill ${esc(l.status)}">${esc(l.status)}</span></td>
                 <td>${esc(l.intake)}</td>
                 <td>${esc(l.source)}</td>
+                <td><button class="btn-sm btn-danger intake-delete-btn" data-id="${esc(l.id)}" data-kind="${esc(l.kind)}">Delete</button></td>
               </tr>`).join('')}
           </tbody>
         </table>
       ` : '<p class="shop-empty-msg">No intake submissions yet — the web form and Aria both feed this list.</p>';
+
+      wrap.querySelectorAll('.intake-delete-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.id;
+          const kind = btn.dataset.kind;
+          const label = kind === 'lead' ? 'this lead' : 'this intake submission';
+          if (!id || !window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+          btn.disabled = true;
+          try {
+            const ep = kind === 'lead' ? `/api/agents/leads?id=${encodeURIComponent(id)}` : `/api/intake?id=${encodeURIComponent(id)}`;
+            const r = await fetch(`${getBackendUrl()}${ep}`, { method: 'DELETE' });
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(d.error || r.statusText);
+            shopToast('Deleted', 'success');
+            loadIntakeLeads();
+          } catch (e) {
+            shopToast(e.message, 'error');
+            btn.disabled = false;
+          }
+        });
+      });
     } catch (e) {
       wrap.innerHTML = `<p class="shop-empty-msg" style="color:var(--red)">${esc(e.message)}</p>`;
     }
