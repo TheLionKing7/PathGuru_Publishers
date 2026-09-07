@@ -99,6 +99,7 @@
           <tr>
             <th>Business</th>
             <th>Instrument</th>
+            <th>Line</th>
             <th>Sector · Size</th>
             <th>Stage</th>
             <th>Agent</th>
@@ -123,13 +124,14 @@
     return `<tr>
       <td class="eb-name">${esc(r.clientName)}</td>
       <td>${badge}</td>
+      <td>${r.track ? esc(r.track) : '<span class="eb-muted">—</span>'}</td>
       <td>${esc([r.sector, r.headcountBand].filter(Boolean).join(' · ')) || '—'}</td>
       <td>${esc(stage)}</td>
       <td>${r.assignedAgent ? esc(r.assignedAgent) : '<span class="eb-muted">—</span>'}</td>
       <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="eb-muted">—</span>'}</td>
       <td class="eb-rec">${r.recommendation ? esc(r.recommendation) : '<span class="eb-muted">—</span>'}</td>
       <td>${r.nextStage ? esc(r.nextStage) : '<span class="eb-muted">—</span>'}</td>
-      <td class="eb-num">${money(r.serviceAmount, r.serviceCurrency)}</td>
+      <td class="eb-num">${money(r.serviceAmount, r.serviceCurrency)}${r.engagementId ? ' <span class="eb-badge eb-badge-contracted" title="Promoted — the amount is a contract on the delivery OS">contracted</span>' : ''}</td>
     </tr>`;
   }
 

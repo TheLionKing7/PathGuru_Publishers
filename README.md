@@ -121,6 +121,8 @@ Two instruments, two registers — `assessment_5d` (five-day) and `frictioniq_en
 
 **Promotion stamps the envelope.** A five-day `proceed` (`backend/skills/assessment5d.js`) and an enterprise engagement's creation (DigiFusion `createEngagement`) resolve and write the route automatically; the `operating` op re-routes by hand when needed.
 
+**Promotion also makes the amount real.** `backend/skills/promoteToDelivery.js` creates a `client_accounts` and an `engagements` row whose `contract_value` is the quoted `service_amount`, then the register's `engagement_id` (migration `0029`) is stamped back — so "amount" on the board becomes actual money rather than a note. The enterprise register (`frictioniq_engagement`) promotes through the same function; its `track` (migration `0028`) is the service line that drives the route.
+
 **The board.** `GET /api/engagements/board` reads both registers into one projection; the `Engagements` tab (FrictionIQ department) renders it as one table, filterable by agent / unassigned.
 
 ---

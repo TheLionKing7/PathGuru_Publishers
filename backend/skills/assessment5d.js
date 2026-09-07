@@ -192,7 +192,10 @@ async function routeAssessment(a) {
     track = data?.track || null;
   }
   const lane = PRACTICE_TRACKS.has(track) ? track : 'ai-automation';
-  return routeEngagement({ track: lane, segment: 'sme', sector: a.sector, headcountBand: a.headcount_band });
+  return {
+    track: lane,
+    ...routeEngagement({ track: lane, segment: 'sme', sector: a.sector, headcountBand: a.headcount_band }),
+  };
 }
 
 /** One switch, matching the digifusion route's ops exactly. */
@@ -290,6 +293,20 @@ export async function applyOp(id, op, body = {}) {
         if (route.assigned_agent) patch.assigned_agent = route.assigned_agent;
         if (route.framework_id) patch.framework_id = route.framework_id;
         if (!a.recommendation && a.first_build) patch.recommendation = a.first_build;
+        if (!a.service_amount && a.first_build_cost) patch.service_amount = a.first_build_cost;
+
+        /* Promote to the delivery OS — the amount becomes a real contract_value
+           on public.engagements, and the register is linked to it. Idempotent:
+           an already-promoted assessment is left alone. */
+        if (!a.engagement_id) {
+          try {
+            const { promoteToDelivery } = await import('./promoteToDelivery.js');
+            const promoted = await promoteToDelivery('assessment_5d', { ...a, ...patch }, { track: route.track, segment: 'sme' });
+            if (promoted?.engagement_id) patch.engagement_id = promoted.engagement_id;
+          } catch (e) {
+            console.warn('[FiveDay] promote failed — amount stays a note:', e.message);
+          }
+        }
       }
       break;
     }

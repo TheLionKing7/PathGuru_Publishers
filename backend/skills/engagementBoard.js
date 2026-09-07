@@ -56,6 +56,7 @@ function projectFive(a) {
     instrument: '5day',
     id: a.id,
     clientName: a.client_name,
+    track: null,
     sector: a.sector,
     headcountBand: a.headcount_band,
     revenueBand: a.revenue_band,
@@ -68,6 +69,7 @@ function projectFive(a) {
     nextStage: a.next_stage,
     serviceAmount: a.service_amount ?? a.first_build_cost,
     serviceCurrency: a.service_currency || a.currency || 'USD',
+    engagementId: a.engagement_id ?? null,
     updatedAt: a.created_at,
   };
 }
@@ -77,6 +79,7 @@ function projectFiq(e) {
     instrument: 'fiq',
     id: e.id,
     clientName: e.client_name,
+    track: e.track,
     sector: e.sector,
     headcountBand: e.headcount_band,
     revenueBand: e.revenue_band,
@@ -89,6 +92,7 @@ function projectFiq(e) {
     nextStage: e.next_stage,
     serviceAmount: e.service_amount,
     serviceCurrency: e.service_currency || e.currency || 'USD',
+    engagementId: e.engagement_id ?? null,
     updatedAt: e.started_at,
   };
 }
