@@ -3094,7 +3094,8 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && path.startsWith('/api/engagements/') && path.split('/').length === 4) {
+  if (req.method === 'GET' && path.startsWith('/api/engagements/') && path.split('/').length === 4
+      && !['board', 'ready', 'create'].includes(path.split('/')[3])) {
     try {
       const id = path.split('/')[3];
       const { getEngagementDetail } = await import('./skills/engagementDelivery.js');
