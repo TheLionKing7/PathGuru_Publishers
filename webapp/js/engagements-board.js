@@ -23,7 +23,7 @@
 
   const AGENTS = ['atlas', 'nova', 'aether'];
 
-  const state = { rows: [], filter: 'all', error: null, showForm: false, busy: false };
+  const state = { rows: [], ready: [], preFill: null, filter: 'all', error: null, showForm: false, busy: false };
 
   const money = (n, ccy) => {
     if (n === null || n === undefined || n === '') return '—';
@@ -31,15 +31,20 @@
       return new Intl.NumberFormat('en-GB', { style: 'currency', currency: ccy || 'USD', maximumFractionDigits: 0 }).format(Number(n));
     } catch { return `${ccy || 'USD'} ${Number(n).toLocaleString('en-GB')}`; }
   };
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : null);
 
   async function load() {
     const host = $('engBoard');
     if (!host) return;
     try {
-      const d = await api().apiFetch('/api/engagements/board?limit=500', { timeoutMs: 15000 });
+      const [d, r] = await Promise.all([
+        api().apiFetch('/api/engagements/board?limit=500', { timeoutMs: 15000 }),
+        api().apiFetch('/api/engagements/ready?limit=100', { timeoutMs: 15000 }).catch(() => ({ prospects: [] })),
+      ]);
       state.rows = d.rows || [];
       state.counts = d.counts || {};
       state.degraded = d.degraded || {};
+      state.ready = r.prospects || [];
       state.error = null;
     } catch (e) {
       state.error = e.message;
@@ -65,7 +70,7 @@
         ? state.rows
         : state.rows.filter((r) => r.assignedAgent === state.filter);
 
-    host.innerHTML = headerHtml() + filtersHtml() + formHtml() + tableHtml(list);
+    host.innerHTML = headerHtml() + filtersHtml() + formHtml() + readyHtml() + tableHtml(list);
   }
 
   function headerHtml() {
@@ -96,15 +101,17 @@
 
   function formHtml() {
     if (!state.showForm) return '';
+    const p = state.preFill || {};
     const sel = (name, opts, def) => `<select name="${name}" class="eb-input"><option value="">—</option>${opts.map((o) => `<option value="${o}"${o === def ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
     return `<form class="eb-form" id="ebNewForm">
-      <h3 class="eb-form-title">New enterprise engagement</h3>
+      <h3 class="eb-form-title">${p.session_token ? 'Start engagement — pre-filled from the diagnostic' : 'New enterprise engagement'}</h3>
+      <input type="hidden" name="session_token" value="${p.session_token || ''}">
       <div class="eb-form-grid">
-        <label>Client name<input name="client_name" required class="eb-input" placeholder="ABC Company"></label>
-        <label>Service line${sel('track', ['ai-automation', 'business-development', 'digital-media'], 'ai-automation')}</label>
+        <label>Client name<input name="client_name" required class="eb-input" value="${esc(p.client_name || '')}" placeholder="ABC Company"></label>
+        <label>Service line${sel('track', ['ai-automation', 'business-development', 'digital-media'], p.track || 'ai-automation')}</label>
         <label>Rung${sel('kind', ['investigation', 'audit-14d', 'build', 'retainer'], 'audit-14d')}</label>
-        <label>Sector<input name="sector" class="eb-input" placeholder="Financial services"></label>
-        <label>Headcount${sel('headcount_band', ['1–9', '10–49', '50–249', '250–999', '1,000+'])}</label>
+        <label>Sector<input name="sector" class="eb-input" value="${esc(p.sector || '')}" placeholder="Financial services"></label>
+        <label>Headcount${sel('headcount_band', ['1–9', '10–49', '50–249', '250–999', '1,000+'], p.headcount_band)}</label>
         <label>Country<input name="country" class="eb-input"></label>
         <label>Amount<input name="service_amount" type="number" step="any" class="eb-input" placeholder="0"></label>
         <label>Currency${sel('service_currency', ['USD', 'NGN', 'GBP', 'EUR', 'GHS', 'KES', 'ZAR', 'CAD', 'AUD'], 'USD')}</label>
@@ -116,6 +123,26 @@
         <button type="button" class="eb-chip" data-cancel-new>Cancel</button>
       </div>
     </form>`;
+  }
+
+  function readyHtml() {
+    if (!state.ready.length) return '';
+    return `<section class="eb-ready">
+      <div class="eb-ready-head"><h3>Ready to engage</h3><span class="eb-muted">${state.ready.length} prospects</span></div>
+      <div class="eb-ready-grid">
+        ${state.ready.map((p) => `
+          <div class="eb-ready-card">
+            <div class="eb-ready-title">${esc(p.organization || p.email || 'Unknown')}</div>
+            <div class="eb-ready-meta">${esc([p.sector, p.headcountBand].filter(Boolean).join(' · ')) || '—'}${p.band ? ` · ${esc(p.band)}` : ''}</div>
+            <div class="eb-ready-meta">${[p.contact, p.email].filter(Boolean).map(esc).join(' · ') || '—'}</div>
+            <div class="eb-ready-meta">${p.leadScore != null ? `lead ${esc(String(p.leadScore))}${p.priority ? ' · ' + esc(p.priority) : ''}` : ''}${p.bookedAt ? (p.leadScore != null ? ' · ' : '') + 'booked ' + esc(day(p.bookedAt)) : ''}</div>
+            <div class="eb-ready-actions">
+              <a href="${esc(p.resultUrl)}" target="_blank" rel="noopener" class="eb-chip">result ↗</a>
+              <button class="eb-new-btn" data-start="${esc(p.token)}">Start engagement</button>
+            </div>
+          </div>`).join('')}
+      </div>
+    </section>`;
   }
 
   function tableHtml(list) {
@@ -175,8 +202,23 @@
   document.addEventListener('click', (e) => {
     const chip = e.target.closest('[data-filter]');
     if (chip) { setFilter(chip.dataset.filter); return; }
-    if (e.target.closest('[data-new-engagement]')) { state.showForm = true; render(); return; }
-    if (e.target.closest('[data-cancel-new]')) { state.showForm = false; render(); }
+    if (e.target.closest('[data-new-engagement]')) { state.preFill = null; state.showForm = true; render(); return; }
+    if (e.target.closest('[data-cancel-new]')) { state.showForm = false; render(); return; }
+    const start = e.target.closest('[data-start]');
+    if (start) {
+      const p = state.ready.find((x) => x.token === start.dataset.start);
+      if (p) {
+        state.preFill = {
+          session_token: p.token,
+          client_name: p.organization || '',
+          sector: p.sector || '',
+          headcount_band: p.headcountBand || '',
+          track: ['ai-automation', 'business-development', 'digital-media'].includes(p.track) ? p.track : 'ai-automation',
+        };
+        state.showForm = true;
+        render();
+      }
+    }
   });
 
   document.addEventListener('submit', async (e) => {
@@ -188,6 +230,7 @@
     const fd = new FormData(form);
     const body = {
       client_name: fd.get('client_name'),
+      session_token: fd.get('session_token') || null,
       track: fd.get('track') || null,
       kind: fd.get('kind') || null,
       sector: fd.get('sector') || null,

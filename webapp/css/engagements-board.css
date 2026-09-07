@@ -68,5 +68,14 @@
 .eb-form-promote { flex-direction: row !important; align-items: center; gap: 8px !important; margin: 10px 0; }
 .eb-form-actions { display: flex; gap: 8px; margin-top: 12px; }
 
+.eb-ready { margin: 0 0 16px; }
+.eb-ready-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.eb-ready-head h3 { margin: 0; font-size: 15px; }
+.eb-ready-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.eb-ready-card { border: 1px solid var(--border, rgba(125,145,180,.2)); border-radius: 10px; padding: 12px 14px; background: var(--surface, rgba(255,255,255,.02)); }
+.eb-ready-title { font-weight: 600; margin-bottom: 2px; }
+.eb-ready-meta { color: var(--text-muted, #4d6280); font-size: 12px; margin-top: 2px; }
+.eb-ready-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+
 .eb-error { color: #ef4444; padding: 14px 16px; border: 1px solid rgba(239,68,68,.35); border-radius: 8px; background: rgba(239,68,68,.07); }
 .eb-empty { color: var(--text-muted, #4d6280); font-size: 14px; padding: 18px 0; }

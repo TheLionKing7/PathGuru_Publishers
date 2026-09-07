@@ -4344,6 +4344,20 @@ Write the full article now.`;
     return;
   }
 
+  /* GET /api/engagements/ready — enterprise prospects that took the diagnostic,
+     identified themselves (result emailed via Resend), and have not yet become
+     an engagement. */
+  if (req.method === 'GET' && path === '/api/engagements/ready') {
+    try {
+      const { loadReadyProspects } = await import('./skills/readyProspects.js');
+      json(res, await loadReadyProspects({ limit: Math.min(Number(url.searchParams.get('limit')) || 100, 500) }));
+    } catch (e) {
+      console.error('[EngagementReady] failed:', e.message);
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   /* POST /api/engagements/board/op — re-route an engagement from the board.
      Writes the operating envelope onto whichever register the row came from, so
      the board is self-service rather than a round-trip to another room. */
