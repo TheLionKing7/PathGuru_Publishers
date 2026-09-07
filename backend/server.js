@@ -4329,6 +4329,21 @@ Write the full article now.`;
     return;
   }
 
+  /* POST /api/engagements/create — create an enterprise engagement from the
+     operations layer. This is the operational home; the DigiFusion `/fiq/e`
+     creation form has been retired. */
+  if (req.method === 'POST' && path === '/api/engagements/create') {
+    try {
+      const body = await readBody(req);
+      const { createEnterpriseEngagement } = await import('./skills/enterpriseEngagement.js');
+      const result = await createEnterpriseEngagement(body || {});
+      json(res, result ?? { ok: false, error: 'could not create' }, result ? 200 : 500);
+    } catch (e) {
+      err(res, e.message, 400);
+    }
+    return;
+  }
+
   /* POST /api/engagements/board/op — re-route an engagement from the board.
      Writes the operating envelope onto whichever register the row came from, so
      the board is self-service rather than a round-trip to another room. */
