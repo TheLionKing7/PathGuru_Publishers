@@ -107,7 +107,7 @@ One row per business, at the furthest stage it has reached: *declined at the gat
 
 **It does not guess.** Where a stage has not happened there is a null, not an inference; a gate with no booking is not "lost", it may be three days old. A gate that declined and later booked anyway keeps its verdict in its own column rather than having it hidden by the progress. Counts are shown rather than rates until ten have passed the gate — a percentage of four is theatre. The four reads are settled rather than chained, so an unmigrated table costs that column and not the whole register.
 
-**One trap worth knowing before you build another room.** `console.css` gives every `.cx-table` a `min-width` of 1060px, which is right for the FrictionIQ register in a full-width console. The Intelligence tab panel is a column flex container, so that floor does not stay inside the table — it becomes the minimum width of the room around it. On a 1280px CSS viewport (a 1080p screen at 150% Windows scaling) that forced the Five-Day board to 1112px and the panel's own overflow sliced the right-hand column off: every band looked broken and not one of them was. A room that uses `.cx-table` should set its own `min-width: 0`, restore a floor only where the panel is certainly wider, and give the table wrapper `contain: inline-size`.
+**One trap worth knowing before you build another room.** `console.css` gives every `.cx-table` a `min-width` of 1060px, which is right for the FrictionIQ register in a full-width console. The Intelligence tab panel is a column flex container, so that floor does not stay inside the table — it becomes the minimum width of the room around it. On a 1280px CSS viewport (a 1080p screen at 150% Windows scaling) that forced the Five-Day board to 1112px and the panel's own overflow sliced the right-hand column off: every band looked broken and not one of them was. A room that uses `.cx-table` should give the table its own `min-width` floor and put `contain: inline-size` plus `overflow-x: auto` on the wrapper, so the floor scrolls inside the box instead of widening the room.
 
 ---
 
@@ -180,7 +180,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | **Prompt registry** | Drafts, publish, revert-to-seed, per-prompt version history, usage recorded on copy, 30-day usage summary, registry health. 13 checks in `promptRegistry.test.mjs` |
 | **Five-Day room** | The published board rendered as the room, with each client's work folded into the step it belongs to. The reckoning and its 15 checks live in `assessment5d.js` / `assessment5d.test.mjs` |
 | **Lifecycle register** | Gate → intake → booking → assessment → decision → outcome, one row per business, small firms only by construction |
-| **Readiness gate in the console** | The three-question gate's rows, verdicts and blocked tests shown in the FrictionIQ console |
+| **Readiness gate** | Seven questions (3 core + 4 calibration), any-zero declines. Rows live in the Five-Day lifecycle register, named by sector + headcount, with the blocked tests written out in plain English |
 | **Intelligence nav** | Schedule removed — it is a content calendar and Blog Room already has one beside the posts it schedules |
 
 ### Pending / known gaps
@@ -256,7 +256,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `POST` | `/api/frictioniq/assessment` | Start one (client, sector, country, currency, optional gate token) |
 | `POST` | `/api/frictioniq/assessment/op` | Every write against an assessment — stage, observe, candidate, drop, price, report, decide, outcome, reference |
 | `GET` | `/api/frictioniq/lifecycle` | The small-business funnel, gate to outcome (`?limit=`, capped at 1000) |
-| `GET` | `/api/frictioniq/gates` | AssessmentIQ gate rows (issued/answered, verdict, prize tier, flags) for the console |
+| `DELETE` | `/api/frictioniq/gate` | Remove a readiness-gate row and its intake / booking / assessment (`?token=`) |
 | `GET` | `/api/engagements/board` | The unified operating board — both registers, one projection (`?limit=`, capped at 1000) |
 | `POST` | `/api/engagements/board/op` | Re-route an engagement from the board — agent, framework, next stage |
 
