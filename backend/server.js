@@ -4526,7 +4526,7 @@ Write the full article now.`;
 
       let q = db
         .from('readiness_gate')
-        .select('token,created_at,verdict,total,blocked,soft,sector,headcount_band,revenue_band,role,booked_at,ip_country')
+        .select('token,created_at,status,verdict,total,total_max,prize_tier,flags,blocked,soft,sector,headcount_band,revenue_band,role,booked_at,ip_country')
         .order('created_at', { ascending: false })
         .limit(limit);
       if (verdict) q = q.eq('verdict', verdict);

@@ -295,8 +295,8 @@
         <p class="fd-live-label">This client</p>
         ${a.gate_token
           ? `<p class="fd-live-text">Came through the gate ·
-             <a href="https://www.digitafusion.com/diagnostic/g/${esc(a.gate_token)}" target="_blank" rel="noopener">see their answers</a></p>`
-          : `<p class="fd-live-text fd-dim">No gate token on this record. If they passed the three questions, paste the token when starting — it is what makes the gate's conversion rate mean anything.</p>`}
+             <a href="https://www.digitafusion.com/assessmentiq/gate/${esc(a.gate_token)}" target="_blank" rel="noopener">see their answers</a></p>`
+          : `<p class="fd-live-text fd-dim">No gate token on this record. If they passed the seven questions, paste the token when starting — it is what makes the gate's conversion rate mean anything.</p>`}
       </div>`;
     }
 

@@ -67,7 +67,7 @@ export async function loadLifecycle({ limit = 300 } = {}) {
      should cost that column, not the whole register. */
   const [gates, intakes, bookings, assessments] = await Promise.allSettled([
     c.from('readiness_gate')
-      .select('token, created_at, verdict, total, blocked, soft, sector, headcount_band, role, booked_at')
+      .select('token, created_at, status, verdict, total, total_max, blocked, soft, sector, headcount_band, role, booked_at')
       .order('created_at', { ascending: false }).limit(limit),
     c.from('intake_submission')
       .select('id, gate_token, track, company, contact_name, work_email, lifecycle, booking_ref, booked_at, created_at')
@@ -170,7 +170,7 @@ function rowFor({ gate, intake, booking, asmt }) {
     enteredVia: gate ? 'gate' : 'direct',
     gateToken: gate?.token || asmt?.gate_token || null,
     gateVerdict: gate?.verdict || null,
-    gateTotal: gate ? `${gate.total}/6` : null,
+    gateTotal: gate ? `${gate.total}/${gate.total_max ?? 14}` : null,
     gateBlocked: gate?.blocked || [],
     intakeTrack: intake?.track || null,
     bookedAt,
