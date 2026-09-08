@@ -2445,17 +2445,17 @@ Write a 5–10 sentence operational briefing. Be direct. Flag anything needing i
     if (!db) return;
     const cutoff = new Date(Date.now() + 20 * 60 * 1000).toISOString();
     const start  = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    const { data: bookings } = await db.from('service_bookings')
-      .select('*').eq('status', 'confirmed')
-      .gte('booking_time', start).lte('booking_time', cutoff);
+    const { data: bookings } = await db.from('booking')
+      .select('*').eq('status', 'active')
+      .gte('starts_at', start).lte('starts_at', cutoff);
     for (const booking of (bookings || [])) {
       if (booking.reminder_sent) continue;
-      const timeStr = new Date(booking.booking_time).toLocaleTimeString('en-GB', {
+      const timeStr = new Date(booking.starts_at).toLocaleTimeString('en-GB', {
         hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos',
       });
-      const msg = 'Reminder: Strategy session in 15 min at ' + timeStr + ' with ' + (booking.client_name || 'a client') + '.';
+      const msg = 'Reminder: Strategy session in 15 min at ' + timeStr + ' with ' + (booking.invitee_name || 'a client') + '.';
       await _sendWhatsAppDirect(process.env.OWNER_PHONE || '', msg).catch(() => {});
-      await db.from('service_bookings').update({ reminder_sent: true }).eq('id', booking.id);
+      await db.from('booking').update({ reminder_sent: true, reminder_sent_at: new Date().toISOString() }).eq('id', booking.id);
     }
   }
 

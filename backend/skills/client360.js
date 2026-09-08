@@ -19,7 +19,7 @@ export async function getClient360(accountId) {
       ? db.from('leads').select('*').eq('id', account.lead_id).single()
       : Promise.resolve({ data: null }),
     account.primary_email
-      ? db.from('service_bookings').select('*').eq('client_email', account.primary_email).order('created_at', { ascending: false }).limit(5)
+      ? db.from('booking').select('*').eq('invitee_email', account.primary_email).order('created_at', { ascending: false }).limit(5)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -45,7 +45,13 @@ export async function getClient360(accountId) {
     engagementDetail,
     economics: economics?.[0] || null,
     invoices: invoices || [],
-    bookings: bookings.data || [],
+    bookings: (bookings.data || []).map(b => ({
+      ...b,
+      client_name: b.invitee_name,
+      client_email: b.invitee_email,
+      booking_time: b.starts_at,
+      source: b.provider || 'calendly',
+    })),
     timeline: timeline.data || [],
   };
 }

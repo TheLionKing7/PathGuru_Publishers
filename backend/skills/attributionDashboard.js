@@ -42,7 +42,7 @@ export async function getAttributionDashboard(range = '30d') {
     db.from('lead_magnet_captures').select('id', { count: 'exact', head: true }).gte('created_at', since),
     db.from('nurture_enrollments').select('id', { count: 'exact', head: true }).eq('status', 'active'),
     db.from('nurture_enrollments').select('id', { count: 'exact', head: true }).eq('status', 'completed'),
-    db.from('service_bookings').select('id', { count: 'exact', head: true }).gte('created_at', since),
+    db.from('booking').select('id', { count: 'exact', head: true }).gte('created_at', since),
     db.from('leads').select('id', { count: 'exact', head: true }).eq('status', 'converted').gte('updated_at', since),
     db.from('lead_magnet_captures').select('magnet_slug').gte('created_at', since),
     db.from('lead_magnet_captures').select('content_slug').gte('created_at', since).not('content_slug', 'is', null),

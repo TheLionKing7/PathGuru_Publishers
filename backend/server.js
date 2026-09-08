@@ -2294,82 +2294,56 @@ const server = createServer(async (req, res) => {
   // ════════════════════════════════════════════════════════════════════════
 
   // GET /api/bookings — list all bookings (Services › Calendly tab).
-  // Two sources are unioned so a past Calendly booking is never invisible: the
-  // CRM mirror (service_bookings) and the funnel register (booking). The funnel
-  // row is only appended when its event URI is missing from the mirror, so a
-  // partial webhook write still surfaces the booking instead of hiding it.
+  // `booking` (migration 0021) is the single source of truth for Calendly
+  // events: one row per event_uri, attributed through intake_id. Track is
+  // resolved from the linked intake row so the tab still shows which playbook
+  // the session belongs to.
   if (req.method === 'GET' && path === '/api/bookings') {
     const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
     try {
       const status = url.searchParams.get('status');
       const limit  = parseInt(url.searchParams.get('limit') || '200', 10);
-      let q = db.from('service_bookings').select('*').order('booking_time', { ascending: false }).limit(limit);
-      if (status) q = q.eq('status', status);
-      const { data, error } = await q;
+
+      let q = db.from('booking').select('*').order('starts_at', { ascending: false }).limit(limit);
+      if (status) q = q.eq('status', (status === 'cancelled' || status === 'canceled') ? 'canceled' : 'active');
+      const { data: rows, error } = await q;
       if (error) throw new Error(error.message);
 
-      const bookings = (data || []).slice();
-      const seen = new Set(bookings.map((b) => b.calendly_event_id).filter(Boolean));
+      const intakeIds = [...new Set((rows || []).map((r) => r.intake_id).filter(Boolean))];
+      const { data: intakes } = intakeIds.length
+        ? await db.from('intake_submission').select('id, track').in('id', intakeIds)
+        : { data: [] };
+      const trackById = new Map((intakes || []).map((i) => [i.id, i.track]));
 
-      /* The funnel register is the source of truth for Calendly's own events.
-         It is read as a best-effort reconciliation: if the table is not present
-         the mirror alone is still returned rather than failing the whole tab. */
-      let funnel = [];
-      try {
-        const { data: fRows, error: fErr } = await db
-          .from('booking')
-          .select('id, provider, status, invitee_name, invitee_email, event_uri, starts_at')
-          .order('starts_at', { ascending: false })
-          .limit(limit);
-        if (fErr) throw new Error(fErr.message);
-        funnel = fRows || [];
-      } catch (fErr) {
-        console.warn('[Bookings] funnel reconciliation skipped:', fErr.message);
-      }
+      const bookings = (rows || []).map((r) => ({
+        id: r.id,
+        client_name: r.invitee_name,
+        client_email: r.invitee_email,
+        track: r.intake_id ? (trackById.get(r.intake_id) ?? null) : null,
+        source: r.provider || 'calendly',
+        status: r.status === 'canceled' ? 'cancelled' : 'confirmed',
+        booking_time: r.starts_at,
+        calendly_event_id: r.event_uri,
+      }));
 
-      for (const f of funnel) {
-        if (!f.event_uri || seen.has(f.event_uri)) continue;
-        bookings.push({
-          id: f.id,
-          client_name: f.invitee_name,
-          client_email: f.invitee_email,
-          track: null,
-          source: f.provider || 'calendly',
-          status: f.status === 'canceled' ? 'cancelled' : f.status === 'active' ? 'confirmed' : f.status,
-          booking_time: f.starts_at,
-          calendly_event_id: f.event_uri,
-        });
-      }
-
-      bookings.sort((a, b) => {
-        const at = a.booking_time ? new Date(a.booking_time).getTime() : -Infinity;
-        const bt = b.booking_time ? new Date(b.booking_time).getTime() : -Infinity;
-        return bt - at;
-      });
-
-      json(res, { bookings: bookings.slice(0, limit) });
+      json(res, { bookings });
     } catch (e) { err(res, e.message, 500); }
     return;
   }
 
-  // PATCH /api/bookings/:id — update status (confirm, cancel, complete)
+  // PATCH /api/bookings/:id — update a booking. `booking.status` is Calendly's
+  // own vocabulary ('active' | 'canceled'); the legacy CRM values are mapped so
+  // existing callers keep working.
   if (req.method === 'PATCH' && path.startsWith('/api/bookings/')) {
     const id = path.split('/')[3];
     const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
     try {
       const body = await readBody(req);
-      const { data, error } = await db.from('service_bookings').update(body).eq('id', id).select().single();
+      const patch = { ...body };
+      if (patch.status === 'confirmed') patch.status = 'active';
+      if (patch.status === 'cancelled') patch.status = 'canceled';
+      const { data, error } = await db.from('booking').update(patch).eq('id', id).select().single();
       if (error) throw new Error(error.message);
-      // If just confirmed, sync milestone to Nexus
-      if (body.status === 'confirmed') {
-        nexus.syncLifecycleMilestone({
-          leadId:     data.lead_id,
-          clientName: data.client_name,
-          track:      data.track,
-          milestone:  'strategy_session_booked',
-          data:       { bookingId: id, bookingTime: data.booking_time },
-        }).catch(() => {});
-      }
       json(res, { booking: data });
     } catch (e) { err(res, e.message, 500); }
     return;
@@ -2531,7 +2505,9 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  // POST /api/bookings/calendly-webhook — Calendly fires this when someone books
+  // POST /api/bookings/calendly-webhook — legacy Calendly webhook. The canonical
+  // handler is DigiFusion's /api/booking/calendly; this mirror writes the same
+  // single `booking` table so a webhook still pointed here keeps working.
   if (req.method === 'POST' && path === '/api/bookings/calendly-webhook') {
     try {
       const body = await readBody(req);
@@ -2539,17 +2515,25 @@ const server = createServer(async (req, res) => {
       if (db && body.event === 'invitee.created') {
         const inv = body.payload?.invitee || {};
         const evt = body.payload?.event   || {};
-        const { data } = await db.from('service_bookings').insert({
-          client_name:      inv.name,
-          client_email:     inv.email,
-          client_phone:     inv.text_reminder_number || null,
-          booking_time:     evt.start_time,
-          source:           'calendly',
-          calendly_event_id: evt.uuid,
-          status:           'confirmed',
-          track:            (inv.questions_and_answers?.find(q => /service|track/i.test(q.question))?.answer) || null,
-          notes:            (inv.questions_and_answers?.map(q => `${q.question}: ${q.answer}`).join('\n')) || null,
-        }).select().single();
+        const eventUri = evt.uri || evt.uuid;
+        const row = {
+          provider:      'calendly',
+          event_uri:     eventUri,
+          invitee_uri:   inv.uri || null,
+          status:        'active',
+          invitee_name:  inv.name,
+          invitee_email: inv.email,
+          event_name:    evt.name || null,
+          starts_at:     evt.start_time || null,
+          invitee_tz:    inv.timezone || null,
+          questions:     inv.questions_and_answers || null,
+          raw:           body,
+        };
+        const { data: existing } = await db.from('booking')
+          .select('id').eq('event_uri', eventUri).maybeSingle();
+        const { data } = existing?.id
+          ? await db.from('booking').update(row).eq('id', existing.id).select().single()
+          : await db.from('booking').insert(row).select().single();
         if (data) {
           const db2 = getSupabase();
           if (db2) {
