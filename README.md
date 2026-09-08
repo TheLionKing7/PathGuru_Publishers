@@ -256,7 +256,7 @@ Set `AI_PROVIDER=` (blank) in `.env` to enable auto-selection. Set it to a provi
 | `POST` | `/api/frictioniq/assessment` | Start one (client, sector, country, currency, optional gate token) |
 | `POST` | `/api/frictioniq/assessment/op` | Every write against an assessment — stage, observe, candidate, drop, price, report, decide, outcome, reference |
 | `GET` | `/api/frictioniq/lifecycle` | The small-business funnel, gate to outcome (`?limit=`, capped at 1000) |
-| `GET` | `/api/frictioniq/gates` | Readiness-gate rows for the FrictionIQ console |
+| `GET` | `/api/frictioniq/gates` | AssessmentIQ gate rows (issued/answered, verdict, prize tier, flags) for the console |
 | `GET` | `/api/engagements/board` | The unified operating board — both registers, one projection (`?limit=`, capped at 1000) |
 | `POST` | `/api/engagements/board/op` | Re-route an engagement from the board — agent, framework, next stage |
 
