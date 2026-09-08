@@ -231,7 +231,11 @@
           <td>${r.frameworkId ? esc(r.frameworkId) : '<span class="fd-dim">—</span>'}</td>
           <td>${r.serviceAmount ? esc(money(r.serviceAmount, r.serviceCurrency)) : '<span class="fd-dim">—</span>'}</td>
           <td>${esc(day(r.lastAt))}</td>
-          <td>${r.assessmentId ? `<button class="cx-btn cx-btn-danger cx-btn-sm" data-del="${esc(r.assessmentId)}" title="Delete this five-day assessment record">Delete</button>` : ''}</td>
+          <td>${r.assessmentId
+            ? `<button class="cx-btn cx-btn-danger cx-btn-sm" data-del="${esc(r.assessmentId)}" title="Delete this five-day assessment record">Delete</button>`
+            : r.gateToken
+              ? `<button class="cx-btn cx-btn-danger cx-btn-sm" data-del-gate="${esc(r.gateToken)}" title="Delete this gate record and everything that came through it">Delete</button>`
+              : ''}</td>
         </tr>`).join('')}</tbody></table></div>
 
       <div class="fd-stagekey">${l.stages.map((st) =>
@@ -530,6 +534,18 @@
         try {
           await api().apiFetch(`/api/frictioniq/assessment?id=${encodeURIComponent(del.dataset.del)}`, { method: 'DELETE' });
           window.pgToast?.('Assessment deleted', 'success');
+          state.open = null;
+          await loadRegister(true);
+          render();
+        } catch (err) { window.pgToast?.(err.message, 'error'); }
+        return;
+      }
+      const delGate = e.target.closest('[data-del-gate]');
+      if (delGate) {
+        if (!window.confirm('Delete this gate record and everything that came through it? This cannot be undone.')) return;
+        try {
+          await api().apiFetch(`/api/frictioniq/gate?token=${encodeURIComponent(delGate.dataset.delGate)}`, { method: 'DELETE' });
+          window.pgToast?.('Gate record deleted', 'success');
           state.open = null;
           await loadRegister(true);
           render();

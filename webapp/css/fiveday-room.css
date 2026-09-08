@@ -149,19 +149,16 @@
      is the same failure as the one above by a different route. */
   contain: inline-size;
 }
-/* min-width: 0 is the whole fix for the clipping.
-   -----------------------------------------------
-   console.css gives every .cx-table `min-width: 1060px`, which is right for the
-   FrictionIQ register in a full-width console. The panel here is a COLUMN FLEX
-   CONTAINER, so that floor does not stay inside the table: it becomes the
-   minimum width of the room itself. On a 1080p screen at 150% Windows scaling —
-   a 1280px CSS viewport, 1000px of panel — the board was forced to 1112px and
-   the panel's own overflow sliced the right-hand column off. Every band looked
-   broken and none of them was: one number in another file was.
-   The floor comes back only where the panel is certainly wider than it, so wide
-   tables scroll rather than crush, and narrow ones wrap their cells instead. */
-.fd-table { width: 100%; min-width: 0; margin-bottom: 0; }
-@media (min-width: 1180px) { .fd-table { min-width: 720px; } }
+/* The register has eleven columns. At console widths it is wider than the
+   panel, so the table keeps a real floor and scrolls inside its own wrapper
+   instead of crushing the columns until their contents clip. `contain:
+   inline-size` on the wrapper is what stops that floor from reaching back out
+   through the flex chain and widening the room: console.css gives every
+   `.cx-table` a 1060px floor, and on a 1080p screen at 150% scaling that floor
+   once forced the board to 1112px — the panel's own overflow sliced the
+   right-hand column off. The wrapper's overflow-x scrolls the table; the room
+   itself never grows. */
+.fd-table { width: 100%; min-width: 960px; margin-bottom: 0; }
 .fd-row { cursor: pointer; }
 .fd-row:hover { background: var(--surface-2); }
 .fd-client { color: var(--text-primary); font-weight: 600; }

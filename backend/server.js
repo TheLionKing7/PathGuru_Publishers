@@ -4492,6 +4492,31 @@ Write the full article now.`;
     return;
   }
 
+  // DELETE /api/frictioniq/gate?token= — remove a readiness-gate row and the
+  // intake / booking / assessment that came through it. The links are text
+  // tokens with no FK cascade, so the order is explicit: children first.
+  if (req.method === 'DELETE' && path === '/api/frictioniq/gate') {
+    try {
+      const db = getSupabase(); if (!db) { err(res, 'Supabase not configured', 503); return; }
+      const token = url.searchParams.get('token') || '';
+      if (!token) { err(res, 'token required', 400); return; }
+
+      const { data: asmts } = await db.from('assessment_5d').select('id').eq('gate_token', token);
+      for (const a of (asmts || [])) await db.from('assessment_5d').delete().eq('id', a.id);
+
+      const { data: intakes } = await db.from('intake_submission').select('id').eq('gate_token', token);
+      const intakeIds = (intakes || []).map((i) => i.id);
+      if (intakeIds.length) await db.from('booking').delete().in('intake_id', intakeIds);
+      await db.from('intake_submission').delete().eq('gate_token', token);
+
+      await db.from('readiness_gate').delete().eq('token', token);
+      json(res, { ok: true, deleted: true });
+    } catch (e) {
+      err(res, e.message, 500);
+    }
+    return;
+  }
+
   /* ── GET /api/frictioniq/gates — the three-question readiness gate ────────
      A SEPARATE ROUTE because it is a separate register. readiness_gate holds a
      three-answer instrument with its own verdicts; folding it into
