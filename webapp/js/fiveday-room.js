@@ -40,6 +40,14 @@
   };
   const day = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—');
 
+  /* The three gating tests, named. `blocked` stores the ids; the register shows
+     the name that tells the operator what to fix, not the bare key. */
+  const GATE_TESTS = {
+    cadence:   'A process that repeats',
+    measure:   'A number that would move',
+    authority: 'Someone who can decide',
+  };
+
   /* ── Data ─────────────────────────────────────────────────────────────── */
 
   async function loadRegister(quiet) {
@@ -211,14 +219,14 @@
       </tr></thead>
       <tbody>${l.rows.map((r) => `
         <tr class="${r.assessmentId ? 'fd-row' : ''}" ${r.assessmentId ? `data-open="${esc(r.assessmentId)}"` : ''}>
-          <td>${r.anonymous
-            ? `<span class="fd-dim">unnamed</span> <span class="fd-tag">${esc(r.enteredVia)}</span>`
-            : `<span class="fd-client">${esc(r.name)}</span>`}
-            ${r.sector ? `<span class="fd-sub">${esc(r.sector)}</span>` : ''}</td>
+          <td>${r.label
+            ? `<span class="fd-client">${esc(r.label)}</span>${r.anonymous ? ` <span class="fd-tag">${esc(r.enteredVia)}</span>` : ''}`
+            : `<span class="fd-dim">unnamed</span> <span class="fd-tag">${esc(r.enteredVia)}</span>`}
+            ${!r.anonymous && r.sector ? `<span class="fd-sub">${esc(r.sector)}</span>` : ''}</td>
           <td><span class="fd-stage fd-stage--${esc(r.stage)}">${esc(stageLabel(r.stage))}</span></td>
           <td>${r.gateVerdict
             ? `${esc(r.gateVerdict)} <span class="fd-dim">${esc(r.gateTotal)}</span>${
-                r.gateBlocked.length ? `<span class="fd-sub">missing: ${r.gateBlocked.map(esc).join(', ')}</span>` : ''}`
+                r.gateBlocked.length ? `<span class="fd-sub">missing: ${r.gateBlocked.map((t) => esc(GATE_TESTS[t] || t)).join(', ')}</span>` : ''}`
             : '<span class="fd-dim">direct</span>'}</td>
           <td>${r.bookedAt ? esc(day(r.bookedAt)) : '<span class="fd-dim">—</span>'}</td>
           <td>${r.assessmentStage ? esc(stepLabelFor(r.assessmentStage)) : '<span class="fd-dim">—</span>'}</td>

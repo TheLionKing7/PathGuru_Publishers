@@ -158,10 +158,16 @@ function rowFor({ gate, intake, booking, asmt }) {
   }
 
   const name = asmt?.client_name || intake?.company || intake?.contact_name || null;
+  /* A gate row is anonymous but not nameless: sector + headcount give it a
+     label better than "unnamed" in the register. */
+  const label = name || (gate && (gate.sector || gate.headcount_band)
+    ? [gate.sector, gate.headcount_band].filter(Boolean).join(' · ')
+    : null);
 
   return {
     key: gate?.token || asmt?.id,
     name,
+    label,
     /* Named only where a person actually gave it. A gate row carries no
        identity at all, by design — see the gate route. */
     anonymous: !name,
