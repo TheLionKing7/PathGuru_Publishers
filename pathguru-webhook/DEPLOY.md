@@ -47,9 +47,14 @@ All five flags must be `true`.
 | Twilio → WhatsApp senders → Status callback URL | `https://webhooks.digitafusion.com/webhooks/whatsapp-status` |
 | Make → Scenario A → HTTP module | `https://…workers.dev/webhooks/inbound-email` |
 
-Slack Events API: subscribe to `app_mention` and `message.im` (the bot must be in
-the relevant channels). The backend ignores `bot_id`/`subtype` so Nexus never
-answers its own messages.
+Slack Events API: subscribe to `app_mention`, `message.im`, `message.channels`,
+and (if using private channels) `message.groups`. Grant the matching bot token
+scopes `chat:write`, `im:history`, `channels:history`, and `groups:history` as
+needed, then reinstall the app after changing scopes. Invite the bot to each
+channel where it should listen. Nexus responds to mentions and DMs, and follows
+up without another mention only inside a thread where Nexus has already
+participated; unrelated channel messages are ignored. The backend ignores
+`bot_id`/`subtype` so Nexus never answers its own messages.
 
 The Worker is the only Slack entry point in production. Render's
 `POST /api/webhooks/slack` route remains in place for local testing, but Slack

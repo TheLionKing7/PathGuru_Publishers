@@ -334,7 +334,7 @@ export async function handleSlashCommand(form) {
     : { text: ':arrow_forward: System resumed. Outbound sends are enabled.' };
 }
 
-/** Handle an Events API `event_callback` — app_mention and thread replies. */
+/** Handle an Events API `event_callback` — mentions, DMs, and active-thread replies. */
 export async function handleSlackEventCallback(payload) {
   const event = payload.event || {};
 
@@ -359,6 +359,25 @@ export async function handleSlackEventCallback(payload) {
     const { handleCommissionThreadReply } = await import('./contentCommissionSlack.js');
     const handled = await handleCommissionThreadReply(event);
     if (handled) return { ok: true, handled: true };
+
+    // Continue a Nexus conversation naturally in its existing thread. Never
+    // answer arbitrary channel messages: the thread must already be in history.
+    if (event.thread_ts) {
+      const { isNexusConversationThread, handleSlackConversation } = await import('./slackConversation.js');
+      const knownThread = await isNexusConversationThread({
+        channel: event.channel,
+        threadTs: event.thread_ts,
+      });
+      if (knownThread) {
+        await handleSlackConversation({
+          channel:  event.channel,
+          threadTs: event.thread_ts,
+          userId:   event.user,
+          text:     event.text,
+        });
+        return { ok: true, handled: true };
+      }
+    }
 
     // DM to the bot → conversational.
     if (event.channel_type === 'im') {

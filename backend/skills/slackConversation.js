@@ -19,6 +19,17 @@ function stripBotMention(text) {
   return String(text || '').replace(/<@[A-Z0-9]+>/g, '').trim();
 }
 
+/** True when Nexus has already participated in this Slack thread. */
+export async function isNexusConversationThread({ db = getSupabase(), channel, threadTs }) {
+  if (!db || !channel || !threadTs) return false;
+  const { data, error } = await db.from('slack_conversation')
+    .select('id')
+    .eq('channel', channel)
+    .eq('thread_ts', threadTs)
+    .limit(1);
+  return !error && Boolean(data?.length);
+}
+
 /** Conversational entry point: load history, reply in-thread, persist both turns. */
 export async function handleSlackConversation({ channel, threadTs, userId, text }) {
   const db = getSupabase();
