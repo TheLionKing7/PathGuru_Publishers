@@ -2014,7 +2014,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     // ── ACTION: Aether blog commission status (fast — no LLM) ───────────────
     if (isAetherContentStatusQuery(message)) {
       try {
-        return await buildAetherContentStatusReply();
+        return await buildAetherContentStatusReply({ message });
       } catch (e) {
         return `I could not read Aether’s blog status right now: ${e.message}. Check the Content Commission thread or Blog → Compose.`;
       }
