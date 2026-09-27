@@ -45,7 +45,7 @@ export async function handleSlackConversation({ channel, threadTs, userId, text 
   let reply;
   try {
     const { nexus } = await import('../agents/nexus.js');
-    reply = await nexus.chat(clean, history, 'internal');
+    reply = await nexus.chat(clean, history, 'internal', { channel, threadTs });
   } catch (e) {
     reply = `I hit an error: ${e.message}`;
   }

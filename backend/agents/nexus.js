@@ -64,6 +64,7 @@ import {
 } from '../skills/whatsappChatIntents.js';
 import { findPendingApproval } from '../skills/approvalGate.js';
 import {
+  isResearchActionRequest,
   isResearchStatusQuery,
   buildResearchStatusReply,
   buildResearchPipelineBlock,
@@ -682,10 +683,23 @@ export class Nexus extends AgentBase {
   /**
    * Background Orion research — avoids HTTP 502 on long Tavily/Firecrawl runs.
    */
-  async _runOrionResearchJob(taskId, instruction, priority = 3) {
+  async _runOrionResearchJob(taskId, instruction, priority = 3, slackContext = null) {
     const db = getSupabase();
     let brief = null;
     let researchMeta = {};
+    const notifySlack = async (text) => {
+      if (!slackContext?.channel) return;
+      try {
+        const { postSlackMessage } = await import('../skills/slackNotify.js');
+        await postSlackMessage({
+          channel: slackContext.channel,
+          threadTs: slackContext.threadTs,
+          text,
+        });
+      } catch (e) {
+        console.warn('[Nexus] Research Slack notification failed:', e.message);
+      }
+    };
 
     try {
       const { researcher } = await import('./researcher.js');
@@ -736,6 +750,7 @@ export class Nexus extends AgentBase {
         reason: e.message,
         depth: 'deep', forAgent: 'nexus',
       });
+      await notifySlack(`:x: Orion research failed for “${instruction.slice(0, 160)}”. ${e.message}`);
       return;
     }
 
@@ -782,6 +797,7 @@ export class Nexus extends AgentBase {
           reason: `Research brief failed the quality gate twice (${qScore.score}/100) — waiting for human review`,
           depth: researchMeta.depth, forAgent: 'nexus',
         });
+        await notifySlack(`:warning: Orion finished researching “${instruction.slice(0, 140)}”, but the brief failed the quality gate twice (${qScore.grade}, ${qScore.score}/100). It was not marked as a completed deliverable.`);
         return;
       }
     }
@@ -800,6 +816,7 @@ export class Nexus extends AgentBase {
         reason: `Research brief shorter than ${MIN_BRIEF_LENGTH} characters — not stored as a completed artifact`,
         depth: researchMeta.depth, forAgent: 'nexus',
       });
+      await notifySlack(`:warning: Orion could not produce a usable brief for “${instruction.slice(0, 140)}” (only ${briefLength} characters; minimum ${MIN_BRIEF_LENGTH}).`);
       return;
     }
 
@@ -892,6 +909,16 @@ export class Nexus extends AgentBase {
     });
 
     console.log(`[Nexus] Orion research complete — task ${taskId}`);
+    const preview = String(brief || '').replace(/\s+/g, ' ').slice(0, 700);
+    await notifySlack([
+      `:white_check_mark: *Orion research is back* — ${qScore.grade} (${qScore.score}/100).`,
+      `Task: \`${String(taskId).slice(0, 8)}…\``,
+      '',
+      preview,
+      brief.length > 700 ? '…' : '',
+      '',
+      'The full brief is available in Agent Console → Orion → Deliverables.',
+    ].filter(Boolean).join('\n'));
   }
 
   // ── Route to the right agent after research ──────────────────────────────
@@ -955,7 +982,7 @@ export class Nexus extends AgentBase {
       return { type: 'plan', paused: true, parentId: null, tasks: [], plan: [] };
     }
 
-    const { priority = 3, researchBrief = null, nextStep = null } = options;
+    const { priority = 3, researchBrief = null, nextStep = null, slackContext = null } = options;
     const db = options.db || getSupabase();
 
     // ── IP Factory: synthesize original framework from resource pool ─────────
@@ -1302,7 +1329,11 @@ No full article. Brief only.`;
       const runId = generateRunId();
       createBudget({ runId, tokenLimit: 100000, costLimitUsdMills: 5000 }).catch(() => {});
 
-      if (db2) {
+      if (!db2) {
+        return { type: 'research_failed', error: 'Supabase is not configured; Orion research was not started.' };
+      }
+
+      {
         const { data: taskRow, error: taskErr } = await db2.from('tasks').insert({
           title:       `[Orion] Research: ${instruction.slice(0, 80)}`,
           description: instruction,
@@ -1312,8 +1343,15 @@ No full article. Brief only.`;
           priority,
           type:        'research',
         }).select('id').single();
-        if (taskErr) console.warn('[Nexus] Research task insert failed:', taskErr.message);
+        if (taskErr) {
+          console.error('[Nexus] Research task insert failed:', taskErr.message);
+          return { type: 'research_failed', error: `Could not create Orion research task: ${taskErr.message}` };
+        }
         taskId = taskRow?.id || null;
+      }
+
+      if (!taskId) {
+        return { type: 'research_failed', error: 'Could not create an auditable Orion research task; research was not started.' };
       }
 
       // ── HARNESS: Trace the research dispatch step ─────────────────────────
@@ -1325,8 +1363,26 @@ No full article. Brief only.`;
       }).catch(() => {});
 
       if (taskId) {
-        this._runOrionResearchJob(taskId, instruction, priority).catch(e => {
+        this._runOrionResearchJob(taskId, instruction, priority, slackContext).catch(e => {
           console.error('[Nexus] Background Orion job failed:', e.message);
+          db2.from('tasks').update({
+            status: 'failed',
+            error: e.message,
+            completed_at: new Date().toISOString(),
+          }).eq('id', taskId).then(({ error }) => {
+            if (error) console.warn('[Nexus] Could not mark failed research task:', error.message);
+          }).catch((updateError) => {
+            console.warn('[Nexus] Could not mark failed research task:', updateError.message);
+          });
+          if (slackContext?.channel) {
+            import('../skills/slackNotify.js').then(({ postSlackMessage }) => postSlackMessage({
+              channel: slackContext.channel,
+              threadTs: slackContext.threadTs,
+              text: `:x: Orion research failed unexpectedly for “${instruction.slice(0, 140)}”. ${e.message}`,
+            })).catch((notifyError) => {
+              console.warn('[Nexus] Research failure notification failed:', notifyError.message);
+            });
+          }
         });
       }
 
@@ -1836,7 +1892,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
   // CHAT — overrides agentBase.chat() to execute real actions, not just talk
   // ══════════════════════════════════════════════════════════════════════════
 
-  async chat(message, history = [], surface = 'internal') {
+  async chat(message, history = [], surface = 'internal', chatContext = null) {
     const lower = message.toLowerCase();
 
     // ── ACTION: Workflow design ────────────────────────────────────────────
@@ -1925,6 +1981,23 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     } catch (e) {
       console.warn('[Nexus] Approval message handling failed:', e.message);
+    }
+
+    // ── ACTION: Explicit research instruction — start Orion, don't answer as status ──
+    if (isResearchActionRequest(message)) {
+      try {
+        const result = await this.orchestrate(message, {
+          slackContext: surface === 'internal' ? chatContext : null,
+        });
+        if (result.type === 'research_started') {
+          return `Orion research started, Boss. Task \`${String(result.taskId).slice(0, 8)}…\`. I’ll reply here when the brief is back and has passed the research quality checks.`;
+        }
+        if (result.paused) return 'The system is paused, so I did not start the research. Resume the system and resend the instruction when ready.';
+        return result.error || 'I could not start Orion research. No research task was created.';
+      } catch (e) {
+        console.error('[Nexus] Slack research instruction failed:', e.message);
+        return `I could not start Orion research: ${e.message}`;
+      }
     }
 
     // ── ACTION: Orion research / deliverable status (fast — no LLM) ────────

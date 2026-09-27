@@ -9,10 +9,20 @@ import { isNotionConfigured } from './truthGuard.js';
 const RESEARCH_QUERY =
   /orion|researcher|nocopo|research\s+(result|report|brief|deliverable|output)|where\s+(is|are)\s+(the\s+)?(research|report|result|brief)|what about the research|research you|deliverable|orion'?s research/i;
 
+const RESEARCH_ACTION =
+  /^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:i\s+(?:want|need)\s+you\s+to|please|can\s+you|could\s+you|go\s+ahead\s+and|have\s+(?:orion|the\s+research\s+agent|the\s+researcher)|let\s+(?:orion|the\s+research\s+agent|the\s+researcher))\b[\s\S]*\b(research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b|^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b/i;
+
+/** Explicit human instruction to start research, distinct from asking its status. */
+export function isResearchActionRequest(text) {
+  const raw = String(text || '').trim();
+  return Boolean(raw && RESEARCH_ACTION.test(raw));
+}
+
 /** Boss asking about Orion research output — not blog approval status. */
 export function isResearchStatusQuery(text) {
   const raw = (text || '').trim();
   if (!raw) return false;
+  if (isResearchActionRequest(raw)) return false;
   if (RESEARCH_QUERY.test(raw)) return true;
   if (/still waiting/i.test(raw) && /research|orion|report|brief|nocopo|deliverable/i.test(raw)) return true;
   if (/can'?t find/i.test(raw) && /notion/i.test(raw) && /research|orion|report/i.test(raw)) return true;
