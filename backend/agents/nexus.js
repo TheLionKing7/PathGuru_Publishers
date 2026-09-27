@@ -69,6 +69,8 @@ import {
   buildResearchStatusReply,
   buildResearchPipelineBlock,
 } from '../skills/nexusResearchOps.js';
+import { isAetherContentStatusQuery, buildAetherContentStatusReply } from '../skills/aetherContentStatus.js';
+import { isAgentNetworkStatusQuery, buildAgentNetworkStatusReply } from '../skills/agentNetworkStatus.js';
 import {
   parseNotionLogIntent,
   formatNotionLogReply,
@@ -2009,6 +2011,25 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       }
     }
 
+    // ── ACTION: Aether blog commission status (fast — no LLM) ───────────────
+    if (isAetherContentStatusQuery(message)) {
+      try {
+        return await buildAetherContentStatusReply();
+      } catch (e) {
+        return `I could not read Aether’s blog status right now: ${e.message}. Check the Content Commission thread or Blog → Compose.`;
+      }
+    }
+
+    // ── ACTION: Full agent-network operations status (fast — no LLM) ────────
+    if (isAgentNetworkStatusQuery(message)) {
+      try {
+        const status = await this.getNetworkStatus();
+        return buildAgentNetworkStatusReply(status);
+      } catch (e) {
+        return `Boss, I could not verify agent operations right now: ${e.message}.`;
+      }
+    }
+
     // ── ACTION: WhatsApp approval receipt (fast — no LLM) ─────────────────
     if (isWhatsAppApprovalQuery(message)) {
       try {
@@ -2236,41 +2257,48 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       { id: 'assistant',   name: 'Aria',        role: 'Lead Intake & Assistant', color: '#84cc16', status: 'idle', lastActivity: null, currentTask: null },
     ];
 
-    // If DB is unavailable, return roster with idle status
+    // If the database is unavailable, do not represent unknown status as idle.
     if (!db) {
       const byId = {};
       for (const a of AGENT_DEFS) {
-        a.lastActivity = 'unavailable';
-        byId[a.id] = { status: a.status, lastActivity: a.lastActivity, currentTask: a.currentTask, name: a.name, role: a.role, color: a.color };
+        byId[a.id] = { status: 'unknown', lastActivity: null, currentTask: null, name: a.name, role: a.role, color: a.color };
       }
-      return { agents: byId, activeTasks: [], pendingAlerts: [], snapshotAt: new Date().toISOString() };
+      return { agents: byId, activeTasks: [], recentCompletedTasks: [], recentFailedTasks: [], pendingAlerts: [], dataAvailable: false, snapshotAt: new Date().toISOString() };
     }
 
-    // Try fetching from DB
-    let dbAgents = [];
-    let tasksRes, notifRes;
-    try {
-      const results = await Promise.all([
-        db.from('agents').select('*').order('id'),
-        db.from('tasks')
-          .select('id, title, agent_id, status, priority, type, created_at, completed_at, error')
-          .in('status', ['pending', 'in_progress'])
-          .order('priority', { ascending: false })
-          .order('created_at', { ascending: true })
-          .limit(50),
-        db.from('notifications')
-          .select('*')
-          .eq('status', 'pending')
-          .in('severity', ['warning', 'critical'])
-          .order('created_at', { ascending: false })
-          .limit(10),
-      ]);
-      dbAgents = results[0]?.data || [];
-      tasksRes = results[1];
-      notifRes = results[2];
-    } catch (_) {
-      // DB query failed — fall back to hard-coded roster
-    }
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const results = await Promise.allSettled([
+      db.from('agents').select('id, display_name, role, status, current_task_id, last_active_at').order('id'),
+      db.from('tasks')
+        .select('id, title, agent_id, status, priority, type, created_at, started_at, updated_at, completed_at, error')
+        .in('status', ['pending', 'in_progress'])
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(100),
+      db.from('tasks')
+        .select('id, title, agent_id, status, completed_at, error')
+        .eq('status', 'completed')
+        .gte('completed_at', since)
+        .order('completed_at', { ascending: false })
+        .limit(10),
+      db.from('tasks')
+        .select('id, title, agent_id, status, completed_at, error')
+        .eq('status', 'failed')
+        .gte('completed_at', since)
+        .order('completed_at', { ascending: false })
+        .limit(10),
+      db.from('notifications')
+        .select('*')
+        .eq('status', 'pending')
+        .in('severity', ['warning', 'critical'])
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ]);
+
+    const queryData = results.map((result) => result.status === 'fulfilled' ? result.value : null);
+    const [agentsRes, tasksRes, completedRes, failedRes, notifRes] = queryData;
+    const coreAvailable = agentsRes && tasksRes && !agentsRes.error && !tasksRes.error;
+    const dbAgents = agentsRes?.data || [];
 
     // Build agent map from DB rows, falling back to hard-coded defs
     const dbAgentMap = {};
@@ -2284,19 +2312,15 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       const dbRow = dbAgentMap[def.id];
       const activeTasks = (tasksRes?.data || []).filter(t => t.agent_id === def.id);
 
-      // Determine status: prioritize DB row, then active tasks, then idle
-      let status = 'idle';
-      if (dbRow?.status) {
-        status = dbRow.status === 'active' ? 'active' : dbRow.status === 'busy' ? 'busy' : 'idle';
-      } else if (activeTasks.length > 0) {
-        const hasRunning = activeTasks.some(t => t.status === 'in_progress');
-        status = hasRunning ? 'busy' : 'active';
-      }
+      // Preserve explicit status; missing rows/signals are unknown, not idle.
+      const status = dbRow?.status || (activeTasks.some(t => t.status === 'in_progress')
+        ? 'busy'
+        : activeTasks.length ? 'active' : 'unknown');
 
       agentStatuses[def.id] = {
         status,
-        lastActivity: dbRow?.last_active || dbRow?.updated_at || (activeTasks.length > 0 ? new Date().toISOString() : '—'),
-        currentTask: activeTasks[0]?.title || dbRow?.current_task || null,
+        lastActivity: dbRow?.last_active_at || null,
+        currentTask: activeTasks[0]?.title || dbRow?.current_task_id || null,
         name: def.name,
         role: def.role,
         color: def.color,
@@ -2306,7 +2330,14 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     return {
       agents:        agentStatuses,
       activeTasks:   tasksRes?.data  || [],
+      recentCompletedTasks: completedRes?.data || [],
+      recentFailedTasks: failedRes?.data || [],
+      completedAvailable: Boolean(completedRes && !completedRes.error),
+      failedAvailable: Boolean(failedRes && !failedRes.error),
       pendingAlerts: notifRes?.data  || [],
+      dataAvailable: Boolean(coreAvailable),
+      partial: results.some((result) => result.status === 'rejected') || results.some((result) => result.status === 'fulfilled' && result.value?.error),
+      error: !coreAvailable ? (agentsRes?.error?.message || tasksRes?.error?.message || 'agent or task status query failed') : null,
       snapshotAt:    new Date().toISOString(),
     };
   }
