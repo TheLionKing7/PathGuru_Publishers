@@ -19,6 +19,7 @@ const t = (name, condition) => {
 console.log('— intent routing —');
 t('routes the reported Aether writing-status question', isAetherContentStatusQuery('Has Aether finished writing the blog post?'));
 t('routes a simple blog status question', isAetherContentStatusQuery('What is the status of Aether’s blog post?'));
+t('routes a blog draft status question without requiring Aether to be named', isAetherContentStatusQuery('Is the blog draft ready?'));
 t('routes a request for current work visibility and latest update', isAetherContentStatusQuery('Boss, I don’t have visibility into Aether’s current work on the OpenMarket blog post. Please share the task reference or brief so I can pull the latest update'));
 t('does not route a request to write a post', !isAetherContentStatusQuery('Aether, write a blog post about AI adoption.'));
 t('does not route unrelated chat', !isAetherContentStatusQuery('Good morning, Nexus.'));

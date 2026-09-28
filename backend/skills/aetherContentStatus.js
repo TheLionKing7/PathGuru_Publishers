@@ -39,10 +39,9 @@ function extractCommissionTopic(message) {
 /** Match status questions about Aether's blog-writing work, not write requests. */
 export function isAetherContentStatusQuery(message) {
   const text = String(message || '').toLowerCase();
-  const namesAether = /\b(?:aether|content agent)\b/.test(text);
   const namesContent = /\b(?:blog|post|article|draft)\b/.test(text);
   const asksProgress = /\b(?:status|finish(?:ed)?|done|complete(?:d)?|ready|writing|written|draft(?:ed|ing)?|current|work|working|progress|visibility|update|latest|stuck|underway)\b/.test(text);
-  return namesAether && namesContent && asksProgress;
+  return namesContent && asksProgress;
 }
 
 /** Read and format a matching commission, or recent commissions, without an LLM. */
