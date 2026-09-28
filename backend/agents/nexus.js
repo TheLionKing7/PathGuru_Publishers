@@ -70,6 +70,7 @@ import {
   buildResearchPipelineBlock,
 } from '../skills/nexusResearchOps.js';
 import { isAetherContentStatusQuery, buildAetherContentStatusReply } from '../skills/aetherContentStatus.js';
+import { classifyDirectAgentTask } from '../skills/nexusTaskRouting.js';
 import { isAgentNetworkStatusQuery, buildAgentNetworkStatusReply } from '../skills/agentNetworkStatus.js';
 import {
   parseNotionLogIntent,
@@ -976,6 +977,103 @@ export class Nexus extends AgentBase {
 
   async listCampaigns(opts = {}) {
     return listOrchestrationCampaigns(opts);
+  }
+
+  /** Execute a clear internal chat delegation and return its durable reference. */
+  async dispatchChatInstruction(message) {
+    const intent = classifyDirectAgentTask(message);
+    if (!intent) return null;
+    if (await isPaused()) return { type: 'task_paused', agent: intent.agentId };
+
+    const db = getSupabase();
+    if (!db) return { type: 'task_failed', error: 'Task storage is unavailable; no agent was dispatched.' };
+
+    if (intent.action === 'blog_commission') {
+      const { assertCommissionCapacity, createContentCommission, transitionContentCommission } = await import('../skills/contentCommission.js');
+      const capacity = await assertCommissionCapacity({ db });
+      if (!capacity.ok) {
+        const names = capacity.inFlight.map((c) => `${c.label} (${c.status})`).join('; ');
+        return { type: 'task_refused', agent: 'aether', error: `Aether already has ${capacity.count} active commission(s): ${names}.` };
+      }
+
+      const created = await createContentCommission({
+        sourceNote: message,
+        commissionedBy: 'nexus-chat',
+        angle: message,
+        mirror: false,
+        db,
+      });
+      if (!created.ok) return { type: 'task_failed', agent: 'aether', error: created.error };
+
+      const moved = await transitionContentCommission({
+        id: created.commission.id,
+        status: 'researching',
+        mirror: false,
+        fields: { angle_approved_at: new Date().toISOString() },
+        db,
+      });
+      if (!moved.ok) return { type: 'task_failed', agent: 'aether', error: moved.error };
+
+      const commissionId = created.commission.id;
+      import('../skills/contentCommissionPipeline.js')
+        .then(({ runContentCommission }) => runContentCommission({ id: commissionId, db }))
+        .catch((error) => console.error('[Nexus] Direct Aether commission failed:', error.message));
+
+      return {
+        type: 'blog_commission_started',
+        agent: 'aether',
+        commissionId,
+        status: 'researching',
+      };
+    }
+
+    if (intent.agentId === 'researcher') {
+      return this.orchestrate(message);
+    }
+
+    const { data: task, error } = await db.from('tasks').insert({
+      title: `[${intent.agentId}] ${intent.title}`,
+      description: message,
+      agent_id: intent.agentId,
+      created_by: 'nexus',
+      status: 'pending',
+      priority: 3,
+      type: intent.type,
+      input: {
+        instruction: message,
+        ...(intent.action ? { action: intent.action, topic: message } : {}),
+      },
+    }).select().single();
+    if (error || !task?.id) {
+      return { type: 'task_failed', agent: intent.agentId, error: error?.message || 'Could not create a tracked task.' };
+    }
+
+    const agentLoaders = {
+      aether: () => import('./aether.js'),
+      atlas: () => import('./atlas.js'),
+      nova: () => import('./nova.js'),
+      pulse: () => import('./pulse.js'),
+      synthesizer: () => import('./synthesizer.js'),
+    };
+    const loadAgent = agentLoaders[intent.agentId];
+    if (!loadAgent) return { type: 'task_failed', agent: intent.agentId, error: 'No executable agent is registered for this instruction.' };
+
+    loadAgent()
+      .then((module) => module[intent.agentId].run({
+        ...task,
+        ...(task.input && typeof task.input === 'object' ? task.input : {}),
+        instruction: message,
+      }))
+      .catch(async (dispatchError) => {
+        console.error(`[Nexus] Chat task dispatch to ${intent.agentId} failed:`, dispatchError.message);
+        await db.from('tasks').update({
+          status: 'failed',
+          error: dispatchError.message,
+          completed_at: new Date().toISOString(),
+        }).eq('id', task.id);
+      });
+
+    return { type: 'task_started', agent: intent.agentId, taskId: task.id, title: task.title };
   }
 
   async orchestrate(instruction, options = {}) {
@@ -1999,6 +2097,24 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
       } catch (e) {
         console.error('[Nexus] Slack research instruction failed:', e.message);
         return `I could not start Orion research: ${e.message}`;
+      }
+    }
+
+    // ── ACTION: Direct instruction to an agent — execute, don't just discuss ──
+    if (surface !== 'external' && classifyDirectAgentTask(message)) {
+      try {
+        const result = await this.dispatchChatInstruction(message);
+        if (result?.type === 'blog_commission_started') {
+          return `Aether’s commission is underway, Boss. Orion will research the requested angle, then Aether will prepare a draft for your review. Commission: \`${String(result.commissionId).slice(0, 8)}…\`. Nothing will publish without your approval.`;
+        }
+        if (result?.type === 'task_started') {
+          return `Assigned to ${result.agent}, Boss. Task \`${String(result.taskId).slice(0, 8)}…\` is tracked in the Tasks tab so you can follow progress and review the result.`;
+        }
+        if (result?.type === 'task_paused') return 'The system is paused, so I did not dispatch that task. Resume the system and resend the instruction.';
+        return result?.error || 'I could not dispatch that instruction; no successful task was recorded.';
+      } catch (e) {
+        console.error('[Nexus] Direct chat delegation failed:', e.message);
+        return `I could not dispatch that task: ${e.message}`;
       }
     }
 

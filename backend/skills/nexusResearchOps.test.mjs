@@ -22,6 +22,7 @@ t('routes the reported Slack instruction as an action', isResearchActionRequest(
 t('does not misclassify the reported action as a status-only query', !isResearchStatusQuery(actualSlackInstruction));
 t('routes direct research command', isResearchActionRequest('Nexus, please research open-market trade in Africa.'));
 t('routes explicit researcher delegation', isResearchActionRequest('Have the research agent investigate intra-African trade barriers.'));
+t('routes plain instruction to get Orion to conduct research', isResearchActionRequest('I want you to get Orion to conduct research on AI adoption in African SMEs.'));
 t('does not route a pure status question as a new action', !isResearchActionRequest('Where is Orion’s research report?'));
 t('does not route a question about completed research as a new action', !isResearchActionRequest('Is the research result back?'));
 t('still recognizes a standalone deliverable status question', isResearchStatusQuery('Is the research result back?'));

@@ -10,7 +10,7 @@ const RESEARCH_QUERY =
   /orion|researcher|nocopo|research\s+(result|report|brief|deliverable|output)|where\s+(is|are)\s+(the\s+)?(research|report|result|brief)|what about the research|research you|deliverable|orion'?s research/i;
 
 const RESEARCH_ACTION =
-  /^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:i\s+(?:want|need)\s+you\s+to|please|can\s+you|could\s+you|go\s+ahead\s+and|have\s+(?:orion|the\s+research\s+agent|the\s+researcher)|let\s+(?:orion|the\s+research\s+agent|the\s+researcher))\b[\s\S]*\b(research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b|^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b/i;
+  /^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:i\s+(?:want|need)\s+you\s+to|please|can\s+you|could\s+you|go\s+ahead\s+and|get\s+(?:orion|the\s+research\s+agent|the\s+researcher)\s+to|have\s+(?:orion|the\s+research\s+agent|the\s+researcher)|let\s+(?:orion|the\s+research\s+agent|the\s+researcher))\b[\s\S]*\b(research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather|conduct\s+research)\b|^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b/i;
 
 /** Explicit human instruction to start research, distinct from asking its status. */
 export function isResearchActionRequest(text) {
