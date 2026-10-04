@@ -29,26 +29,33 @@ function makeFlagDb(initialFlag = false) {
     calls,
     from(table) {
       calls.tables.push(table);
-      return {
-        select() {
-          return {
-            eq(k, v) {
-              return {
-                async maybeSingle() {
-                  if (table === 'system_flag' && k === 'key' && v === 'agents_paused') {
-                    return { data: { key: v, value: state.flag }, error: null };
-                  }
-                  return { data: null, error: null };
-                },
-              };
-            },
-          };
+      let filterKey;
+      let filterValue;
+      const query = {
+        select() { return query; },
+        eq(key, value) {
+          filterKey = key;
+          filterValue = value;
+          return query;
+        },
+        lt() { return query; },
+        order() { return query; },
+        update() { return query; },
+        in: async () => ({ data: [], error: null }),
+        async limit() { return { data: [], error: null }; },
+        async maybeSingle() {
+          if (table === 'system_flag' && filterKey === 'key' && filterValue === 'agents_paused') {
+            return { data: { key: filterValue, value: state.flag }, error: null };
+          }
+          return { data: null, error: null };
         },
         async upsert(row, _opts) {
           if (table === 'system_flag') state.flag = !!row.value;
           return { error: null };
         },
+        then(resolve) { return resolve({ data: [], error: null }); },
       };
+      return query;
     },
     async rpc() {
       calls.tables.push('rpc');

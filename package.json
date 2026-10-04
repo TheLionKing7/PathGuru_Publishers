@@ -14,7 +14,7 @@
     "lint:staged": "lint-staged",
     "check": "node --check backend/server.js",
     "install-playwright": "npx playwright install --with-deps chromium",
-    "test": "node ./tests/skills.test.js",
+    "test": "node ./scripts/test.mjs",
     "test:blog": "node --env-file=.env scripts/test-blog.mjs",
     "test:review": "node --env-file=.env scripts/test-blog.mjs --review",
     "test:cms": "node scripts/e2e-cms.mjs",

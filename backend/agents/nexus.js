@@ -69,7 +69,11 @@ import {
   buildResearchStatusReply,
   buildResearchPipelineBlock,
 } from '../skills/nexusResearchOps.js';
-import { isAetherContentStatusQuery, buildAetherContentStatusReply } from '../skills/aetherContentStatus.js';
+import {
+  isAetherContentStatusQuery,
+  resolveAetherContentStatusRequest,
+  buildAetherContentStatusReply,
+} from '../skills/aetherContentStatus.js';
 import { classifyDirectAgentTask } from '../skills/nexusTaskRouting.js';
 import { isAgentNetworkStatusQuery, buildAgentNetworkStatusReply } from '../skills/agentNetworkStatus.js';
 import {
@@ -2090,7 +2094,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
           slackContext: surface === 'internal' ? chatContext : null,
         });
         if (result.type === 'research_started') {
-          return `Orion research started, Boss. Task \`${String(result.taskId).slice(0, 8)}…\`. I’ll reply here when the brief is back and has passed the research quality checks.`;
+          return `Orion research started, Boss. Task \`${String(result.taskId).slice(0, 8)}…\`. You can check its progress in Agent Console → Orion → Deliverables.`;
         }
         if (result.paused) return 'The system is paused, so I did not start the research. Resume the system and resend the instruction when ready.';
         return result.error || 'I could not start Orion research. No research task was created.';
@@ -2128,9 +2132,12 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     }
 
     // ── ACTION: Aether blog commission status (fast — no LLM) ───────────────
-    if (isAetherContentStatusQuery(message)) {
+    const aetherStatusRequest = isAetherContentStatusQuery(message, history)
+      ? resolveAetherContentStatusRequest(message, history)
+      : null;
+    if (aetherStatusRequest) {
       try {
-        return await buildAetherContentStatusReply({ message });
+        return await buildAetherContentStatusReply({ message: aetherStatusRequest });
       } catch (e) {
         return `I could not read Aether’s blog status right now: ${e.message}. Check the Content Commission thread or Blog → Compose.`;
       }
@@ -2296,7 +2303,7 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     const chatSystem = `${baseSystem}\n\n${buildHonestyEnforcementBlock()}` +
       (external
         ? ' Never mention AI agents, internal systems, internal team names, vendors, pricing, methodology, or client names.'
-        : ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about Orion research, cite ORION RESEARCH lines only — deliverables live in PathGuru (tasks.output / Deliverables panel), not Notion by default.');
+        : ' If PENDING APPROVAL is listed, tell Boss to type YES in this chat (not only WhatsApp). If Boss asks about Orion research, cite ORION RESEARCH lines only — deliverables live in PathGuru (tasks.output / Deliverables panel), not Notion by default. Do not promise to ping an agent, monitor work, or report back later unless a durable follow-up is explicitly scheduled and its confirmation is present in LIVE SYSTEM STATE. A dispatched task alone is not a scheduled Slack follow-up.');
 
     const provider = resolveProvider();
     if (!provider) {

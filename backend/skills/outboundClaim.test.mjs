@@ -17,6 +17,7 @@ function chainable(result) {
   const thenable = {
     update: () => thenable, select: () => thenable,
     eq: () => thenable, is: () => thenable, gte: () => thenable, lt: () => thenable,
+    maybeSingle: () => Promise.resolve({ data: null, error: null }),
     then: (resolve) => resolve(result),
   };
   return thenable;

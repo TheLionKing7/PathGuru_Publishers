@@ -27,8 +27,13 @@ const TOPIC_STOP_WORDS = new Set([
   'hey', 'how', 'i', 'into', 'is', 'latest', 'me', 'my', 'of', 'on', 'or', 'our', 'please',
   'post', 'progress', 'pull', 'reference', 's', 'share', 'so', 'status', 't', 'task', 'the', 'their', 'this', 'update', 'visibility',
   'was', 'what', 'when', 'where', 'who', 'with', 'work', 'working', 'written', 'you', 'brief',
-  'aether', 'content', 'agent', 'nexus', 'writing', 'write', 'finished', 'complete', 'completed',
+  'aether', 'commission', 'content', 'agent', 'nexus', 'writing', 'write', 'finished', 'complete', 'completed',
+  'about', 'ask', 'asked', 'any', 'article', 'drafting', 'get', 'give', 'have', 'into', 'it',
+  'make', 'me', 'need', 'of', 'please', 'prepare', 'requested', 'share', 'to', 'want', 'with', 'brief',
 ]);
+
+const FOLLOW_UP_QUERY = /^(?:(?:hey|hi)\s+)?(?:any\s+)?(?:update|updates|progress|news|movement|word|status|eta|more)(?:\s+(?:on it|on this|there|yet|please))?[?.!\s]*$/i;
+const CONTENT_REFERENCE = /\b(?:aether|blog|post|article|draft|commission)\b/i;
 
 function extractCommissionTopic(message) {
   const words = String(message || '').match(/[\p{L}\p{N}]+/gu) || [];
@@ -36,12 +41,60 @@ function extractCommissionTopic(message) {
   return topicWords.length ? topicWords.join(' ') : null;
 }
 
-/** Match status questions about Aether's blog-writing work, not write requests. */
-export function isAetherContentStatusQuery(message) {
+function isDirectAetherContentStatusQuery(message) {
   const text = String(message || '').toLowerCase();
-  const namesContent = /\b(?:blog|post|article|draft)\b/.test(text);
+  const namesContent = /\b(?:aether|blog|post|article|draft|commission)\b/.test(text);
   const asksProgress = /\b(?:status|finish(?:ed)?|done|complete(?:d)?|ready|writing|written|draft(?:ed|ing)?|current|work|working|progress|visibility|update|latest|stuck|underway)\b/.test(text);
   return namesContent && asksProgress;
+}
+
+/** Resolve an elliptical follow-up only from the immediately active user topic. */
+export function resolveAetherContentStatusRequest(message, history = []) {
+  const text = String(message || '').trim();
+  if (isDirectAetherContentStatusQuery(text)) return text;
+  if (!FOLLOW_UP_QUERY.test(text)) return null;
+
+  for (const turn of [...history].slice(-10).reverse()) {
+    if (turn?.role !== 'user') continue;
+    const priorText = String(turn.content || turn.text || '').trim();
+    if (!priorText) continue;
+    if (isDirectAetherContentStatusQuery(priorText) || CONTENT_REFERENCE.test(priorText)) {
+      return priorText;
+    }
+    // A chain of short follow-ups may refer to the same subject. An unrelated
+    // intervening user message ends that context rather than reviving a stale one.
+    if (FOLLOW_UP_QUERY.test(priorText)) continue;
+    return null;
+  }
+  return null;
+}
+
+/** Match explicit status questions and short follow-ups with relevant thread context. */
+export function isAetherContentStatusQuery(message, history = []) {
+  return resolveAetherContentStatusRequest(message, history) !== null;
+}
+
+function findMatchingCommissions(commissions, topic) {
+  const topicWords = (topic.match(/[\p{L}\p{N}]+/gu) || [])
+    .map((word) => word.toLowerCase())
+    .filter((word) => !TOPIC_STOP_WORDS.has(word));
+  if (!topicWords.length) return commissions;
+
+  const matches = commissions.map((commission) => {
+    const subject = [commission.angle, commission.source_note, commission.source_url]
+      .filter(Boolean)
+      .join(' ');
+    const subjectWords = new Set((subject.match(/[\p{L}\p{N}]+/gu) || []).map((word) => word.toLowerCase()));
+    const overlap = topicWords.filter((word) => subjectWords.has(word)).length;
+    return { commission, overlap, ratio: overlap / topicWords.length };
+  }).filter(({ overlap, ratio }) => overlap > 0 && (topicWords.length === 1 || ratio >= 0.6));
+
+  if (!matches.length) return [];
+  const bestOverlap = Math.max(...matches.map(({ overlap }) => overlap));
+  const bestRatio = Math.max(...matches.filter(({ overlap }) => overlap === bestOverlap).map(({ ratio }) => ratio));
+  return matches
+    .filter(({ overlap, ratio }) => overlap === bestOverlap && ratio === bestRatio)
+    .map(({ commission }) => commission);
 }
 
 /** Read and format a matching commission, or recent commissions, without an LLM. */
@@ -57,15 +110,7 @@ export async function buildAetherContentStatusReply({ db = getSupabase(), messag
   if (error) throw new Error(error.message || 'commission status lookup failed');
 
   const trackedCommissions = data || [];
-  const commissions = topic
-    ? trackedCommissions.filter((commission) => {
-        const subject = [commission.angle, commission.source_note, commission.source_url]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        return subject.includes(topic.toLowerCase());
-      })
-    : trackedCommissions;
+  const commissions = topic ? findMatchingCommissions(trackedCommissions, topic) : trackedCommissions;
   if (!commissions.length) {
     if (topic) {
       return `Boss, I couldn’t find a tracked blog commission matching “${topic}”, so I can’t verify its progress. I checked the latest commission records; I won’t substitute an unrelated post.`;
