@@ -15,6 +15,15 @@ const STATUS_LANGUAGE =
 const DIRECTIVE_LANGUAGE =
   /^(?:(?:hey\s+)?(?:nexus|orion|aether|atlas|nova|pulse|synthesizer|aria|assistant)[,:\s-]*)?(?:i\s+(?:want|need)\s+(?:you|\w+[\w -]*?)\s+to\s+|please\s+|can\s+you\s+|could\s+you\s+|would\s+you\s+|have\s+\w+[\w -]*?\s+(?:to\s+)?|get\s+\w+[\w -]*?\s+to\s+|ask\s+\w+[\w -]*?\s+to\s+|tell\s+\w+[\w -]*?\s+to\s+|let\s+\w+[\w -]*?\s+|delegate\s+|assign\s+|send\s+|route\s+|start\s+|run\s+|write\s+|draft\s+|create\s+|build\s+|design\s+|analy[sz]e\s+|investigate\s+|prepare\s+|review\s+|monitor\s+|check\s+|produce\s+|make\s+)/i;
 
+const EXISTING_RESEARCH_ACTION = /\b(?:pick\s+up|use|reuse|work\s+from|refine|build\s+on|draft\s+from|write\s+from|start\s+from|based\s+on|informed\s+by)\b/i;
+const RESEARCH_REFERENCE = /\b(?:orion|research|report|brief|deliverable|thesis)\b/i;
+
+function isExplicitAetherFollowUp(text) {
+  return /\b(?:let|have|ask|tell|delegate|assign|instruct)\s+(?:the\s+)?aether\b/i.test(text) &&
+    /\b(?:blog|article|post|draft|write|refine|pick\s+up)\b/i.test(text) &&
+    /\b(?:orion|research|thesis|report|brief|deliverable)\b/i.test(text);
+}
+
 function hasAgentName(text, aliases) {
   return aliases.some((name) => new RegExp(`\\b${name}\\b`, 'i').test(text));
 }
@@ -37,15 +46,22 @@ function inferAgent(text) {
  */
 export function classifyDirectAgentTask(message) {
   const text = String(message || '').trim();
-  if (!text || STATUS_LANGUAGE.test(text) || !DIRECTIVE_LANGUAGE.test(text)) return null;
+  const explicitAetherFollowUp = isExplicitAetherFollowUp(text);
+  if (!text || (STATUS_LANGUAGE.test(text) && !explicitAetherFollowUp) ||
+      (!DIRECTIVE_LANGUAGE.test(text) && !explicitAetherFollowUp)) return null;
 
-  const namedAgent = AGENT_ALIASES.find(({ names }) => hasAgentName(text, names))?.agentId;
+  const namedAgent = explicitAetherFollowUp
+    ? 'aether'
+    : AGENT_ALIASES.find(({ names }) => hasAgentName(text, names))?.agentId;
   const inferredAgent = inferAgent(text);
   const agentId = namedAgent || inferredAgent;
   if (!agentId || agentId === 'researcher' || agentId === 'assistant') return null;
 
-  const isBlog = agentId === 'aether' && /\b(?:blog|article|post)\b/i.test(text) &&
-    /\b(?:write|draft|publish|create|produce|have|ask|let|please|need|want|delegate|assign)\b/i.test(text);
+  const isBlog = agentId === 'aether' && (
+    (/\b(?:blog|article|post)\b/i.test(text) &&
+      /\b(?:write|draft|publish|create|produce|have|ask|let|please|need|want|delegate|assign|refine|pick\s+up|use|reuse|build\s+on)\b/i.test(text)) ||
+    explicitAetherFollowUp
+  );
   const action = isBlog ? 'blog_commission'
     : agentId === 'aether' && /\b(?:write|draft|create|produce)\b/i.test(text) ? 'write'
       : null;
@@ -61,5 +77,6 @@ export function classifyDirectAgentTask(message) {
     type,
     title: text.replace(/\s+/g, ' ').slice(0, 120),
     instruction: text,
+    reuseResearch: isBlog && (EXISTING_RESEARCH_ACTION.test(text) || explicitAetherFollowUp) && RESEARCH_REFERENCE.test(text),
   };
 }

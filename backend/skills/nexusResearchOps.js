@@ -12,6 +12,42 @@ const RESEARCH_QUERY =
 const RESEARCH_ACTION =
   /^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:i\s+(?:want|need)\s+you\s+to|please|can\s+you|could\s+you|go\s+ahead\s+and|get\s+(?:orion|the\s+research\s+agent|the\s+researcher)\s+to|have\s+(?:orion|the\s+research\s+agent|the\s+researcher)|let\s+(?:orion|the\s+research\s+agent|the\s+researcher))\b[\s\S]*\b(research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather|conduct\s+research)\b|^(?:(?:hey\s+)?(?:nexus|orion)[,:\s-]*)?(?:research|investigate|look\s+into|look\s+up|study|analy[sz]e|compile|gather)\b/i;
 
+const AETHER_DRAFT_ACTION = /\b(?:let|have|ask|tell|delegate|assign|instruct)\s+(?:the\s+)?aether\b/i;
+const AETHER_DRAFT_OUTPUT = /\b(?:blog|article|post|draft|write|refine|pick\s+up)\b/i;
+const STATUS_STOP_WORDS = new Set([
+  'a', 'about', 'an', 'and', 'are', 'back', 'be', 'been', 'being', 'can', 'completed', 'did', 'do', 'does',
+  'done', 'find', 'for', 'from', 'get', 'has', 'have', 'how', 'i', 'in', 'into', 'is', 'it', 'latest', 'me',
+  'my', 'of', 'on', 'or', 'orion', 'our', 'please', 'research', 'result', 'report', 'status', 'the', 'their',
+  'this', 'to', 'update', 'was', 'what', 'when', 'where', 'which', 'with', 'you', 'your', 'thesis', 'brief', 'deliverable',
+]);
+
+function researchTopicTokens(message) {
+  return [...new Set((String(message || '').match(/[\p{L}\p{N}]+/gu) || [])
+    .map((word) => word.toLowerCase())
+    .filter((word) => word.length > 1 && !STATUS_STOP_WORDS.has(word)))];
+}
+
+/** Choose a specifically requested report; never silently substitute another topic. */
+export function selectRelevantResearchDeliverables(items = [], message = '') {
+  const topic = researchTopicTokens(message);
+  const withBrief = items.filter((item) => item.brief && String(item.brief).trim().length > 20);
+  if (!topic.length) return { items: withBrief.slice(0, 1), specific: false };
+
+  const matches = withBrief.filter((item) => {
+    const searchable = `${item.title || ''} ${item.instruction || ''}`.toLowerCase();
+    const matched = topic.filter((word) => searchable.includes(word));
+    return matched.length > 0 && matched.length / topic.length >= 0.6;
+  });
+  return { items: matches, specific: true };
+}
+
+/** A clear Aether instruction takes precedence over research-status phrasing. */
+export function isAetherResearchHandoffRequest(text) {
+  const raw = String(text || '').trim();
+  return Boolean(raw && AETHER_DRAFT_ACTION.test(raw) && AETHER_DRAFT_OUTPUT.test(raw) &&
+    /\b(?:orion|research|thesis|report|brief|deliverable)\b/i.test(raw));
+}
+
 /** Explicit human instruction to start research, distinct from asking its status. */
 export function isResearchActionRequest(text) {
   const raw = String(text || '').trim();
@@ -22,6 +58,7 @@ export function isResearchActionRequest(text) {
 export function isResearchStatusQuery(text) {
   const raw = (text || '').trim();
   if (!raw) return false;
+  if (isAetherResearchHandoffRequest(raw)) return false;
   if (isResearchActionRequest(raw)) return false;
   if (RESEARCH_QUERY.test(raw)) return true;
   if (/still waiting/i.test(raw) && /research|orion|report|brief|nocopo|deliverable/i.test(raw)) return true;
@@ -56,7 +93,8 @@ export async function buildResearchStatusReply(message = '') {
 
   const withBrief = items.filter((i) => i.brief && String(i.brief).trim().length > 20);
   const ghostComplete = items.filter((i) => i.status === 'completed' && !i.brief);
-  const latest = withBrief[0] || null;
+  const selection = selectRelevantResearchDeliverables(withBrief, message);
+  const latest = selection.items.length === 1 ? selection.items[0] : null;
 
   const lines = [];
 
@@ -71,6 +109,14 @@ export async function buildResearchStatusReply(message = '') {
       lines.push('**Notion:** brief exists in PathGuru but no Notion pageId yet — backfill runs on hygiene pass.');
     }
     lines.push('Full brief: Agent Console → Orion → Deliverables, or `GET /api/agents/research/deliverables`.');
+  } else if (selection.items.length > 1) {
+    lines.push('I found multiple completed Orion reports matching that topic, so I will not choose one automatically:');
+    for (const item of selection.items.slice(0, 5)) {
+      lines.push(`• *${item.title?.slice(0, 100) || 'Research'}* — task \`${String(item.taskId).slice(0, 8)}…\``);
+    }
+    lines.push('Please identify the exact report or task ID.');
+  } else if (selection.specific) {
+    lines.push('I could not match that topic to a completed Orion deliverable with a brief. Please provide the exact report title or task ID; I will not substitute the latest unrelated report.');
   } else if (ghostComplete.length) {
     lines.push(`⚠️ ${ghostComplete.length} research task(s) marked **completed** but have **no brief in Supabase** — likely a wiring gap. I will not claim the research is done.`);
     lines.push(`Most recent: "${ghostComplete[0].title?.slice(0, 80)}" (\`${String(ghostComplete[0].taskId).slice(0, 8)}…\`).`);

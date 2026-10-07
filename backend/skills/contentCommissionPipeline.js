@@ -16,6 +16,7 @@ import { postSlackMessage } from './slackNotify.js';
 import { scoreResearchBrief } from './researchQualityGate.js';
 import { transitionContentCommission } from './contentCommission.js';
 import { generateAndPublishBlogPost } from '../blogPublisher.js';
+import { getResearchDeliverable } from '../lib/researchDeliverables.js';
 
 function safeJson(value) {
   if (value == null) return {};
@@ -38,7 +39,18 @@ async function getResearchBrief(commission, db) {
   if (!commission.research_task_id) return { brief: '', sources: [], grade: commission.research_grade };
   const { data: task } = await db.from('tasks').select('output').eq('id', commission.research_task_id).maybeSingle();
   const out = safeJson(task?.output);
-  return { brief: out.brief || '', sources: out.sources || [], grade: commission.research_grade };
+  if (out.brief) return { brief: out.brief, sources: out.sources || [], grade: commission.research_grade };
+  try {
+    const deliverable = await getResearchDeliverable(commission.research_task_id);
+    return {
+      brief: deliverable?.brief || '',
+      sources: deliverable?.sources || [],
+      grade: commission.research_grade,
+    };
+  } catch (error) {
+    console.warn('[ContentCommission] research brief fallback lookup failed:', error.message);
+    return { brief: '', sources: [], grade: commission.research_grade };
+  }
 }
 
 /** Research stage: angle-approved commission → Orion task → P1 gate. */
@@ -47,6 +59,54 @@ async function researchStage(commission, db) {
   if (!angle) {
     await transitionContentCommission({ id: commission.id, status: 'research_review', mirror: false, fields: { close_reason: 'no approved angle' }, db });
     await threadMessage(commission, ':x: No approved angle — cannot research.');
+    return;
+  }
+
+  if (commission.research_task_id) {
+    let deliverable;
+    try {
+      deliverable = await getResearchDeliverable(commission.research_task_id);
+    } catch (error) {
+      deliverable = null;
+      console.warn('[ContentCommission] existing Orion deliverable lookup failed:', error.message);
+    }
+    const brief = String(deliverable?.brief || '').trim();
+    const task = deliverable?.task;
+    if (!task || String(task.id) !== String(commission.research_task_id) ||
+        task.agent_id !== 'researcher' || task.type !== 'research' || task.status !== 'completed' || brief.length < 40) {
+      await transitionContentCommission({
+        id: commission.id,
+        status: 'research_review',
+        mirror: false,
+        fields: { close_reason: 'attached Orion task is not a completed research deliverable with a usable brief' },
+        db,
+      });
+      await threadMessage(commission, ':x: The attached Orion report could not be verified as a completed research deliverable with a usable brief. Please confirm the report task ID; no new research was started.');
+      return;
+    }
+
+    const qScore = scoreResearchBrief({
+      brief,
+      sources: deliverable.sources || [],
+      gaps: deliverable.gaps || [],
+      depth: deliverable.depth || 'standard',
+    });
+    const fields = { research_grade: qScore.score };
+    if (!qScore.passed) {
+      await transitionContentCommission({
+        id: commission.id,
+        status: 'research_review',
+        mirror: false,
+        fields: { ...fields, close_reason: `attached research failed quality gate: ${qScore.score}/100` },
+        db,
+      });
+      const reasons = (qScore.failures || []).map((failure) => `• ${failure}`).join('\n') || '(no reasons recorded)';
+      await threadMessage(commission, `:no_entry: The attached Orion report failed the quality gate (${qScore.score}/100); no replacement research was started.\n${reasons}`);
+      return;
+    }
+
+    await transitionContentCommission({ id: commission.id, status: 'synthesising', mirror: false, fields, db });
+    await threadMessage(commission, `:link: Reusing completed Orion report \`${String(task.id).slice(0, 8)}…\` — *${String(task.title || 'Research').slice(0, 100)}* (${qScore.grade}, ${qScore.score}/100).`);
     return;
   }
 

@@ -984,7 +984,7 @@ export class Nexus extends AgentBase {
   }
 
   /** Execute a clear internal chat delegation and return its durable reference. */
-  async dispatchChatInstruction(message) {
+  async dispatchChatInstruction(message, history = []) {
     const intent = classifyDirectAgentTask(message);
     if (!intent) return null;
     if (await isPaused()) return { type: 'task_paused', agent: intent.agentId };
@@ -994,6 +994,23 @@ export class Nexus extends AgentBase {
 
     if (intent.action === 'blog_commission') {
       const { assertCommissionCapacity, createContentCommission, transitionContentCommission } = await import('../skills/contentCommission.js');
+      let existingResearch = null;
+      if (intent.reuseResearch) {
+        const { resolveExistingResearchForCommission } = await import('../skills/existingResearchForCommission.js');
+        existingResearch = await resolveExistingResearchForCommission({ message, history, db });
+        if (!existingResearch.ok) {
+          if (existingResearch.reason === 'ambiguous') {
+            const choices = existingResearch.candidates.map((candidate) => `• ${candidate.title} (\`${String(candidate.id).slice(0, 8)}…\`)`).join('\n');
+            return { type: 'task_refused', agent: 'aether', error: `I found more than one completed Orion report matching that reference. Which one should Aether use?\n${choices}` };
+          }
+          const reason = existingResearch.reason === 'reference_required'
+            ? 'I can’t identify which completed Orion report you mean. Please give me its exact title or task ID; I will not substitute the latest report.'
+            : existingResearch.reason === 'not_found'
+              ? 'I could not verify a completed Orion report with that exact reference. Please provide the report title or task ID; I will not start replacement research.'
+              : 'I could not verify the Orion report because research storage is unavailable. No commission was started.';
+          return { type: 'task_refused', agent: 'aether', error: reason };
+        }
+      }
       const capacity = await assertCommissionCapacity({ db });
       if (!capacity.ok) {
         const names = capacity.inFlight.map((c) => `${c.label} (${c.status})`).join('; ');
@@ -1013,7 +1030,10 @@ export class Nexus extends AgentBase {
         id: created.commission.id,
         status: 'researching',
         mirror: false,
-        fields: { angle_approved_at: new Date().toISOString() },
+        fields: {
+          angle_approved_at: new Date().toISOString(),
+          ...(existingResearch ? { research_task_id: existingResearch.task.id } : {}),
+        },
         db,
       });
       if (!moved.ok) return { type: 'task_failed', agent: 'aether', error: moved.error };
@@ -1028,6 +1048,7 @@ export class Nexus extends AgentBase {
         agent: 'aether',
         commissionId,
         status: 'researching',
+        researchTaskId: existingResearch?.task.id || null,
       };
     }
 
@@ -1820,7 +1841,12 @@ CEO OPS:
 
 ORION RESEARCH (verified): ${researchPipe.textBlock}
 
-Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first. Only cite tasks from SHIPPED/STILL ACTIVE lists — do not invent stuck research if deliverables with brief > 0.`;
+Cover: what shipped, what's blocked, tomorrow's top 3 priorities, content/blog status. Max 5 sentences. Recommendation first. Only cite tasks from SHIPPED/STILL ACTIVE lists — do not invent stuck research if deliverables with brief > 0.
+
+CONSISTENCY RULES (hard constraints):
+1. Never ask Boss to approve anything when Pending approvals is 0 — instead name the concrete next action (e.g. finalize the brief, then submit for approval).
+2. Do not claim the content schedule is on track if nothing shipped today AND cadence is due — say cadence is at risk and lead with the recovery action.
+3. Every claim must be derivable from the SHIPPED/STILL ACTIVE/CEO OPS/ORION data above. No optimistic filler.`;
 
     let briefing = await callAiProvider(resolveProvider(), prompt, this.systemPrompt, CEO_LLM_OPTS);
     const quality = scoreCeoOutput({ text: briefing, outputType: 'briefing' });
@@ -2107,9 +2133,12 @@ No generic TOGAF/SAP language. Use DigiFusion framework names.`;
     // ── ACTION: Direct instruction to an agent — execute, don't just discuss ──
     if (surface !== 'external' && classifyDirectAgentTask(message)) {
       try {
-        const result = await this.dispatchChatInstruction(message);
+        const result = await this.dispatchChatInstruction(message, history);
         if (result?.type === 'blog_commission_started') {
-          return `Aether’s commission is underway, Boss. Orion will research the requested angle, then Aether will prepare a draft for your review. Commission: \`${String(result.commissionId).slice(0, 8)}…\`. Nothing will publish without your approval.`;
+          const researchSource = result.researchTaskId
+            ? `Aether will use the verified completed Orion report \`${String(result.researchTaskId).slice(0, 8)}…\` and prepare a draft for your review.`
+            : 'Orion will research the requested angle, then Aether will prepare a draft for your review.';
+          return `Aether’s commission is underway, Boss. ${researchSource} Commission: \`${String(result.commissionId).slice(0, 8)}…\`. Nothing will publish without your approval.`;
         }
         if (result?.type === 'task_started') {
           return `Assigned to ${result.agent}, Boss. Task \`${String(result.taskId).slice(0, 8)}…\` is tracked in the Tasks tab so you can follow progress and review the result.`;
